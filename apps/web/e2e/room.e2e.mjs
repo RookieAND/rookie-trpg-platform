@@ -564,6 +564,13 @@ try {
   await pl.getByTestId("scene-name").getByText("장면 1").waitFor();
   step("시작 장면을 지정하면 세션을 시작할 때 그 장면이 열림(PL은 지정 표시를 못 봄)");
 
+  // 이전 실행이 남긴 서재를 비워 개수 한도에 걸리지 않게 한다
+  {
+    const h = { "content-type": "application/json", "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") };
+    const cur = await (await fetch("http://localhost:8787/library", { headers: h })).json();
+    await fetch("http://localhost:8787/library", { method: "PUT", headers: h, body: JSON.stringify({ macros: [], occupations: cur.occupations, baseRevision: cur.revision }) });
+  }
+
   // 매크로: 이름 붙여 저장한 식을 한 번에 굴리고, 잘못된 식은 거절하며, 다시 열어도 남아 있다
   await pl.getByRole("tab", { name: "굴림" }).click();
   await pl.getByRole("button", { name: "매크로 편집" }).click();
@@ -582,6 +589,25 @@ try {
   const serverLib = await (await fetch("http://localhost:8787/library", { headers: { "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") } })).json();
   assert.ok(serverLib.macros.some((m) => m.name === "한 방 " + run && m.expr === "3d6"));
   step("매크로: 저장한 식을 한 번에 굴리고, 잘못된 식은 거절하며, 새로고침해도 남고 서버 서재에 저장됨");
+
+  // 서재 충돌: 다른 기기가 먼저 저장해도 내 변경과 항목 단위로 합쳐지고 어느 쪽도 사라지지 않는다
+  const dev = { "content-type": "application/json", "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") };
+  const otherPut = await fetch("http://localhost:8787/library", {
+    method: "PUT",
+    headers: dev,
+    body: JSON.stringify({ macros: [...serverLib.macros, { id: "other" + run, name: "다른 기기 " + run, expr: "1d4", secret: false }], occupations: serverLib.occupations, baseRevision: serverLib.revision }),
+  });
+  assert.equal(otherPut.status, 200);
+  await pl.getByRole("button", { name: "매크로 편집" }).click();
+  await pl.getByLabel("매크로 이름").fill("이쪽 " + run);
+  await pl.getByLabel("매크로 굴림 식").fill("1d8");
+  await pl.getByRole("button", { name: "저장", exact: true }).click();
+  await pl.getByRole("button", { name: "닫기", exact: true }).click();
+  await pl.getByTestId("macro").filter({ hasText: "다른 기기 " + run }).waitFor();
+  await pl.getByTestId("macro").filter({ hasText: "이쪽 " + run }).waitFor();
+  const merged = await (await fetch("http://localhost:8787/library", { headers: dev })).json();
+  assert.ok(merged.macros.some((m) => m.name === "다른 기기 " + run) && merged.macros.some((m) => m.name === "이쪽 " + run));
+  step("서재 충돌: 다른 기기가 먼저 저장해도 항목 단위로 합쳐져 둘 다 남음");
 
   // 굴림 기록 저장: 이 화면에서 보인 굴림이 마크다운 파일로 내려오고, 비밀 굴림 안내가 붙는다
   await pl.getByRole("tab", { name: "굴림" }).click();

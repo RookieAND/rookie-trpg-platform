@@ -12,6 +12,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** 서버가 에러와 함께 보낸 내용(충돌 때 최신 데이터 등) */
+    readonly body?: unknown,
   ) {
     super(message);
   }
@@ -35,6 +37,6 @@ export async function http<T>(me: Caller, method: string, path: string, body?: u
   });
   const text = await res.text();
   const json = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new ApiError(res.status, json?.message ?? "요청에 실패했어요.");
+  if (!res.ok) throw new ApiError(res.status, json?.message ?? "요청에 실패했어요.", json);
   return json as T;
 }

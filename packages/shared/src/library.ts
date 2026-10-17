@@ -62,3 +62,35 @@ export interface Library {
 }
 
 export const emptyLibrary = (): Library => ({ macros: [], occupations: [] });
+
+const sameItem = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/** id가 있는 항목 목록을 세 갈래로 합친다. base=내가 마지막으로 받은 것, mine=내가 바꾼 것, theirs=서버의 최신. */
+function mergeById<T extends { id: string }>(base: T[], mine: T[], theirs: T[]): T[] {
+  const baseById = new Map(base.map((x) => [x.id, x]));
+  const mineById = new Map(mine.map((x) => [x.id, x]));
+  const theirsIds = new Set(theirs.map((x) => x.id));
+  const out: T[] = [];
+  for (const t of theirs) {
+    const b = baseById.get(t.id);
+    const m = mineById.get(t.id);
+    if (!b) out.push(t); // 다른 기기에서 새로 만든 것
+    else if (!m) {
+      if (!sameItem(b, t)) out.push(t); // 내가 지웠지만 상대가 고쳤으면 살린다
+    } else out.push(sameItem(b, m) ? t : m); // 내가 고친 쪽을 우선한다
+  }
+  for (const m of mine) if (!baseById.has(m.id) && !theirsIds.has(m.id)) out.push(m); // 내가 새로 만든 것
+  return out;
+}
+
+/**
+ * 두 기기에서 서재를 따로 고쳤을 때 항목(id) 단위로 합친다.
+ * 같은 항목을 둘 다 고쳤으면 내가 고친 것을 쓴다. 합친 결과가 규칙(개수·이름 중복 등)에 맞지 않으면 null이다.
+ */
+export function mergeLibrary(base: Library, mine: Library, theirs: Library): Library | null {
+  const merged: Library = {
+    macros: mergeById(base.macros, mine.macros, theirs.macros),
+    occupations: mergeById(base.occupations, mine.occupations, theirs.occupations),
+  };
+  return librarySchema.safeParse(merged).success ? merged : null;
+}

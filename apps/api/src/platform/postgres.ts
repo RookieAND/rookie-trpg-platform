@@ -42,6 +42,8 @@ create table if not exists libraries (
   updated_at timestamptz not null default now()
 );
 
+alter table libraries add column if not exists revision integer not null default 0;
+
 create table if not exists images (
   id text primary key,
   mime text not null,

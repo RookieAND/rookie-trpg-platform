@@ -80,11 +80,12 @@ describe.skipIf(!url)("Postgres 어댑터", () => {
     const repo = new PostgresLibraryRepository(db);
     expect(await repo.load("u1")).toBeNull();
     const lib = { macros: [{ id: "m1", name: "한 방", expr: "1d6", secret: false }], occupations: [] };
-    await repo.save("u1", lib);
-    await repo.save("u2", { macros: [], occupations: [] });
-    expect(await repo.load("u1")).toEqual(lib);
-    await repo.save("u1", { macros: [], occupations: [] });
-    expect(await repo.load("u1")).toEqual({ macros: [], occupations: [] });
+    expect(await repo.save("u1", lib, 0)).toBe(1);
+    expect(await repo.save("u2", { macros: [], occupations: [] }, 0)).toBe(1);
+    expect(await repo.load("u1")).toEqual({ library: lib, revision: 1 });
+    expect(await repo.save("u1", { macros: [], occupations: [] }, 0)).toBeNull(); // 낡은 번호
+    expect(await repo.save("u1", { macros: [], occupations: [] }, 1)).toBe(2);
+    expect(await repo.load("u1")).toEqual({ library: { macros: [], occupations: [] }, revision: 2 });
   });
 
   it("이미지를 바이트 그대로 저장하고 읽는다", async () => {

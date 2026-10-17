@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Inject, Put, Req, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, Body, ConflictException, Controller, Get, Inject, Put, Req, UnauthorizedException } from "@nestjs/common";
 import type { IncomingMessage } from "node:http";
 import { AuthService } from "../../../identity/application/auth.service";
 import { LibraryService } from "../../application/library.service";
@@ -25,7 +25,10 @@ export class LibraryController {
   @Put()
   async put(@Req() req: IncomingMessage, @Body() body: unknown) {
     const r = await this.library.replace(this.me(req), body);
-    if (!r.ok) throw new BadRequestException(r.message);
+    if (!r.ok) {
+      if (r.reason === "conflict") throw new ConflictException({ message: "다른 기기에서 서재가 먼저 바뀌었어요.", library: r.library });
+      throw new BadRequestException(r.message);
+    }
     return r.library;
   }
 }
