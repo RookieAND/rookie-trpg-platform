@@ -1,0 +1,13 @@
+{
+  "name": "coc-vtt",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "dev:api": "pnpm --filter @coc-vtt/api dev",
+    "dev:web": "pnpm --filter @coc-vtt/web dev",
+    "e2e": "pnpm --filter @coc-vtt/web e2e",
+    "arch": "node scripts/check-architecture.mjs"
+  }
+}
