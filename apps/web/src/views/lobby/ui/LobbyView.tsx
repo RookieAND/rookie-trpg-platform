@@ -39,7 +39,7 @@ function Lobby({ me, onLogout }: { me: Identity; onLogout: () => void }) {
       <header className="topbar">
         <strong>[서비스 이름]</strong>
         <div style={{ flex: 1 }} />
-        <Link href="/characters" className="btn" style={{ textDecoration: "none", lineHeight: "32px" }}>내 캐릭터</Link>
+        <Link href="/characters" className="btn">내 캐릭터</Link>
         <span className="badge">{me.name}</span>
         <button className="btn" onClick={onLogout}>로그아웃</button>
       </header>
