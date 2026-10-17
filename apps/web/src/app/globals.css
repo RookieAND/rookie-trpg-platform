@@ -4,8 +4,9 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-  font-family: "IBM Plex Sans KR", system-ui, sans-serif; font-size: 14px; line-height: 1.5; }
-button, input, select { font: inherit; color: inherit; }
+  font-family: "IBM Plex Sans KR", "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased; word-break: keep-all; overflow-wrap: break-word; font-size: 14px; line-height: 1.5; }
+button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 a { color: inherit; }
 a.btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
