@@ -39,8 +39,8 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 textarea.input { resize: vertical; line-height: 1.5; }
 .scenebar { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 3; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 8px;
   border-radius: 10px; border: 1px solid var(--line-2); background: color-mix(in srgb, var(--panel) 92%, transparent); }
-.scene-tabs { display: flex; gap: 4px; }
-.scene-tab { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: none; color: var(--muted); }
+.scene-tabs { display: flex; gap: 4px; flex-wrap: wrap; min-width: 0; }
+.scene-tab { height: 28px; white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; border-radius: 6px; border: 1px solid transparent; background: none; color: var(--muted); }
 .scene-tab[aria-selected="true"] { border-color: var(--line-2); background: var(--panel-2); color: var(--text); }
 .scene-fade { position: absolute; inset: 0; z-index: 4; background: #000; pointer-events: none; animation: scene-fade 1.2s ease-out forwards; }
 @keyframes scene-fade { from { opacity: 1; } to { opacity: 0; } }

@@ -8,6 +8,7 @@
     "dev:api": "pnpm --filter @coc-vtt/api dev",
     "dev:web": "pnpm --filter @coc-vtt/web dev",
     "e2e": "pnpm --filter @coc-vtt/web e2e",
-    "arch": "node scripts/check-architecture.mjs"
+    "arch": "node scripts/check-architecture.mjs",
+    "import:scenario": "pnpm --filter @coc-vtt/api import:scenario"
   }
 }

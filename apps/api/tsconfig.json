@@ -6,5 +6,5 @@
     "emitDecoratorMetadata": false,
     "useDefineForClassFields": false
   },
-  "include": ["src"]
+  "include": ["src", "scripts"]
 }
