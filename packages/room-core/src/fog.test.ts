@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_FOG_ZONES, type ClientCommand, type GameObject } from "@coc-vtt/shared";
+import { MAX_FOG_EXPLORED, MAX_FOG_ZONES, type ClientCommand, type GameObject } from "@coc-vtt/shared";
 import { Room, type Actor, type Out } from "./room";
 
 const kp: Actor = { userId: "kp1", name: "하늘", role: "kp" };
@@ -144,5 +144,87 @@ describe("안개", () => {
     const back = Room.fromData(JSON.parse(JSON.stringify(room.toData())), { newId: () => `id-${++n}`, rng: () => 0.5 });
     back.join(pl);
     expect(back.snapshot(pl).scenes[0]!.fogAreas).toEqual([{ x: 700, y: 700, r: 40 }, { x: 100, y: 100, r: 70 }]);
+  });
+
+  describe("탐험 기록", () => {
+    const mv = (room: Room, who: Actor, id: string, x: number, y: number) => room.handle(who, cmd("object.move", { id, x, y, rev: room.snapshot(kp).objects.find((o) => o.id === id)!.rev }));
+    const explored = (room: Room, who: Actor) => {
+      const sc = room.snapshot(who).scenes.find((x) => x.id === "main")!;
+      return who.role === "kp" ? sc.fog?.explored : sc.fogExplored;
+    };
+
+    it("시야 토큰이 지나간 자리가 쌓이고, PL은 받지만 비활성 장면·꺼진 안개에는 없다", () => {
+      const { room, obj } = setup();
+      const me = obj("내 토큰", 100, 100, { ownerId: "pl1" });
+      expect(explored(room, pl)).toBeUndefined();
+      must(room.handle(kp, cmd("scene.fog", { id: "main", enabled: true })));
+      must(room.handle(kp, cmd("object.update", { id: me.id, vision: 60 })));
+      expect(explored(room, pl)).toEqual([{ x: 100, y: 100, r: 60 }]);
+      const moved = must(mv(room, pl, me.id, 300, 100));
+      expect(moved.filter((o) => o.event.type === "scene.updated" && o.audience.roles?.includes("pl"))).toHaveLength(1);
+      expect(explored(room, pl)).toEqual([
+        { x: 100, y: 100, r: 60 },
+        { x: 300, y: 100, r: 60 },
+      ]);
+      expect(explored(room, kp)).toHaveLength(2);
+      expect(room.snapshot(pl).scenes[0]!.fog).toBeUndefined();
+    });
+
+    it("거의 같은 자리는 늘지 않고, 더 큰 원이 들어오면 안쪽 원은 합쳐진다", () => {
+      const { room, obj } = setup();
+      const me = obj("내 토큰", 100, 100, { ownerId: "pl1" });
+      must(room.handle(kp, cmd("scene.fog", { id: "main", enabled: true })));
+      must(room.handle(kp, cmd("object.update", { id: me.id, vision: 100 })));
+      must(mv(room, pl, me.id, 105, 100));
+      expect(explored(room, pl)).toHaveLength(1);
+      must(room.handle(kp, cmd("object.update", { id: me.id, vision: 300 })));
+      expect(explored(room, pl)).toHaveLength(1);
+      expect(explored(room, pl)![0]!.r).toBeGreaterThanOrEqual(300);
+    });
+
+    it("밝힌 영역을 지워도 기록은 남고, KP가 지울 수 있으며 PL은 못 지운다", () => {
+      const { room } = setup();
+      must(room.handle(kp, cmd("scene.fog", { id: "main", enabled: true })));
+      must(room.handle(kp, cmd("fog.reveal", { sceneId: "main", x: 500, y: 500, r: 80 })));
+      expect(explored(room, pl)).toEqual([{ x: 500, y: 500, r: 80 }]);
+      const zone = room.snapshot(kp).scenes[0]!.fog!.zones[0]!;
+      must(room.handle(kp, cmd("fog.remove", { sceneId: "main", zoneId: zone.id })));
+      expect(explored(room, pl)).toEqual([{ x: 500, y: 500, r: 80 }]);
+      // 안개를 껐다 켜도 기록이 남는다
+      must(room.handle(kp, cmd("scene.fog", { id: "main", enabled: false })));
+      expect(room.snapshot(pl).scenes[0]!.fogExplored).toBeUndefined();
+      must(room.handle(kp, cmd("scene.fog", { id: "main", enabled: true })));
+      expect(explored(room, pl)).toEqual([{ x: 500, y: 500, r: 80 }]);
+
+      expect(room.handle(pl, cmd("fog.forget", { sceneId: "main" })).ok).toBe(false);
+      const out = must(room.handle(kp, cmd("fog.forget", { sceneId: "main" })));
+      expect(out.filter((o) => o.event.type === "scene.updated" && o.audience.roles?.includes("pl"))).toHaveLength(1);
+      expect(explored(room, pl)).toEqual([]);
+      expect(room.handle(kp, cmd("fog.forget", { sceneId: "main" })).ok).toBe(false);
+    });
+
+    it("기록이 있어도 그 자리의 오브젝트는 지금 시야 밖이면 보내지 않고, 저장했다 복원해도 남는다", () => {
+      const { room, obj } = setup();
+      const me = obj("내 토큰", 100, 100, { ownerId: "pl1" });
+      obj("몬스터", 120, 100);
+      must(room.handle(kp, cmd("scene.fog", { id: "main", enabled: true })));
+      must(room.handle(kp, cmd("object.update", { id: me.id, vision: 60 })));
+      expect(names(room, pl)).toEqual(["내 토큰", "몬스터"]);
+      must(mv(room, pl, me.id, 700, 600));
+      expect(names(room, pl)).toEqual(["내 토큰"]);
+      expect(explored(room, pl)).toContainEqual({ x: 100, y: 100, r: 60 });
+      const back = Room.fromData(JSON.parse(JSON.stringify(room.toData())), { newId: () => `id-${++n}`, rng: () => 0.5 });
+      back.join(pl);
+      expect(back.snapshot(pl).scenes[0]!.fogExplored).toContainEqual({ x: 100, y: 100, r: 60 });
+    });
+
+    it("기록 한도를 넘으면 오래된 것부터 버린다", () => {
+      const { room, obj } = setup();
+      const me = obj("내 토큰", 0, 0, { ownerId: "pl1" });
+      must(room.handle(kp, cmd("scene.fog", { id: "main", enabled: true })));
+      must(room.handle(kp, cmd("object.update", { id: me.id, vision: 10 })));
+      for (let i = 1; i <= MAX_FOG_EXPLORED + 20; i++) must(mv(room, kp, me.id, (i % 40) * 25, Math.floor(i / 40) * 25 + 100));
+      expect(explored(room, pl)!.length).toBeLessThanOrEqual(MAX_FOG_EXPLORED);
+    });
   });
 });

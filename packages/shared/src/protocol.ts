@@ -22,10 +22,14 @@ export interface Scene {
   fog?: SceneFog;
   /** 안개가 켜진 활성 장면에서 지금 보이는 원들(밝힌 영역 + 시야 토큰). KP가 아닌 사람에게만 온다. */
   fogAreas?: FogArea[];
+  /** 한 번이라도 시야에 들어왔던 곳(탐험 기록). 안개가 켜진 활성 장면에서 KP가 아닌 사람에게만 온다. */
+  fogExplored?: FogArea[];
 }
 
 export const MAX_FOG_ZONES = 60;
 export const FOG_MAX_RADIUS = 600;
+/** 장면마다 남기는 탐험 기록 원의 최대 개수(넘치면 오래된 것부터 버린다) */
+export const MAX_FOG_EXPLORED = 200;
 
 export interface FogZone {
   id: string;
@@ -41,6 +45,8 @@ export interface FogArea {
 export interface SceneFog {
   enabled: boolean;
   zones: FogZone[];
+  /** 한 번이라도 보였던 곳. 서버가 시야가 바뀔 때마다 쌓는다. */
+  explored?: FogArea[];
 }
 
 export type Transition = "cut" | "fade";
@@ -367,6 +373,7 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("fog.reveal"), data: z.object({ sceneId: id, x: coord, y: coord, r: z.number().int().min(10).max(FOG_MAX_RADIUS) }) }),
   z.object({ type: z.literal("fog.remove"), data: z.object({ sceneId: id, zoneId: id }) }),
   z.object({ type: z.literal("fog.clear"), data: z.object({ sceneId: id }) }),
+  z.object({ type: z.literal("fog.forget"), data: z.object({ sceneId: id }) }),
   z.object({ type: z.literal("object.remove"), data: z.object({ id }) }),
   z.object({
     type: z.literal("roll.request"),

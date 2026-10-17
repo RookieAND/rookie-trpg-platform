@@ -17,7 +17,7 @@ interface Props {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   /** 안개. areas는 지금 보이는 원들이고, preview면 KP용으로 가려진 곳을 반투명하게 보여 준다. */
-  fog?: { areas: FogArea[]; preview: boolean };
+  fog?: { areas: FogArea[]; preview: boolean; /** 한 번이라도 보였던 곳: 지금 안 보여도 배경은 어둡게 보인다 */ explored?: FogArea[] };
   /** 켜 두면 빈 곳을 눌렀을 때 선택 대신 그 좌표를 알린다(영역 밝히기). */
   onPick?: (x: number, y: number) => void;
 }
@@ -75,12 +75,24 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         <g data-testid="fog" data-areas={fog.areas.length} pointerEvents="none">
           <mask id="fog-mask">
             <rect width={W} height={H} fill="white" />
-            {fog.areas.map((a, i) => (
+            {(fog.preview ? fog.areas : [...fog.areas, ...(fog.explored ?? [])]).map((a, i) => (
               <circle key={i} cx={a.x} cy={a.y} r={a.r} fill="black" />
             ))}
           </mask>
           <rect width={W} height={H} fill="#000" opacity={fog.preview ? 0.55 : 1} mask="url(#fog-mask)" />
+          {!fog.preview && !!fog.explored?.length && (
+            <>
+              <mask id="fog-mask-now">
+                <rect width={W} height={H} fill="white" />
+                {fog.areas.map((a, i) => (
+                  <circle key={i} cx={a.x} cy={a.y} r={a.r} fill="black" />
+                ))}
+              </mask>
+              <rect width={W} height={H} fill="#000" opacity={0.55} mask="url(#fog-mask-now)" data-testid="fog-explored" data-count={fog.explored.length} />
+            </>
+          )}
           {fog.preview && fog.areas.map((a, i) => <circle key={i} cx={a.x} cy={a.y} r={a.r} fill="none" stroke="#5fd3a4" strokeWidth="1.5" strokeDasharray="6 5" opacity="0.8" />)}
+          {fog.preview && fog.explored?.map((a, i) => <circle key={`e${i}`} cx={a.x} cy={a.y} r={a.r} fill="none" stroke="#e3a94a" strokeWidth="1" strokeDasharray="2 6" opacity="0.5" data-testid="fog-explored-ring" />)}
         </g>
       )}
       {objects.map((o) => {

@@ -25,6 +25,7 @@ export function FogToolbar({
   const fog = scene.fog;
   const on = !!fog?.enabled;
   const zones = fog?.zones ?? [];
+  const explored = fog?.explored?.length ?? 0;
   const [vision, setVision] = useState(120);
 
   return (
@@ -42,6 +43,12 @@ export function FogToolbar({
             {picking ? "보드를 눌러 밝히는 중…" : "영역 밝히기"}
           </button>
           <span style={{ color: "var(--muted)", fontSize: 12.5 }} data-testid="fog-zones">밝힌 영역 {zones.length}</span>
+          <span style={{ color: "var(--muted)", fontSize: 12.5 }} data-testid="fog-explored-count">탐험 기록 {explored}</span>
+          {explored > 0 && (
+            <button className="btn" style={{ height: 28 }} disabled={!enabled} onClick={() => send({ type: "fog.forget", data: { sceneId: scene.id } })}>
+              탐험 기록 지우기
+            </button>
+          )}
           {zones.length > 0 && (
             <>
               <button className="btn" style={{ height: 28 }} disabled={!enabled} onClick={() => send({ type: "fog.remove", data: { sceneId: scene.id, zoneId: zones[zones.length - 1]!.id } })}>

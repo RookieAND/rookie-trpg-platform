@@ -81,9 +81,9 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     if (isKp) {
       if (!shownScene?.fog?.enabled) return undefined;
       const areas = [...shownScene.fog.zones.map((z) => ({ x: z.x, y: z.y, r: z.r })), ...objects.filter((o) => o.vision).map((o) => ({ x: o.x, y: o.y, r: o.vision! }))];
-      return { areas, preview: true };
+      return { areas, preview: true, explored: shownScene.fog.explored };
     }
-    return shownScene?.fogAreas ? { areas: shownScene.fogAreas, preview: false } : undefined;
+    return shownScene?.fogAreas ? { areas: shownScene.fogAreas, preview: false, explored: shownScene.fogExplored } : undefined;
   }, [isKp, shownScene, objects]);
   const audio = useAudioEngine({ bgm: state.bgm, lastSe: state.lastSe, clockOffset: state.clockOffset, lastRollId: state.rolls.at(-1)?.id ?? null, ready: state.ready, prefs: sound.prefs });
 

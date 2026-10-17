@@ -404,10 +404,17 @@ try {
   await kp.getByRole("button", { name: "보드를 눌러 밝히는 중…" }).click();
   await kp.getByRole("button", { name: "영역 모두 지우기" }).click();
   await plProps.first().waitFor({ state: "detached" });
+  // 탐험 기록: 시야가 지나간 자리는 지금 안 보여도 기록으로 남고, KP가 지울 수 있다
+  await pl.getByTestId("fog-explored").waitFor();
+  await kp.getByTestId("fog-explored-count").getByText(/탐험 기록 [1-9]/).waitFor();
+  await kp.getByRole("button", { name: "탐험 기록 지우기" }).click();
+  await kp.getByTestId("fog-explored-count").getByText("탐험 기록 0").waitFor();
+  await pl.getByTestId("fog-explored").waitFor({ state: "detached" });
+  await plProps.first().waitFor({ state: "detached" });
   await kp.getByRole("button", { name: "안개 끄기" }).click();
   await plProps.first().waitFor();
   await pl.getByTestId("fog").waitFor({ state: "detached" });
-  step("안개와 시야: 안개 속 오브젝트는 PL 화면에서 사라지고, 시야 반지름·밝힌 영역으로 다시 보이며, 끄면 모두 보임");
+  step("안개와 시야: 안개 속 오브젝트는 PL 화면에서 사라지고, 시야 반지름·밝힌 영역으로 다시 보이며, 지나간 자리는 탐험 기록으로 남고(KP가 지움), 끄면 모두 보임");
 
   // 굴림: 공개
   await pl.getByLabel("굴림 식").fill("CC<=60");

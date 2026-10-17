@@ -18,6 +18,7 @@ import {
   MAX_AUDIO_TRACKS,
   MAX_FOG_ZONES,
   type FogArea,
+  MAX_FOG_EXPLORED,
   MAX_BEATS,
   MAX_BRANCHES,
   MAX_INITIATIVE_ENTRIES,
@@ -306,7 +307,9 @@ export class Room {
     const sceneBefore = this.activeSceneId;
     this.fogBefore = this.fogAreas();
     this.fanned = new Set();
+    this.exploredChanged = false;
     const first = this.dispatch(actor, command);
+    if (first.ok && sceneBefore === this.activeSceneId) this.recordExplored();
     // 안개 안의 오브젝트는 시야가 바뀌면 다른 오브젝트도 새로 보이거나 사라진다.
     const r = first.ok && sceneBefore === this.activeSceneId ? this.withFogDiff(first) : first;
     if (!r.ok || this.flow.current === null) return r;
@@ -316,6 +319,8 @@ export class Room {
 
   /** 이번 명령 전의 안개 원들과, 이번 명령에서 이미 알린 오브젝트 */
   private fogBefore: FogArea[] | undefined;
+  /** 이번 명령으로 탐험 기록이 늘었는지 */
+  private exploredChanged = false;
   private fanned = new Set<string>();
 
   private dispatch(actor: Actor, command: ClientCommand): Result {
@@ -359,6 +364,8 @@ export class Room {
         return this.fogRemove(who, command.data);
       case "fog.clear":
         return this.fogClear(who, command.data.sceneId);
+      case "fog.forget":
+        return this.fogForget(who, command.data.sceneId);
       case "scene.rename":
         return this.sceneRename(who, command.data);
       case "scene.remove":
@@ -946,7 +953,9 @@ export class Room {
     const changed = JSON.stringify(before ?? null) !== JSON.stringify(after ?? null);
     const told = out.some((o) => o.event.type === "scene.updated" && o.audience.roles?.includes("pl"));
     const scene = this.scenes.get(this.activeSceneId);
-    if (changed && !told && scene) out.push(this.emit({ type: "scene.updated", data: this.sceneFor(scene, false) }, { roles: ["pl", "spectator"] }));
+    if (scene && ((changed && !told) || this.exploredChanged)) out.push(this.emit({ type: "scene.updated", data: this.sceneFor(scene, false) }, { roles: ["pl", "spectator"] }));
+    // 탐험 기록은 KP 화면에도 보여 준다.
+    if (scene && this.exploredChanged) out.push(this.emit({ type: "scene.updated", data: this.sceneFor(scene, true) }, { roles: ["kp"] }));
     return ok(...out);
   }
 
@@ -954,11 +963,41 @@ export class Room {
   private sceneFor(scene: Scene, forKp: boolean): Scene {
     if (forKp) {
       const { fog, ...rest } = scene;
-      return { ...rest, ...(fog ? { fog: { enabled: fog.enabled, zones: fog.zones.map((z) => ({ ...z })) } } : {}) };
+      return { ...rest, ...(fog ? { fog: { enabled: fog.enabled, zones: fog.zones.map((z) => ({ ...z })), ...(fog.explored ? { explored: fog.explored.map((a) => ({ ...a })) } : {}) } } : {}) };
     }
     const pub = publicScene(scene);
     const areas = scene.id === this.activeSceneId ? this.fogAreas(scene.id) : undefined;
-    return areas ? { ...pub, fogAreas: areas } : pub;
+    if (!areas) return pub;
+    return { ...pub, fogAreas: areas, fogExplored: (scene.fog?.explored ?? []).map((a) => ({ ...a })) };
+  }
+
+  /**
+   * 지금 보이는 원들을 탐험 기록에 더한다. 이미 기록된 원에 (조금의 오차 안에서) 들어가는 원은 더하지 않고,
+   * 새 원이 기존 원을 통째로 덮으면 기존 원은 지운다. 안개가 꺼진 장면에서는 쌓지 않는다.
+   */
+  private recordExplored(): void {
+    const scene = this.scenes.get(this.activeSceneId);
+    const areas = this.fogAreas();
+    if (!scene?.fog || !areas) return;
+    const ex = (scene.fog.explored ??= []);
+    const SLACK = 8;
+    for (const a of areas) {
+      const q = { x: Math.round(a.x), y: Math.round(a.y), r: Math.ceil(a.r) };
+      if (ex.some((e) => Math.hypot(e.x - q.x, e.y - q.y) + q.r <= e.r + SLACK)) continue;
+      for (let i = ex.length - 1; i >= 0; i--) if (Math.hypot(ex[i]!.x - q.x, ex[i]!.y - q.y) + ex[i]!.r <= q.r) ex.splice(i, 1);
+      ex.push(q);
+      if (ex.length > MAX_FOG_EXPLORED) ex.splice(0, ex.length - MAX_FOG_EXPLORED);
+      this.exploredChanged = true;
+    }
+    if (ex.length === 0) delete scene.fog.explored;
+  }
+
+  private fogForget(who: Actor, sceneId: string): Result {
+    const g = this.fogGuard(who, sceneId);
+    if ("error" in g) return g.error;
+    if (!g.scene.fog?.explored?.length) return fail("bad_message", "지울 탐험 기록이 없어요.");
+    delete g.scene.fog.explored;
+    return ok(...this.emitScene(g.scene));
   }
 
   private fogGuard(who: Actor, sceneId: string): { error: Result } | { scene: Scene } {
@@ -971,7 +1010,7 @@ export class Room {
   private sceneFog(who: Actor, d: { id: string; enabled: boolean }): Result {
     const g = this.fogGuard(who, d.id);
     if ("error" in g) return g.error;
-    g.scene.fog = { enabled: d.enabled, zones: g.scene.fog?.zones ?? [] };
+    g.scene.fog = { ...g.scene.fog, enabled: d.enabled, zones: g.scene.fog?.zones ?? [] };
     return ok(...this.emitScene(g.scene));
   }
 
@@ -1598,7 +1637,7 @@ const sortByDex = (entries: InitiativeEntry[]): InitiativeEntry[] =>
 const cloneInitiative = (i: Initiative | null): Initiative | null => (i ? { ...i, entries: i.entries.map((e) => ({ ...e })) } : null);
 
 const publicScene = (s: Scene): Scene => {
-  const { start: _start, bgmTrackId: _bgm, fog: _fog, fogAreas: _areas, ...rest } = s;
+  const { start: _start, bgmTrackId: _bgm, fog: _fog, fogAreas: _areas, fogExplored: _explored, ...rest } = s;
   return rest;
 };
 
