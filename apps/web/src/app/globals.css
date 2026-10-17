@@ -24,7 +24,7 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .body { flex: 1; min-height: 0; display: flex; }
 .board { flex: 1; min-width: 0; position: relative; background: #0e1013; }
 .side { width: 360px; flex: none; border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; }
-.banner { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); padding: 8px 16px; border-radius: 20px;
+.banner { position: absolute; top: 156px; left: 50%; transform: translateX(-50%); padding: 8px 16px; border-radius: 20px;
   border: 1px solid color-mix(in srgb, var(--amber) 50%, transparent); background: color-mix(in srgb, var(--panel) 90%, var(--amber) 10%); color: var(--amber); }
 .log { flex: 1; min-height: 0; overflow: auto; padding: 8px 16px; display: flex; flex-direction: column; gap: 10px; }
 .log-item { padding-bottom: 10px; border-bottom: 1px solid #1a1d22; }

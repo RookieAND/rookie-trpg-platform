@@ -7,12 +7,13 @@ import { useIdentity, type Identity } from "@/entities/user";
 import { LoginForm } from "@/features/auth";
 import { CreateRoomForm } from "@/features/create-room";
 import { JoinByLinkForm } from "@/features/join-by-link";
+import { SERVICE_NAME } from "@/shared/config";
 
 export function LobbyView() {
   const { identity, login, logout } = useIdentity();
   if (identity === undefined) return null;
   if (identity === null) {
-    return <LoginForm title="[서비스 이름]" description="개발용 로그인이에요. 이름만 정하면 시작할 수 있어요. Discord 로그인은 곧 연결돼요." submitLabel="시작하기" onLogin={login} />;
+    return <LoginForm title={SERVICE_NAME} description="개발용 로그인이에요. 이름만 정하면 시작할 수 있어요. Discord 로그인은 곧 연결돼요." submitLabel="시작하기" onLogin={login} />;
   }
   return <Lobby me={identity} onLogout={logout} />;
 }
@@ -37,7 +38,7 @@ function Lobby({ me, onLogout }: { me: Identity; onLogout: () => void }) {
   return (
     <div style={{ minHeight: "100vh" }}>
       <header className="topbar">
-        <strong>[서비스 이름]</strong>
+        <strong>{SERVICE_NAME}</strong>
         <div style={{ flex: 1 }} />
         <Link href="/characters" className="btn">내 캐릭터</Link>
         <span className="badge">{me.name}</span>

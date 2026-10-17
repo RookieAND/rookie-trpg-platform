@@ -8,6 +8,7 @@ import { useIdentity, type Identity } from "@/entities/user";
 import { CharacterForm, CharacterWizard } from "@/features/edit-character";
 import { OccupationManager, useOccupations } from "@/features/manage-occupations";
 import { ApiError } from "@/shared/api";
+import { SERVICE_NAME } from "@/shared/config";
 
 export function CharactersView() {
   const router = useRouter();
@@ -57,7 +58,7 @@ function Vault({ me }: { me: Identity }) {
   return (
     <div style={{ minHeight: "100vh" }}>
       <header className="topbar">
-        <strong>[서비스 이름]</strong>
+        <strong>{SERVICE_NAME}</strong>
         <Link href="/" style={{ color: "var(--muted)", textDecoration: "none" }}>← 로비</Link>
         <div style={{ flex: 1 }} />
         <span className="badge">{me.name}</span>

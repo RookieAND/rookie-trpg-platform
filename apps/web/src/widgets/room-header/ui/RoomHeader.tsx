@@ -11,6 +11,7 @@ import { EffectSettingsButton } from "@/features/manage-effects";
 import { MadnessTableButton } from "@/features/manage-madness";
 import type { Connection } from "@/features/room-realtime";
 import { SessionControls, type EndingDefaults } from "@/features/session-control";
+import { SERVICE_NAME } from "@/shared/config";
 
 const CONNECTION_LABEL: Record<Connection, string> = { open: "연결됨", connecting: "연결 중", closed: "다시 연결 중" };
 
@@ -50,7 +51,7 @@ export function RoomHeader({
   const isKp = role === "kp";
   return (
     <header className="topbar">
-      <strong>[서비스 이름]</strong>
+      <strong>{SERVICE_NAME}</strong>
       <Link href="/" style={{ color: "var(--muted)", textDecoration: "none" }}>← 로비</Link>
       <span className={`badge ${isKp ? "kp" : ""}`}>{ROLE_LABEL[role]}</span>
       <span className={`badge ${status === "PAUSED" ? "paused" : ""}`} data-testid="session-status">
