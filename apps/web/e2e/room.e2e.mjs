@@ -166,9 +166,23 @@ try {
   lobby.once("dialog", (d) => d.accept());
   await wizCard2.getByRole("button", { name: "삭제" }).click();
   await wizCard2.waitFor({ state: "detached" });
+  // 고치기·내보내기·가져오기
+  await lobby.getByRole("button", { name: `${JOB} 직업 수정` }).click();
+  assert.equal(await lobby.getByLabel("직업 이름").inputValue(), JOB);
+  await lobby.getByLabel("신용도 최대").fill("45");
+  await lobby.getByRole("button", { name: "수정 저장" }).click();
+  await lobby.getByTestId("occupation-item").filter({ hasText: JOB }).filter({ hasText: "20~45" }).waitFor();
+  const [jobDl] = await Promise.all([lobby.waitForEvent("download"), lobby.getByRole("button", { name: "내보내기" }).click()]);
+  const jobFile = await (await import("node:fs/promises")).readFile(await jobDl.path(), "utf8");
+  assert.ok(jobFile.includes(JOB) && !jobFile.includes('"id"'));
   await lobby.getByRole("button", { name: `${JOB} 직업 삭제` }).click();
   await lobby.getByTestId("occupation-item").filter({ hasText: JOB }).waitFor({ state: "detached" });
-  step("직업 정의: 직업 기능에만 직업 포인트를 쓰고 신용도 범위를 지켜야 만들어지며, 정의는 지울 수 있음");
+  await lobby.getByLabel("직업 파일 가져오기").setInputFiles({ name: "jobs.json", mimeType: "application/json", buffer: Buffer.from(jobFile) });
+  await lobby.getByTestId("occupation-item").filter({ hasText: JOB }).filter({ hasText: "20~45" }).waitFor();
+  await lobby.getByRole("status").filter({ hasText: "1개를 가져왔어요" }).waitFor();
+  await lobby.getByRole("button", { name: `${JOB} 직업 삭제` }).click();
+  await lobby.getByTestId("occupation-item").filter({ hasText: JOB }).waitFor({ state: "detached" });
+  step("직업 정의: 직업 기능에만 직업 포인트를 쓰고 신용도 범위를 지켜야 만들어지며, 정의는 고치고·내보내고·가져오고·지울 수 있음");
   await lobby.context().close();
   step("PL이 보관함에 캐릭터를 만듦 (파생 수치 미리보기 포함)");
 

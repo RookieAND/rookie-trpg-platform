@@ -80,7 +80,7 @@ function Vault({ me }: { me: Identity }) {
           />
         )}
 
-        {!editing && <OccupationManager error={jobs.error} occupations={jobs.occupations} onAdd={jobs.add} onRemove={jobs.remove} />}
+        {!editing && <OccupationManager error={jobs.error} occupations={jobs.occupations} onAdd={jobs.add} onEdit={jobs.edit} onRemove={jobs.remove} exportText={jobs.exportText} importText={jobs.importText} />}
 
         {items && items.length === 0 && !editing && <div style={{ color: "var(--muted)" }}>아직 캐릭터가 없어요. 새 캐릭터를 만들어 보세요.</div>}
         {!editing &&
