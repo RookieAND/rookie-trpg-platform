@@ -2,7 +2,7 @@
 import { useState } from "react";
 import type { AudioTrack, ClientCommand, Scene } from "@coc-vtt/shared";
 import type { Caller } from "@/shared/api";
-import { ImageUploadButton, Menu, MenuLabel } from "@/shared/ui";
+import { ImageUploadButton, Menu, MenuLabel, onTabListKeyDown } from "@/shared/ui";
 
 /** KP의 장면 막대: 장면을 고르고, 만들고, 지금 장면으로 바꾼다(컷/페이드). 활성이 아닌 장면은 PL에게 보이지 않아 미리 꾸며 둘 수 있다. */
 export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled, canActivate = enabled, send }: { me: Caller; scenes: Scene[]; tracks: AudioTrack[]; activeId: string; viewId: string; onView: (id: string) => void; enabled: boolean; canActivate?: boolean; send: (c: ClientCommand) => unknown }) {
@@ -18,7 +18,7 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
   return (
     <div className="scenebar" data-testid="scenebar">
       <div className="scene-row">
-        <div className="scene-tabs" role="tablist" aria-label="장면">
+        <div className="scene-tabs" role="tablist" aria-label="장면" onKeyDown={onTabListKeyDown}>
           {scenes.map((s) => (
             <button key={s.id} role="tab" aria-selected={s.id === viewId} className="scene-tab" onClick={() => onView(s.id)}>
               {s.id === activeId && <span aria-label="진행 중" style={{ color: "var(--ok)" }}>● </span>}

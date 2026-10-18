@@ -342,6 +342,14 @@ try {
   await pl.getByTestId("roll-entry").getByText(`${CHAR} · 도서관 이용`).first().waitFor();
   step("KP가 판정을 요청하면 PL에게 배너가 뜨고, 굴리기를 누르면 내 캐릭터로 굴림");
 
+  // 탭 목록은 화살표 키로 옮길 수 있다
+  await pl.getByRole("tab", { name: "굴림" }).focus();
+  await pl.keyboard.press("ArrowRight");
+  await pl.getByRole("tab", { name: "시트", selected: true }).waitFor();
+  await pl.keyboard.press("ArrowLeft");
+  await pl.getByRole("tab", { name: "굴림", selected: true }).waitFor();
+  step("탭 목록이 화살표 키로 움직임");
+
   // 무기·상태·소지품
   await pl.getByRole("tab", { name: "시트" }).click();
   await pl.getByTestId("weapons").getByText("주먹").waitFor();

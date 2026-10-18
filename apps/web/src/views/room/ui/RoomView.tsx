@@ -7,7 +7,7 @@ import { beginDiscordLogin, refreshStoredSession, useIdentity, type Identity } f
 import { SUPABASE_URL } from "@/shared/config";
 import { ObjectToolbar, uniqueName } from "@/features/board-objects";
 import { FogToolbar } from "@/features/manage-fog";
-import { Hint } from "@/shared/ui";
+import { Hint, onTabListKeyDown } from "@/shared/ui";
 import { SceneBar } from "@/features/manage-scenes";
 import { StageCues } from "@/features/stage-cues";
 import { useEffectPreference } from "@/features/effect-preference";
@@ -199,7 +199,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
 
         <aside className={`side${panelOpen ? "" : " collapsed"}`}>
           <button type="button" className="side-toggle" aria-expanded={panelOpen} onClick={() => setPanelOpen((o) => !o)}>{panelOpen ? "패널 접기" : "패널 펴기"}</button>
-          <div className="tabs" role="tablist">
+          <div className="tabs" role="tablist" aria-label="패널" onKeyDown={onTabListKeyDown}>
             <button role="tab" aria-selected={tab === "roll"} onClick={() => setTab("roll")}>굴림</button>
             <button role="tab" aria-selected={tab === "sheet"} onClick={() => setTab("sheet")}>시트</button>
             <button role="tab" aria-selected={tab === "handout"} onClick={() => setTab("handout")}>핸드아웃{newHandouts.length > 0 && <span className="tab-dot" data-testid="handout-new" aria-label={`새 핸드아웃 ${newHandouts.length}개`}>{newHandouts.length}</span>}</button>

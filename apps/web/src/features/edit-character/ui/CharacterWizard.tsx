@@ -42,6 +42,7 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
   const [backstory, setBackstory] = useState("");
   const [possessions, setPossessions] = useState("");
   const [busy, setBusy] = useState(false);
+  const [skillFilter, setSkillFilter] = useState("");
 
   const rules = useMemo(() => ageRules(age), [age]);
   const ageOk = age >= 15 && age <= 90;
@@ -170,6 +171,10 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
 
       {step === 2 && (
         <div style={{ display: "grid", gap: 12 }}>
+          <div className="card" style={{ gap: 4, fontSize: 12.5, color: "var(--muted)" }} data-testid="points-guide">
+            <span><strong>직업 포인트</strong>는 직업이 요구하는 기능(★)과 신용도에, <strong>관심 포인트</strong>는 아무 기능에나 쓰는 몫이에요.</span>
+            <span>기능 칸에 숫자를 적으면 그 만큼 올라가요. 남는 포인트는 그대로 둬도 돼요. {job ? "" : "직업을 정해 두지 않았다면 직업 포인트는 어느 기능에나 쓸 수 있어요."}</span>
+          </div>
           <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
             직업 포인트 공식
             <select className="input" aria-label="직업 포인트 공식" disabled={!!job} value={job?.formula ?? formula} onChange={(e) => setFormula(e.target.value as OccupationFormulaId)}>
@@ -185,13 +190,14 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
           {check.errors.map((e) => (
             <div key={e} className="err" role="alert">{e}</div>
           ))}
-          <div style={{ display: "grid", gap: 6, maxHeight: 360, overflow: "auto" }}>
-            {skills.map((s) => {
+          <input className="input" aria-label="기능 찾기" placeholder="기능 찾기 (예: 사격, 외국어)" value={skillFilter} onChange={(e) => setSkillFilter(e.target.value)} />
+          <div style={{ display: "grid", gap: 6, maxHeight: "min(480px, 55vh)", overflow: "auto" }}>
+            {skills.filter((s) => s.name.includes(skillFilter.trim()) || (alloc[s.name]?.occ ?? 0) + (alloc[s.name]?.personal ?? 0) > 0).map((s) => {
               const a = alloc[s.name] ?? { occ: 0, personal: 0 };
               const fixed = (FIXED_SKILLS as readonly string[]).includes(s.name);
               const star = !!job && (job.skills.includes(s.name) || s.name === "신용도");
               return (
-                <div key={s.name} style={{ display: "grid", gridTemplateColumns: "1fr 50px 80px 80px 50px", gap: 8, alignItems: "center" }}>
+                <div key={s.name} data-invalid={check.errors.some((e) => e.startsWith(`${s.name}:`))} style={{ display: "grid", gridTemplateColumns: "1fr 50px 80px 80px 50px", gap: 8, alignItems: "center", ...(check.errors.some((e) => e.startsWith(`${s.name}:`)) ? { outline: "1px solid var(--danger)", borderRadius: 6, padding: 2 } : {}) }}>
                   <span>{star && "★ "}{s.name}</span>
                   <span className="mono" style={{ color: "var(--muted)" }}>{s.value}</span>
                   <input className="input mono" disabled={fixed || (!!job && !star)} aria-label={`${s.name} 직업 포인트`} type="number" min={0} value={a.occ || ""} placeholder="직업" onChange={(e) => setPts(s.name, "occ", num(e.target.value))} />
