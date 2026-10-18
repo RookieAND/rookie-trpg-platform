@@ -98,7 +98,8 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
       {objects.map((o) => {
         const pos = drag?.id === o.id ? drag : o;
         const hidden = o.layer === "gm" || o.visibleTo === "gm";
-        const stroke = hidden ? "#e3a94a" : o.kind === "token" ? "#b8c7ff" : "#6b727c";
+        const mine = o.kind === "token" && me.role === "pl" && o.ownerId === me.userId;
+        const stroke = hidden ? "#e3a94a" : mine ? "#4cc38a" : o.kind === "token" ? "#b8c7ff" : "#6b727c";
         const fill = hidden ? "rgba(227,169,74,.12)" : o.kind === "token" ? "#2b3a5e" : "#23272d";
         return (
           <g
@@ -106,6 +107,8 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
             data-testid={`obj-${o.name}`}
             data-x={Math.round(pos.x)}
             data-y={Math.round(pos.y)}
+            data-mine={mine ? "true" : undefined}
+            data-locked={o.locked ? "true" : undefined}
             style={{ cursor: canMove(o) ? "grab" : "default" }}
             onPointerDown={(e) => {
               e.stopPropagation();
@@ -117,6 +120,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
             }}
           >
             <circle className="tok-hit" cx={pos.x} cy={pos.y} r={44} />
+            {mine && <circle cx={pos.x} cy={pos.y} r={R + 5} fill="none" stroke="#4cc38a" strokeWidth="1.5" opacity="0.55" data-testid="mine-ring" pointerEvents="none" />}
             {selectedId === o.id && <circle cx={pos.x} cy={pos.y} r={R + 8} fill="none" stroke="#7c86f7" strokeWidth="2" />}
             {o.image ? (
               <>
@@ -143,7 +147,14 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
             <text x={pos.x} y={pos.y + (o.kind === "token" ? R + 18 : o.image ? 48 : 32)} textAnchor="middle" fill={hidden ? "#e3a94a" : "#a0a7b0"} fontSize="12" pointerEvents="none">
               {o.name}
               {hidden ? " · GM 전용" : ""}
+              {o.locked ? " · 잠김" : ""}
             </text>
+            {mine && (
+              <g pointerEvents="none" data-testid="mine-badge">
+                <rect x={pos.x + R - 12} y={pos.y - R - 6} width="22" height="16" rx="8" fill="#4cc38a" />
+                <text x={pos.x + R - 1} y={pos.y - R + 6} textAnchor="middle" fill="#08090a" fontSize="11" fontWeight="700">나</text>
+              </g>
+            )}
           </g>
         );
       })}

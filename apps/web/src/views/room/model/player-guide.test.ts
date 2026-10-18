@@ -52,3 +52,12 @@ describe("닫은 상태 저장", () => {
     expect(() => writeGuideClosed("r1", bad)).not.toThrow();
   });
 });
+
+describe("토큰 단계 안내", () => {
+  const hint = (hasToken?: boolean) => playerGuideSteps({ ...base, hasToken }).find((s) => s.key === "move")!.hint;
+  it("내 토큰이 없으면 KP에게 요청하거나 기다리라고 알린다", () => {
+    expect(hint(false)).toContain("아직 내 토큰이 없어요");
+    expect(hint(true)).not.toContain("아직 내 토큰이 없어요");
+    expect(hint(undefined)).not.toContain("아직 내 토큰이 없어요");
+  });
+});

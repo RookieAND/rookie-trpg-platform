@@ -357,6 +357,8 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
       ownerId: id.optional(),
       /** 비우면 지금 활성 장면에 놓는다. */
       sceneId: id.optional(),
+      /** 켜면 (x,y)에서 가장 가까운, 같은 장면의 다른 오브젝트와 겹치지 않는 빈자리에 놓는다. */
+      autoPlace: z.boolean().optional(),
     }),
   }),
   z.object({
@@ -368,6 +370,8 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
     data: z.object({
       id,
       name: z.string().min(1).max(40).optional(),
+      /** 소유자(룸의 PL). null이면 소유자를 푼다(NPC). */
+      ownerId: id.nullable().optional(),
       /** null이면 이미지를 뗀다. */
       image: imageId.nullable().optional(),
       layer: z.enum(["background", "object", "gm"]).optional(),

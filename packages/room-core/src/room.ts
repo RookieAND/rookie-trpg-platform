@@ -1207,13 +1207,15 @@ export class Room {
     if (this.objects.size >= MAX_OBJECTS) return fail("bad_message", `오브젝트는 ${MAX_OBJECTS}개까지 둘 수 있어요.`);
     const sceneId = d.sceneId ?? this.activeSceneId;
     if (!this.scenes.has(sceneId)) return fail("not_found", "장면을 찾을 수 없어요.");
+    if (d.ownerId && this.members.get(d.ownerId)?.role !== "pl") return fail("bad_message", "소유자는 룸의 PL이어야 해요.");
+    const spot = d.autoPlace ? this.freeSpot(sceneId, d.x, d.y) : { x: d.x, y: d.y };
     const obj: GameObject = {
       id: this.newId(),
       sceneId,
       kind: d.kind,
       name: d.name,
-      x: d.x,
-      y: d.y,
+      x: spot.x,
+      y: spot.y,
       layer: d.layer,
       visibleTo: d.visibleTo,
       locked: false,
@@ -1223,6 +1225,25 @@ export class Room {
     };
     this.objects.set(obj.id, obj);
     return ok(...this.fanOutObject(null, obj));
+  }
+
+  /** 같은 장면의 오브젝트와 겹치지 않는, (x,y)에 가장 가까운 격자 자리. 빈자리가 없으면 그대로 돌려준다. */
+  private freeSpot(sceneId: string, x: number, y: number): { x: number; y: number } {
+    const STEP = 56;
+    const others = [...this.objects.values()].filter((o) => o.sceneId === sceneId);
+    const free = (px: number, py: number) => others.every((o) => (o.x - px) ** 2 + (o.y - py) ** 2 >= STEP * STEP);
+    const inBoard = (px: number, py: number) => px >= 30 && px <= 970 && py >= 30 && py <= 770;
+    const cands: { x: number; y: number; d: number }[] = [];
+    for (let i = -12; i <= 12; i++) {
+      for (let j = -12; j <= 12; j++) {
+        const px = x + i * STEP;
+        const py = y + j * STEP;
+        if (inBoard(px, py)) cands.push({ x: px, y: py, d: i * i + j * j });
+      }
+    }
+    cands.sort((a, b) => a.d - b.d);
+    const hit = cands.find((c) => free(c.x, c.y));
+    return hit ? { x: hit.x, y: hit.y } : { x, y };
   }
 
   private objectMove(who: Actor, d: { id: string; x: number; y: number; rev: number }): Result {
@@ -1251,8 +1272,15 @@ export class Room {
     if (who.role !== "kp") return fail("forbidden", "KP만 오브젝트를 바꿀 수 있어요.");
     const obj = this.objects.get(d.id);
     if (!obj) return fail("not_found", "오브젝트를 찾을 수 없어요.");
+    if (d.ownerId) {
+      if (this.members.get(d.ownerId)?.role !== "pl") return fail("bad_message", "소유자는 룸의 PL이어야 해요.");
+    }
     const before = { ...obj };
     if (d.name !== undefined) obj.name = d.name;
+    if (d.ownerId !== undefined) {
+      if (d.ownerId) obj.ownerId = d.ownerId;
+      else delete obj.ownerId;
+    }
     if (d.image !== undefined) {
       if (d.image) obj.image = d.image;
       else delete obj.image;
