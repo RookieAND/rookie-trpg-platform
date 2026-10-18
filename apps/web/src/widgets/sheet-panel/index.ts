@@ -1,1 +1,1 @@
-export { SheetPanel, type RollOptions } from "./ui/SheetPanel";
+export { SheetPanel, SheetEmpty, type RollOptions } from "./ui/SheetPanel";

@@ -26,7 +26,9 @@ import { RollPanel } from "@/widgets/roll-panel";
 import { SceneTransition } from "@/widgets/scene-transition";
 import { RoomHeader } from "@/widgets/room-header";
 import { StartGuide } from "./StartGuide";
-import { SheetPanel, type RollOptions } from "@/widgets/sheet-panel";
+import { PlayerGuide } from "./PlayerGuide";
+import { playerGuideSteps, readGuideClosed, showPlayerGuide, writeGuideClosed } from "../model/player-guide";
+import { SheetPanel, SheetEmpty, type RollOptions } from "@/widgets/sheet-panel";
 
 const REJECTED: Record<number, string> = {
   4401: "로그인 정보가 올바르지 않아요.",
@@ -48,6 +50,8 @@ export function RoomView({ roomId, invite }: { roomId: string; invite?: string }
 function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: string }) {
   const { state, connection, closeCode, send } = useRoom({ roomId, user: me.userId, name: me.name, token: me.token, invite });
   const [guideClosed, setGuideClosed] = useState(false);
+  const [plGuideClosed, setPlGuideClosed] = useState(false);
+  useEffect(() => setPlGuideClosed(readGuideClosed(roomId)), [roomId]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const fx = useEffectPreference();
   const sound = useAudioPreference();
@@ -115,6 +119,9 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
           {state.sessionStatus === "PAUSED" && <div className="banner" role="status">세션이 일시정지 중이에요. KP가 돌아오면 이어서 진행해요.</div>}
           {state.sessionStatus === "IDLE" && !isKp && (
             <div className="banner" role="status">KP가 세션을 시작하기를 기다리고 있어요.</div>
+          )}
+          {showPlayerGuide({ role, ready: state.ready, sessionStatus: state.sessionStatus, closed: plGuideClosed }) && (
+            <PlayerGuide spectator={role === "spectator"} steps={playerGuideSteps({ role, userId: me.userId, characters, rolls: state.rolls, handouts: handoutList })} onClose={() => { setPlGuideClosed(true); writeGuideClosed(roomId); }} />
           )}
           {state.sessionStatus === "IDLE" && isKp && !guideClosed && (
             <StartGuide
@@ -214,7 +221,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               )}
               <div style={{ padding: 16, display: "grid", gap: 12, marginTop: characters.length > 0 ? "auto" : 0 }}>
                 {role !== "spectator" && (isKp || !hasOwn) && <LoadCharacter me={me} send={send} disabled={state.sessionStatus === "PAUSED"} />}
-                {characters.length === 0 && role === "spectator" && <div style={{ color: "var(--muted)" }}>관전자는 시트를 볼 수 없어요.</div>}
+                {characters.length === 0 && <SheetEmpty role={role} canLoad={!hasOwn} />}
                 {state.sessionStatus === "IDLE" && state.sessionNumber > 0 && sheet && sheet.ownerId === me.userId && <SaveToVaultButton key={`${sheet.id}-${sheet.rev}`} me={me} character={sheet} />}
                 {state.lastError && <div className="err" role="alert">{state.lastError.message}</div>}
               </div>

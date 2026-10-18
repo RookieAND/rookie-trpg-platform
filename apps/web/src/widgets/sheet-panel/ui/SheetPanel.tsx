@@ -196,3 +196,16 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, 
     </div>
   );
 }
+
+/** 시트 탭이 비었을 때(룸에 캐릭터가 없을 때) 다음 행동을 알려 준다. */
+export function SheetEmpty({ role, canLoad }: { role: "kp" | "pl" | "spectator"; canLoad: boolean }) {
+  const text =
+    role === "spectator"
+      ? "관전자는 시트를 볼 수 없어요."
+      : role === "kp"
+        ? "아직 룸에 캐릭터가 없어요. 아래에서 보관함 캐릭터를 불러오거나 PL이 불러오길 기다려요."
+        : canLoad
+          ? "내 캐릭터가 아직 없어요. 아래에서 보관함 캐릭터를 불러와요. 보관함이 비었다면 로비의 ‘내 캐릭터’에서 먼저 만들어요."
+          : "아직 내 캐릭터가 없어요.";
+  return <div style={{ color: "var(--muted)" }} data-testid="sheet-empty">{text}</div>;
+}
