@@ -54,7 +54,7 @@ export function BeatEditor({ initial, scenes, handouts, tracks, onSave, onCancel
                 checked={picked.includes(h.id)}
                 disabled={!picked.includes(h.id) && picked.length >= MAX_BEAT_HANDOUTS}
                 onChange={(e) => setPicked(e.target.checked ? [...picked, h.id] : picked.filter((x) => x !== h.id))}
-                style={{ accentColor: "#5fd3a4" }}
+                style={{ accentColor: "#7c86f7" }}
               />
               {h.title}
               {h.visibleTo === "gm" && <span style={{ color: "var(--muted)", fontSize: 12 }}>(초안이라 건너뜀)</span>}

@@ -42,10 +42,11 @@ export function ObjectToolbar({
   };
 
   return (
-    <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: 12, display: "flex", gap: 8 }}>
-      <button className="btn" disabled={!enabled} onClick={() => add("token", "object")}>+ 토큰</button>
-      <button className="btn" disabled={!enabled} onClick={() => add("prop", "object")}>+ 소품</button>
-      <button className="btn" disabled={!enabled} onClick={() => add("prop", "gm")}>+ GM 전용</button>
+    <div className="dock" style={{ bottom: 12 }}>
+      <span className="dock-label" title="지금 보고 있는 장면에 오브젝트를 놓아요">놓기</span>
+      <button className="btn" disabled={!enabled} title="PL이 움직일 수 있는 토큰(캐릭터·NPC)을 놓아요" onClick={() => add("token", "object")}>+ 토큰</button>
+      <button className="btn" disabled={!enabled} title="가구·단서 같은 소품을 놓아요" onClick={() => add("prop", "object")}>+ 소품</button>
+      <button className="btn" disabled={!enabled} title="PL에게 보이지 않는 메모용 오브젝트를 놓아요" onClick={() => add("prop", "gm")}>+ GM 전용</button>
       {selected && (
         <>
           <button className="btn" disabled={!enabled} onClick={() => send({ type: "object.update", data: { id: selected.id, layer: selected.layer === "gm" ? "object" : "gm" } })}>

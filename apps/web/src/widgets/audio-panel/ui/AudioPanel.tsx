@@ -44,7 +44,7 @@ export function AudioPanel({ me, library, bgm, enabled, send }: { me: Caller; li
             <span data-testid="audio-now-name">{nowPlaying?.label ?? "(라이브러리에 없는 음원)"}</span>
             <label style={{ display: "grid", gap: 2, fontSize: 13 }}>
               볼륨 {bgm.volume}
-              <input type="range" min={0} max={100} value={bgm.volume} aria-label="배경음 전체 볼륨" disabled={!enabled} onChange={(e) => send({ type: "audio.volume", data: { volume: Number(e.target.value) } })} style={{ accentColor: "#5fd3a4" }} />
+              <input type="range" min={0} max={100} value={bgm.volume} aria-label="배경음 전체 볼륨" disabled={!enabled} onChange={(e) => send({ type: "audio.volume", data: { volume: Number(e.target.value) } })} style={{ accentColor: "#7c86f7" }} />
             </label>
             <button className="btn" disabled={!enabled} onClick={() => send({ type: "audio.stop", data: { fadeMs } })}>정지</button>
           </>
@@ -71,7 +71,7 @@ export function AudioPanel({ me, library, bgm, enabled, send }: { me: Caller; li
           </select>
           <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, whiteSpace: "nowrap" }}>
             기본 볼륨 {volume}
-            <input type="range" min={0} max={100} value={volume} aria-label="기본 볼륨" onChange={(e) => setVolume(Number(e.target.value))} style={{ accentColor: "#5fd3a4" }} />
+            <input type="range" min={0} max={100} value={volume} aria-label="기본 볼륨" onChange={(e) => setVolume(Number(e.target.value))} style={{ accentColor: "#7c86f7" }} />
           </label>
         </div>
         <button className="btn primary" disabled={!enabled || busy || library.length >= MAX_AUDIO_TRACKS} onClick={() => input.current?.click()}>

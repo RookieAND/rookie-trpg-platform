@@ -92,8 +92,9 @@ const MAX_HANDOUTS = 100;
 const MAX_SCENES = 30;
 const SHEET_PATCHES_PER_SECOND = 10;
 
-export function canSeeHandout(h: Pick<Handout, "visibleTo">, viewer: Pick<Member, "userId" | "role">): boolean {
+export function canSeeHandout(h: Pick<Handout, "visibleTo" | "kpOnly">, viewer: Pick<Member, "userId" | "role">): boolean {
   if (viewer.role === "kp") return true;
+  if (h.kpOnly) return false;
   const v = h.visibleTo;
   if (v === "all") return true;
   if (v === "gm") return false;
@@ -667,6 +668,7 @@ export class Room {
       if (!probe.ok || probe.outcome.kind !== "dice") return fail("bad_message", "SAN 보상은 1d6처럼 주사위 식으로 적어 주세요.");
     }
     if (d.bgmTrackId && this.audio.find((t) => t.id === d.bgmTrackId)?.kind !== "bgm") return fail("not_found", "배경음을 찾을 수 없어요.");
+    if (d.handoutIds.some((hid) => this.handouts.get(hid)?.kpOnly)) return fail("bad_message", "KP 전용 노트는 비트에 붙일 수 없어요.");
     const existing = d.id ? this.flow.beats.find((b) => b.id === d.id) : undefined;
     if (d.id && !existing) return fail("not_found", "비트를 찾을 수 없어요.");
     if (!existing && this.flow.beats.length >= MAX_BEATS) return fail("bad_message", `비트는 ${MAX_BEATS}개까지 둘 수 있어요.`);
@@ -704,6 +706,7 @@ export class Room {
     if (!this.flow.beats.some((b) => b.id === d.from) || !this.flow.beats.some((b) => b.id === d.to)) return fail("not_found", "비트를 찾을 수 없어요.");
     if (d.from === d.to) return fail("bad_message", "같은 비트로 되돌아가는 분기는 만들 수 없어요.");
     if (d.condition.type === "handout" && !this.handouts.has(d.condition.handoutId)) return fail("not_found", "핸드아웃을 찾을 수 없어요.");
+    if (d.condition.type === "handout" && this.handouts.get(d.condition.handoutId)?.kpOnly) return fail("bad_message", "KP 전용 노트는 분기 조건으로 쓸 수 없어요.");
     const existing = d.id ? this.flow.branches.find((b) => b.id === d.id) : undefined;
     if (d.id && !existing) return fail("not_found", "분기를 찾을 수 없어요.");
     if (!existing && this.flow.branches.length >= MAX_BRANCHES) return fail("bad_message", `분기는 ${MAX_BRANCHES}개까지 둘 수 있어요.`);
@@ -1419,7 +1422,7 @@ export class Room {
   private handoutCreate(who: Actor, d: Extract<ClientCommand, { type: "handout.create" }>["data"]): Result {
     if (who.role !== "kp") return fail("forbidden", "KP만 핸드아웃을 만들 수 있어요.");
     if (this.handouts.size >= MAX_HANDOUTS) return fail("bad_message", `핸드아웃은 ${MAX_HANDOUTS}개까지 둘 수 있어요.`);
-    const h: Handout = { id: this.newId(), title: d.title, body: d.body, visibleTo: d.visibleTo, rev: 0, ...(d.image ? { image: d.image } : {}) };
+    const h: Handout = { id: this.newId(), title: d.title, body: d.body, visibleTo: d.kpOnly ? "gm" : d.visibleTo, rev: 0, ...(d.image ? { image: d.image } : {}), ...(d.kpOnly ? { kpOnly: true } : {}) };
     this.handouts.set(h.id, h);
     return ok(...this.fanOutHandout(null, h));
   }
@@ -1429,6 +1432,14 @@ export class Room {
     const h = this.handouts.get(d.id);
     if (!h) return fail("not_found", "핸드아웃을 찾을 수 없어요.");
     const before = cloneHandout(h);
+    const locked = d.kpOnly ?? h.kpOnly ?? false;
+    if (locked && d.visibleTo !== undefined && d.visibleTo !== "gm") return fail("bad_message", "KP 전용 노트는 공개할 수 없어요. 먼저 KP 전용을 풀어 주세요.");
+    if (d.kpOnly !== undefined) {
+      if (d.kpOnly) {
+        h.kpOnly = true;
+        h.visibleTo = "gm";
+      } else delete h.kpOnly;
+    }
     if (d.title !== undefined) h.title = d.title;
     if (d.body !== undefined) h.body = d.body;
     if (d.image !== undefined) {
@@ -1452,6 +1463,7 @@ export class Room {
     if (who.role !== "kp") return fail("forbidden", "KP만 핸드아웃을 펼쳐 보일 수 있어요.");
     const h = this.handouts.get(id);
     if (!h) return fail("not_found", "핸드아웃을 찾을 수 없어요.");
+    if (h.kpOnly) return fail("bad_message", "KP 전용 노트는 펼쳐 보일 수 없어요.");
     if (h.visibleTo === "gm") return fail("bad_message", "초안은 펼쳐 보일 수 없어요. 먼저 공개 범위를 정해 주세요.");
     // 한 번 쓰고 사라지는 연출이라 버퍼에는 남기지 않는다(늦게 들어온 사람에게 다시 띄우지 않는다).
     // 누른 KP 화면은 가리지 않는다.

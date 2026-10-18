@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   HttpCode,
@@ -75,6 +76,18 @@ export class RoomsController {
     const entry = await this.registry.create(me.userId, parsed.data.name);
     // 만든 사람은 이름도 함께 기억해 목록에 보이게 한다(접속 때 멤버로 등록된다).
     return { id: entry.meta.id, name: entry.meta.name, invite: entry.meta.invite };
+  }
+
+  /** 룸 주인이 룸을 지운다. 되돌릴 수 없다. */
+  @Delete("rooms/:roomId")
+  @HttpCode(204)
+  async remove(@Req() req: IncomingMessage, @Param("roomId") roomId: string) {
+    const me = this.who(req);
+    const r = await this.registry.remove(roomId, me.userId);
+    if (!r.ok) {
+      if (r.reason === "not_found") throw new NotFoundException("룸을 찾을 수 없어요.");
+      throw new ForbiddenException("룸을 만든 사람만 지울 수 있어요.");
+    }
   }
 
   /** 초대 링크로 들어온 사람이 룸 이름과 입장 가능 여부를 보는 용도 */

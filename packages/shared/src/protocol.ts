@@ -122,6 +122,8 @@ export interface Handout {
   /** 핸드아웃에 붙인 이미지 id */
   image?: string;
   visibleTo: Visibility;
+  /** KP 전용 노트. 공개 범위를 바꾸거나 비트·분기에 붙일 수 없어서 실수로 새어 나가지 않는다. */
+  kpOnly?: boolean;
   rev: number;
 }
 
@@ -409,6 +411,7 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
       body: z.string().max(4000).default(""),
       image: imageId.optional(),
       visibleTo: visibility.default("gm"),
+      kpOnly: z.boolean().optional(),
     }),
   }),
   z.object({
@@ -419,6 +422,7 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
       body: z.string().max(4000).optional(),
       image: imageId.nullable().optional(),
       visibleTo: visibility.optional(),
+      kpOnly: z.boolean().optional(),
     }),
   }),
   z.object({ type: z.literal("handout.remove"), data: z.object({ id }) }),

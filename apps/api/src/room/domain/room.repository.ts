@@ -33,6 +33,8 @@ export interface RoomRepository {
   save(room: StoredRoom): Promise<void>;
   /** 사용자가 만들었거나 참가한 룸 */
   listFor(userId: string): Promise<StoredRoom[]>;
+  /** 룸을 통째로 지운다. 없는 룸이면 아무 일도 없다. */
+  remove(id: string): Promise<void>;
 }
 
 /** 룸을 만들었거나 멤버로 참가한 사용자인지 */

@@ -7,7 +7,7 @@ import { imageUrl, type Caller } from "@/shared/api";
 type Editing = { mode: "new" } | { mode: "edit"; handout: Handout } | null;
 
 const scope = (h: Handout, players: Member[]) =>
-  h.visibleTo === "gm" ? "초안" : h.visibleTo === "all" ? "전원" : h.visibleTo.map((id) => players.find((p) => p.userId === id)?.name ?? "?").join(", ");
+  h.kpOnly ? "KP 노트" : h.visibleTo === "gm" ? "초안" : h.visibleTo === "all" ? "전원" : h.visibleTo.map((id) => players.find((p) => p.userId === id)?.name ?? "?").join(", ");
 
 /** 핸드아웃 목록. KP는 만들고 고치고 공개 범위를 정하고, 나머지는 받은 것만 읽는다. */
 export function HandoutPanel({ me, handouts, isKp, canEdit, players, send }: { me: Caller; handouts: Handout[]; isKp: boolean; canEdit: boolean; players: Member[]; send: (c: ClientCommand) => unknown }) {
@@ -26,7 +26,7 @@ export function HandoutPanel({ me, handouts, isKp, canEdit, players, send }: { m
           onCancel={() => setEditing(null)}
           onSave={(d) => {
             if (editing.mode === "edit") send({ type: "handout.update", data: { id: editing.handout.id, ...d } });
-            else send({ type: "handout.create", data: { title: d.title, body: d.body, visibleTo: d.visibleTo, ...(d.image ? { image: d.image } : {}) } });
+            else send({ type: "handout.create", data: { title: d.title, body: d.body, visibleTo: d.visibleTo, ...(d.kpOnly ? { kpOnly: true } : {}), ...(d.image ? { image: d.image } : {}) } });
             setEditing(null);
           }}
         />
@@ -41,7 +41,7 @@ export function HandoutPanel({ me, handouts, isKp, canEdit, players, send }: { m
           <article key={h.id} className="card" data-testid="handout-item" style={{ gap: 8 }}>
             <button style={{ all: "unset", cursor: "pointer", display: "flex", gap: 8, alignItems: "center" }} aria-expanded={openId === h.id} onClick={() => setOpenId(openId === h.id ? null : h.id)}>
               <strong style={{ flex: 1 }}>{h.title}</strong>
-              {isKp && <span className={`badge ${h.visibleTo === "gm" ? "paused" : ""}`}>{scope(h, players)}</span>}
+              {isKp && <span className={`badge ${h.kpOnly ? "kp" : h.visibleTo === "gm" ? "paused" : ""}`}>{scope(h, players)}</span>}
             </button>
             {openId === h.id && (
               <div style={{ display: "grid", gap: 8 }}>
@@ -50,8 +50,8 @@ export function HandoutPanel({ me, handouts, isKp, canEdit, players, send }: { m
               </div>
             )}
             {isKp && (
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn" disabled={!canEdit || h.visibleTo === "gm"} onClick={() => send({ type: "handout.show", data: { id: h.id } })}>펼쳐 보이기</button>
+              <div className="btn-row">
+                {!h.kpOnly && <button className="btn" disabled={!canEdit || h.visibleTo === "gm"} title={h.kpOnly ? "KP 전용 노트는 펼쳐 보일 수 없어요" : undefined} onClick={() => send({ type: "handout.show", data: { id: h.id } })}>펼쳐 보이기</button>}
                 <button className="btn" disabled={!canEdit} onClick={() => setEditing({ mode: "edit", handout: h })}>편집</button>
                 <button className="btn danger" disabled={!canEdit} onClick={() => window.confirm(`'${h.title}'을(를) 지울까요?`) && send({ type: "handout.remove", data: { id: h.id } })}>삭제</button>
               </div>

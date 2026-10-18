@@ -30,7 +30,7 @@ export function FlowPanel({ flow, scenes, handouts, tracks, status, enabled, sen
         <BeatEditor
           initial={editing.beat}
           scenes={scenes}
-          handouts={handouts}
+          handouts={handouts.filter((h) => !h.kpOnly)}
           tracks={tracks}
           onCancel={() => setEditing(null)}
           onSave={(d) => {
@@ -48,7 +48,7 @@ export function FlowPanel({ flow, scenes, handouts, tracks, status, enabled, sen
           initial={editing.branch}
           fromId={editing.from}
           beats={flow.beats}
-          handouts={handouts}
+          handouts={handouts.filter((h) => !h.kpOnly)}
           onCancel={() => setEditing(null)}
           onSave={(d) => {
             send({ type: "flow.branch.upsert", data: d });
@@ -95,9 +95,9 @@ export function FlowPanel({ flow, scenes, handouts, tracks, status, enabled, sen
               <span style={{ flex: 1 }}>
                 {b.label} → {beatName(b.to)} <span style={{ color: "var(--muted)", fontSize: 12 }}>({conditionText(b, handouts)})</span>
               </span>
-              <button className="btn" style={{ height: 28 }} disabled={!enabled || !active} onClick={() => send(gotoCmd(flow, b.to))}>{flow.beats.find((x) => x.id === b.to)?.kind === "ending" ? "엔딩 확정" : "이동"}</button>
-              <button className="btn" style={{ height: 28 }} disabled={!enabled} onClick={() => setEditing({ kind: "branch", from: b.from, branch: b })}>편집</button>
-              <button className="btn danger" style={{ height: 28 }} aria-label={`${b.label} 분기 삭제`} disabled={!enabled} onClick={() => send({ type: "flow.branch.remove", data: { id: b.id } })}>삭제</button>
+              <button className="btn" disabled={!enabled || !active} onClick={() => send(gotoCmd(flow, b.to))}>{flow.beats.find((x) => x.id === b.to)?.kind === "ending" ? "엔딩 확정" : "이동"}</button>
+              <button className="btn" disabled={!enabled} onClick={() => setEditing({ kind: "branch", from: b.from, branch: b })}>편집</button>
+              <button className="btn danger" aria-label={`${b.label} 분기 삭제`} disabled={!enabled} onClick={() => send({ type: "flow.branch.remove", data: { id: b.id } })}>삭제</button>
             </div>
           ))}
         </section>
@@ -127,11 +127,11 @@ export function FlowPanel({ flow, scenes, handouts, tracks, status, enabled, sen
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {!isCurrent && b.kind !== "start" && (
-                <button className="btn" style={{ height: 28 }} disabled={!enabled || !active} onClick={() => send(gotoCmd(flow, b.id))}>{b.kind === "ending" ? "엔딩 확정" : "여기로 이동"}</button>
+                <button className="btn" disabled={!enabled || !active} onClick={() => send(gotoCmd(flow, b.id))}>{b.kind === "ending" ? "엔딩 확정" : "여기로 이동"}</button>
               )}
-              {b.kind !== "ending" && <button className="btn" style={{ height: 28 }} disabled={!enabled || flow.beats.length < 2} onClick={() => setEditing({ kind: "branch", from: b.id })}>분기 추가</button>}
-              <button className="btn" style={{ height: 28 }} disabled={!enabled} onClick={() => setEditing({ kind: "beat", beat: b })}>편집</button>
-              <button className="btn danger" style={{ height: 28 }} aria-label={`${b.name} 삭제`} disabled={!enabled} onClick={() => window.confirm(`'${b.name}'과(와) 이어진 분기를 지울까요?`) && send({ type: "flow.beat.remove", data: { id: b.id } })}>삭제</button>
+              {b.kind !== "ending" && <button className="btn" disabled={!enabled || flow.beats.length < 2} onClick={() => setEditing({ kind: "branch", from: b.id })}>분기 추가</button>}
+              <button className="btn" disabled={!enabled} onClick={() => setEditing({ kind: "beat", beat: b })}>편집</button>
+              <button className="btn danger" aria-label={`${b.name} 삭제`} disabled={!enabled} onClick={() => window.confirm(`'${b.name}'과(와) 이어진 분기를 지울까요?`) && send({ type: "flow.beat.remove", data: { id: b.id } })}>삭제</button>
             </div>
           </article>
         );

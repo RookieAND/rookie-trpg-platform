@@ -26,6 +26,10 @@ export class PostgresRoomRepository implements RoomRepository {
     );
   }
 
+  async remove(id: string) {
+    await this.db.query("delete from rooms where id = $1", [id]);
+  }
+
   async listFor(userId: string) {
     const { rows } = await this.db.query<Row>("select meta, data from rooms where owner_id = $1 or member_ids @> array[$1]::text[] order by updated_at desc", [userId]);
     return rows.map(toStored);

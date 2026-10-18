@@ -81,7 +81,7 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
       <div className="compose">
         {isKp && (
           <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input type="checkbox" checked={secret} onChange={(e) => setSecret(e.target.checked)} style={{ accentColor: "#5fd3a4" }} />
+            <input type="checkbox" checked={secret} onChange={(e) => setSecret(e.target.checked)} style={{ accentColor: "#7c86f7" }} />
             비밀 굴림 (결과는 KP에게만 보여요)
           </label>
         )}

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RoomRepository, StoredRoom } from "../domain/room.repository";
 import { involvesUser } from "../domain/room.repository";
@@ -28,6 +28,10 @@ export class FileRoomRepository implements RoomRepository {
     const tmp = `${target}.${randomBytes(4).toString("hex")}.tmp`;
     await writeFile(tmp, JSON.stringify(room), "utf8");
     await rename(tmp, target);
+  }
+
+  async remove(id: string) {
+    await rm(this.path(id), { force: true });
   }
 
   async listFor(userId: string) {

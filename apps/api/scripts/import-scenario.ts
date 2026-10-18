@@ -167,7 +167,7 @@ async function main() {
   }
 
   for (const h of sc.handouts) {
-    const ev = await kp.send({ type: "handout.create", data: { title: h.title, body: h.body, visibleTo: h.visibleTo } });
+    const ev = await kp.send({ type: "handout.create", data: { title: h.title, body: h.body, visibleTo: h.visibleTo, ...(h.title.startsWith("[KP]") ? { kpOnly: true } : {}) } });
     const added = ev.find((e) => e.type === "handout.added");
     if (!added || added.type !== "handout.added") throw new Error(`핸드아웃을 만들지 못했어요: ${h.title}`);
     handoutId.set(h.key, added.data.id);

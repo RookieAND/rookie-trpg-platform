@@ -29,6 +29,9 @@ export class RoomRegistry {
   private saving = new Map<string, Promise<void>>();
   private readonly now: () => number;
   private readonly debounce: number;
+  /** 지운 룸. 늦게 도착한 저장이 되살리지 못하게 막는다. */
+  private removed = new Set<string>();
+  private removeListeners: Array<(roomId: string) => void> = [];
 
   constructor(private readonly opts: RegistryOptions) {
     this.now = opts.now ?? Date.now;
@@ -37,6 +40,27 @@ export class RoomRegistry {
 
   roomCount() {
     return this.loaded.size;
+  }
+
+  /** 룸이 지워졌을 때 알림을 받는다(연결 끊기용). */
+  onRemoved(cb: (roomId: string) => void) {
+    this.removeListeners.push(cb);
+  }
+
+  /** 룸 주인만 룸을 지울 수 있다. 저장 대기와 진행 중인 저장을 정리한 뒤 저장소에서 지운다. */
+  async remove(id: string, requesterId: string) {
+    const entry = await this.get(id);
+    if (!entry) return { ok: false as const, reason: "not_found" as const };
+    if (entry.meta.ownerId !== requesterId) return { ok: false as const, reason: "forbidden" as const };
+    this.removed.add(id);
+    const timer = this.timers.get(id);
+    if (timer) clearTimeout(timer);
+    this.timers.delete(id);
+    await (this.saving.get(id) ?? Promise.resolve());
+    await this.opts.store.remove(id);
+    this.loaded.delete(id);
+    for (const cb of this.removeListeners) cb(id);
+    return { ok: true as const };
   }
 
   async create(ownerId: string, name: string): Promise<LoadedRoom> {
@@ -153,6 +177,7 @@ export class RoomRegistry {
   markChanged(entry: LoadedRoom, immediate = false) {
     if (entry.room.currentSeq === entry.savedSeq) return;
     const id = entry.meta.id;
+    if (this.removed.has(id)) return;
     const pending = this.timers.get(id);
     if (immediate) {
       if (pending) clearTimeout(pending);
@@ -173,6 +198,7 @@ export class RoomRegistry {
   save(entry: LoadedRoom): Promise<void> {
     const id = entry.meta.id;
     const run = (this.saving.get(id) ?? Promise.resolve()).then(async () => {
+      if (this.removed.has(id)) return;
       // 차례가 왔을 때의 최신 상태를 저장한다.
       const seq = entry.room.currentSeq;
       await this.opts.store.save({ meta: entry.meta, data: entry.room.toData() });

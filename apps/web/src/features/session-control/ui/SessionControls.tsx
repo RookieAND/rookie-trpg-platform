@@ -54,7 +54,7 @@ function EndDialog({ onClose, send, defaults }: { onClose: () => void; send: (c:
         <input className="input" value={san} maxLength={30} onChange={(e) => setSan(e.target.value)} placeholder="예: 1d6 (참가자마다 한 번씩 굴려요)" />
       </label>
       <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <input type="checkbox" checked={growth} onChange={() => setGrowth(!growth)} style={{ accentColor: "#5fd3a4" }} />
+        <input type="checkbox" checked={growth} onChange={() => setGrowth(!growth)} style={{ accentColor: "#7c86f7" }} />
         성장 표시를 한 기능은 성장 굴림을 해요
       </label>
       <div style={{ display: "flex", gap: 8 }}>

@@ -18,7 +18,7 @@ export function JoinByLinkForm({ onJoin, onError }: { onJoin: (roomId: string, i
   };
 
   return (
-    <div style={{ display: "flex", gap: 8 }}>
+    <div className="toolbar">
       <input className="input" aria-label="초대 링크" placeholder="초대 링크로 참가" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
       <button className="btn" disabled={!text.trim()} onClick={submit}>참가</button>
     </div>

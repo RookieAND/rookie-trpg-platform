@@ -24,11 +24,11 @@ export function SoundControl({ prefs, onChange, unlocked, onUnlock, playing }: {
           {SLIDERS.map((s) => (
             <label key={s.key} style={{ display: "grid", gap: 2, fontSize: 13 }}>
               {s.label} {prefs[s.key]}
-              <input type="range" min={0} max={100} value={prefs[s.key]} aria-label={`${s.label} 볼륨`} onChange={(e) => onChange({ [s.key]: Number(e.target.value) })} style={{ accentColor: "#5fd3a4" }} />
+              <input type="range" min={0} max={100} value={prefs[s.key]} aria-label={`${s.label} 볼륨`} onChange={(e) => onChange({ [s.key]: Number(e.target.value) })} style={{ accentColor: "#7c86f7" }} />
             </label>
           ))}
           <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input type="checkbox" checked={prefs.muted} onChange={(e) => onChange({ muted: e.target.checked })} style={{ accentColor: "#5fd3a4" }} />
+            <input type="checkbox" checked={prefs.muted} onChange={(e) => onChange({ muted: e.target.checked })} style={{ accentColor: "#7c86f7" }} />
             전체 음소거
           </label>
         </div>

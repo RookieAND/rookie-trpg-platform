@@ -22,3 +22,6 @@ export const saveDiscord = (me: Caller, id: string, webhookUrl: string | null | 
   http<DiscordSettings>(me, "PUT", `/rooms/${encodeURIComponent(id)}/discord`, { webhookUrl, events });
 
 export const testDiscord = (me: Caller, id: string) => http<{ ok: true }>(me, "POST", `/rooms/${encodeURIComponent(id)}/discord/test`);
+
+/** 룸 주인 전용. 되돌릴 수 없다. */
+export const deleteRoom = (me: Caller, id: string) => http<null>(me, "DELETE", `/rooms/${encodeURIComponent(id)}`);

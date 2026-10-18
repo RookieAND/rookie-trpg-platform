@@ -29,32 +29,33 @@ export function FogToolbar({
   const [vision, setVision] = useState(120);
 
   return (
-    <div className="scenebar" data-testid="fog-toolbar" style={{ top: "auto", bottom: 100, left: "50%", right: "auto", transform: "translateX(-50%)", width: "max-content", maxWidth: "calc(100% - 24px)", flexWrap: "wrap", justifyContent: "center" }}>
-      <button className="btn" style={{ height: 28 }} aria-pressed={on} disabled={!enabled} onClick={() => send({ type: "scene.fog", data: { id: scene.id, enabled: !on } })}>
+    <div className="dock" data-testid="fog-toolbar" style={{ bottom: 100, flexWrap: "wrap", justifyContent: "center", maxWidth: "calc(100% - 24px)" }}>
+      <span className="dock-label" title="안개를 켜면 PL은 밝힌 영역과 시야 안만 볼 수 있어요">안개</span>
+      <button className="btn" aria-pressed={on} disabled={!enabled} onClick={() => send({ type: "scene.fog", data: { id: scene.id, enabled: !on } })}>
         안개 {on ? "끄기" : "켜기"}
       </button>
       {on && (
         <>
           <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>
             반지름 {radius}
-            <input type="range" min={20} max={FOG_MAX_RADIUS} step={10} value={radius} aria-label="밝힐 반지름" onChange={(e) => onRadius(Number(e.target.value))} style={{ accentColor: "#5fd3a4" }} />
+            <input type="range" min={20} max={FOG_MAX_RADIUS} step={10} value={radius} aria-label="밝힐 반지름" onChange={(e) => onRadius(Number(e.target.value))} style={{ accentColor: "#7c86f7" }} />
           </label>
-          <button className="btn" style={{ height: 28 }} aria-pressed={picking} disabled={!enabled || zones.length >= MAX_FOG_ZONES} onClick={() => onPicking(!picking)}>
+          <button className="btn" aria-pressed={picking} disabled={!enabled || zones.length >= MAX_FOG_ZONES} onClick={() => onPicking(!picking)}>
             {picking ? "보드를 눌러 밝히는 중…" : "영역 밝히기"}
           </button>
           <span style={{ color: "var(--muted)", fontSize: 12.5 }} data-testid="fog-zones">밝힌 영역 {zones.length}</span>
           <span style={{ color: "var(--muted)", fontSize: 12.5 }} data-testid="fog-explored-count">탐험 기록 {explored}</span>
           {explored > 0 && (
-            <button className="btn" style={{ height: 28 }} disabled={!enabled} onClick={() => send({ type: "fog.forget", data: { sceneId: scene.id } })}>
+            <button className="btn" disabled={!enabled} onClick={() => send({ type: "fog.forget", data: { sceneId: scene.id } })}>
               탐험 기록 지우기
             </button>
           )}
           {zones.length > 0 && (
             <>
-              <button className="btn" style={{ height: 28 }} disabled={!enabled} onClick={() => send({ type: "fog.remove", data: { sceneId: scene.id, zoneId: zones[zones.length - 1]!.id } })}>
+              <button className="btn" disabled={!enabled} onClick={() => send({ type: "fog.remove", data: { sceneId: scene.id, zoneId: zones[zones.length - 1]!.id } })}>
                 마지막 영역 되돌리기
               </button>
-              <button className="btn" style={{ height: 28 }} disabled={!enabled} onClick={() => send({ type: "fog.clear", data: { sceneId: scene.id } })}>
+              <button className="btn" disabled={!enabled} onClick={() => send({ type: "fog.clear", data: { sceneId: scene.id } })}>
                 영역 모두 지우기
               </button>
             </>
@@ -65,8 +66,8 @@ export function FogToolbar({
         <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
           <span style={{ color: "var(--muted)", fontSize: 12.5 }}>{selected.name} 시야 {selected.vision ?? "없음"}</span>
           <input className="input mono" style={{ width: 70, height: 28 }} type="number" min={10} max={FOG_MAX_RADIUS} aria-label="시야 반지름" value={vision} onChange={(e) => setVision(Number(e.target.value))} />
-          <button className="btn" style={{ height: 28 }} disabled={!enabled || !(vision >= 10 && vision <= FOG_MAX_RADIUS)} onClick={() => send({ type: "object.update", data: { id: selected.id, vision: Math.round(vision) } })}>시야 주기</button>
-          {selected.vision ? <button className="btn" style={{ height: 28 }} disabled={!enabled} onClick={() => send({ type: "object.update", data: { id: selected.id, vision: 0 } })}>시야 없애기</button> : null}
+          <button className="btn" disabled={!enabled || !(vision >= 10 && vision <= FOG_MAX_RADIUS)} onClick={() => send({ type: "object.update", data: { id: selected.id, vision: Math.round(vision) } })}>시야 주기</button>
+          {selected.vision ? <button className="btn" disabled={!enabled} onClick={() => send({ type: "object.update", data: { id: selected.id, vision: 0 } })}>시야 없애기</button> : null}
         </span>
       )}
     </div>

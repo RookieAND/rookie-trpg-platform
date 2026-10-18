@@ -106,3 +106,28 @@ describe("알림 종류만 바꾸기", () => {
     expect((await api("POST", `/rooms/${room.id}/discord/test`, "kp1")).status).toBe(200);
   });
 });
+
+describe("룸 삭제", () => {
+  it("주인만 지울 수 있고, 지우면 목록과 조회에서 사라진다", async () => {
+    const room = (await api("POST", "/rooms", "kp1", { name: "지울 룸" })).json;
+    expect((await api("DELETE", `/rooms/${room.id}`, "pl1")).status).toBe(403);
+    expect((await api("GET", `/rooms/${room.id}`, "kp1")).status).toBe(200);
+    expect((await api("DELETE", `/rooms/${room.id}`, "kp1")).status).toBe(204);
+    expect((await api("GET", `/rooms/${room.id}`, "kp1")).status).toBe(404);
+    expect((await api("GET", "/rooms", "kp1")).json).toEqual([]);
+    expect((await api("DELETE", `/rooms/${room.id}`, "kp1")).status).toBe(404);
+  });
+
+  it("붙어 있던 연결은 4404로 끊기고, 늦은 저장이 룸을 되살리지 못한다", async () => {
+    const room = (await api("POST", "/rooms", "kp1", { name: "지울 룸" })).json;
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?room=${room.id}&user=kp1&name=kp1`);
+    await new Promise((r) => ws.once("open", r));
+    ws.send(JSON.stringify({ type: "join", data: {} }));
+    await wait();
+    const closed = new Promise<number>((r) => ws.once("close", (code) => r(code)));
+    await api("DELETE", `/rooms/${room.id}`, "kp1");
+    expect(await closed).toBe(4404);
+    await wait();
+    expect((await api("GET", "/rooms", "kp1")).json).toEqual([]);
+  });
+});

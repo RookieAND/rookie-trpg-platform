@@ -22,9 +22,9 @@ export function CreateRoomForm({ me, onCreated, onError }: { me: Identity; onCre
   };
 
   return (
-    <>
-      <input ref={inputRef} className="input" style={{ width: 220 }} aria-label="새 룸 이름" placeholder="새 룸 이름" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
+    <div className="toolbar">
+      <input ref={inputRef} className="input" style={{ width: 200 }} aria-label="새 룸 이름" placeholder="새 룸 이름" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
       <button className="btn primary" disabled={busy} onClick={submit}>{busy ? "만드는 중…" : "새 룸 만들기"}</button>
-    </>
+    </div>
   );
 }

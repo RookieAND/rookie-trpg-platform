@@ -62,6 +62,7 @@ export function StageCues({ roomId, source, enabled, send }: { roomId: string; s
   return (
     <>
       <div className="cuebar" data-testid="cuebar" role="toolbar" aria-label="연출 바">
+        <span className="dock-label" title="칸에 장면·핸드아웃을 등록해 두면 숫자 키(1~9)로 바로 실행해요. ⌘K로 검색해도 돼요">단축키</span>
         {Array.from({ length: SLOT_COUNT }, (_, i) => {
           const id = slots[i];
           const cue = id ? byId.get(id) : undefined;

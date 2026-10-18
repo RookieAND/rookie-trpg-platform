@@ -125,4 +125,47 @@ describe("핸드아웃", () => {
       expect(show(room, "nope")).toMatchObject({ ok: false, code: "not_found" });
     });
   });
+
+  describe("KP 전용 노트", () => {
+    const note = (room: Room) => {
+      const outs = must(room.handle(kp, cmd("handout.create", { title: "시나리오의 진상", body: "범인은 이웃", visibleTo: "all", kpOnly: true })));
+      return { outs, id: (outs[0]!.event as { data: { id: string } }).data.id };
+    };
+
+    it("공개 범위를 all로 만들어도 KP만 받는다", () => {
+      const { outs } = note(setup());
+      expect(toWho(outs, kp)).toEqual(["handout.added"]);
+      for (const a of [seo, han, spec]) expect(toWho(outs, a)).toEqual([]);
+    });
+
+    it("공개 범위를 바꾸려 하면 거절하고, 펼쳐 보이기도 안 된다", () => {
+      const room = setup();
+      const { id } = note(room);
+      expect(room.handle(kp, cmd("handout.update", { id, visibleTo: "all" })).ok).toBe(false);
+      expect(room.handle(kp, cmd("handout.show", { id })).ok).toBe(false);
+    });
+
+    it("비트에 붙이거나 분기 조건으로 쓸 수 없다", () => {
+      const room = setup();
+      const { id } = note(room);
+      expect(room.handle(kp, cmd("flow.beat.upsert", { name: "도입", kind: "start", memo: "", handoutIds: [id] })).ok).toBe(false);
+      const a = must(room.handle(kp, cmd("flow.beat.upsert", { name: "A", kind: "start", memo: "", handoutIds: [] })));
+      expect(a.length).toBeGreaterThan(0);
+    });
+
+    it("KP 전용을 풀면 일반 초안이 되어 다시 공개할 수 있다", () => {
+      const room = setup();
+      const { id } = note(room);
+      must(room.handle(kp, cmd("handout.update", { id, kpOnly: false })));
+      const outs = must(room.handle(kp, cmd("handout.update", { id, visibleTo: "all" })));
+      expect(toWho(outs, seo)).toEqual(["handout.added"]);
+    });
+
+    it("스냅샷에서도 PL에게는 빠진다", () => {
+      const room = setup();
+      note(room);
+      expect(room.snapshot(seo).handouts).toHaveLength(0);
+      expect(room.snapshot(kp).handouts).toHaveLength(1);
+    });
+  });
 });

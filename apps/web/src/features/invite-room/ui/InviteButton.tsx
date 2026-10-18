@@ -29,7 +29,7 @@ export function InviteButton({ me, roomId }: { me: Identity; roomId: string }) {
 
   return (
     <>
-      <button className="btn" onClick={refresh}>초대</button>
+      <button className="btn keep" onClick={refresh} title="초대 링크를 만들어 PL을 부르세요">초대</button>
       {open && invite && (
         <div className="dialog" role="dialog" aria-label="초대 링크">
           <strong>초대 링크</strong>

@@ -149,7 +149,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, 
         <input className="input" aria-label="기능 찾기" placeholder="기능 찾기" value={filter} onChange={(e) => setFilter(e.target.value)} />
         {skills.map(([name, s]) => (
           <div key={name} data-testid={`skill-${name}`} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 8, alignItems: "center" }}>
-            <input type="checkbox" aria-label={`${name} 성장 표시`} checked={s.grown} disabled={!canAct} onChange={(e) => onPatch(c.id, [{ path: "skill", name, grown: e.target.checked }])} style={{ accentColor: "#5fd3a4" }} />
+            <input type="checkbox" aria-label={`${name} 성장 표시`} checked={s.grown} disabled={!canAct} onChange={(e) => onPatch(c.id, [{ path: "skill", name, grown: e.target.checked }])} style={{ accentColor: "#7c86f7" }} />
             <span>{name}</span>
             <span className="mono" style={{ color: "var(--muted)" }}>{s.value} <span style={{ fontSize: 11 }}>({half(s.value)}/{fifth(s.value)})</span></span>
             <button className="btn" style={{ height: 28, padding: "0 10px" }} disabled={!canAct} onClick={() => onRoll(c.id, name, opts)} aria-label={`${name} 굴리기`}>굴리기</button>

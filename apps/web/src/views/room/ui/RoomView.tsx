@@ -25,12 +25,13 @@ import { RollEffect } from "@/widgets/roll-effect";
 import { RollPanel } from "@/widgets/roll-panel";
 import { SceneTransition } from "@/widgets/scene-transition";
 import { RoomHeader } from "@/widgets/room-header";
+import { StartGuide } from "./StartGuide";
 import { SheetPanel, type RollOptions } from "@/widgets/sheet-panel";
 
 const REJECTED: Record<number, string> = {
   4401: "로그인 정보가 올바르지 않아요.",
   4403: "이 룸에 들어갈 수 없어요. 초대 링크가 없거나 만료됐어요. KP에게 새 링크를 받아 주세요.",
-  4404: "룸을 찾을 수 없어요.",
+  4404: "룸을 찾을 수 없어요. 룸을 만든 사람이 지웠을 수 있어요.",
   4409: "룸 인원이 가득 찼어요.",
 };
 
@@ -46,6 +47,7 @@ export function RoomView({ roomId, invite }: { roomId: string; invite?: string }
 
 function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: string }) {
   const { state, connection, closeCode, send } = useRoom({ roomId, user: me.userId, name: me.name, token: me.token, invite });
+  const [guideClosed, setGuideClosed] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const fx = useEffectPreference();
   const sound = useAudioPreference();
@@ -89,9 +91,9 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
 
   if (closeCode !== null && REJECTED[closeCode]) {
     return (
-      <main style={{ maxWidth: 420, margin: "120px auto", display: "grid", gap: 12, padding: "0 16px" }}>
+      <main className="login">
         <div className="err" role="alert">{REJECTED[closeCode]}</div>
-        <Link className="btn" href="/" style={{ textAlign: "center", lineHeight: "34px", textDecoration: "none" }}>로비로</Link>
+        <Link className="btn" href="/">로비로</Link>
       </main>
     );
   }
@@ -111,10 +113,19 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
       <div className="body">
         <main className="board">
           {state.sessionStatus === "PAUSED" && <div className="banner" role="status">세션이 일시정지 중이에요. KP가 돌아오면 이어서 진행해요.</div>}
-          {state.sessionStatus === "IDLE" && (
-            <div className="banner" role="status">
-              {isKp ? "세션 시작 전이에요. 시작하면 PL이 함께 움직일 수 있어요." : "KP가 세션을 시작하기를 기다리고 있어요."}
-            </div>
+          {state.sessionStatus === "IDLE" && !isKp && (
+            <div className="banner" role="status">KP가 세션을 시작하기를 기다리고 있어요.</div>
+          )}
+          {state.sessionStatus === "IDLE" && isKp && !guideClosed && (
+            <StartGuide
+              steps={[
+                { done: Boolean(shownScene?.background), title: "장면 꾸미기", hint: "위 장면 막대의 ‘장면 설정’에서 배경을 넣고, 장면을 더 만들 수 있어요." },
+                { done: objects.length > 0, title: "토큰·소품 놓기", hint: "아래의 ‘+ 토큰’, ‘+ 소품’으로 놓고, 끌어서 옮겨요." },
+                { done: state.members.some((m) => m.role === "pl"), title: "PL 부르기", hint: "오른쪽 위 ‘초대’에서 링크를 만들어 보내요." },
+                { done: false, title: "세션 시작", hint: "준비가 끝나면 오른쪽 위 ‘세션 시작’을 눌러요. 그 전엔 PL이 움직일 수 없어요." },
+              ]}
+              onClose={() => setGuideClosed(true)}
+            />
           )}
           {isKp && <SceneBar me={me} scenes={scenes} tracks={state.audioLibrary} activeId={state.activeSceneId} viewId={shownSceneId} onView={setViewSceneId} enabled={state.sessionStatus !== "PAUSED"} send={send} />}
           <Board objects={objects} background={state.scenes[shownSceneId]?.background} me={{ userId: me.userId, role }} canInteract={canEditBoard} onMove={move} selectedId={selectedId} onSelect={setSelectedId} fog={fogView} onPick={isKp && fogPicking ? (x, y) => send({ type: "fog.reveal", data: { sceneId: shownSceneId, x, y, r: fogRadius } }) : undefined} />

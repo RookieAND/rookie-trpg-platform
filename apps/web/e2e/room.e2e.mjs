@@ -12,6 +12,9 @@ const run = Date.now().toString(36);
 const ROOM = `안개 낀 저택 ${run}`;
 const CHAR = `윤서하 ${run}`;
 const step = (m) => console.log("✓", m);
+// 설정·장면 설정 메뉴 안의 항목은 메뉴를 먼저 열어야 보인다. 쓰고 나면 Esc로 닫아 아래 화면을 가리지 않게 한다.
+const openSettings = async (page) => { if (!(await page.getByRole("menu").count())) await page.getByTestId("settings-menu").click(); };
+const openSceneMenu = async (page) => { if (!(await page.getByRole("menu").count())) await page.getByRole("button", { name: /장면 설정/ }).click(); };
 
 const login = async (page, name) => {
   await page.goto(WEB);
@@ -40,6 +43,7 @@ try {
   step("KP가 초대 링크를 만듦");
 
   // 디스코드 알림: 잘못된 주소는 거절, 올바른 형식은 저장되고 연결됨으로 보임
+  await openSettings(kp);
   await kp.getByRole("button", { name: "디스코드", exact: true }).click();
   await kp.getByLabel("웹훅 주소").fill("https://example.com/hook");
   await kp.getByRole("button", { name: "저장", exact: true }).click();
@@ -254,9 +258,11 @@ try {
   step("행운을 쓰면 실패가 성공으로 바뀐 결과가 로그에 남음");
 
   // 광기: KP가 상태를 지정하면 PL 시트에 표시, 증상표에서 굴리면 주인과 KP만 본다
+  await openSettings(kp);
   await kp.getByRole("button", { name: "광기표", exact: true }).click();
   await kp.getByLabel("증상 목록").fill("공포에 얼어붙는다\n비명을 지르며 달아난다");
   await kp.getByRole("button", { name: "저장", exact: true }).click();
+  await kp.keyboard.press("Escape");
   await kp.getByRole("tab", { name: "시트" }).click();
   await kp.getByLabel("광기 상태").selectOption("temporary");
   await pl.getByRole("tab", { name: "시트" }).click();
@@ -336,9 +342,11 @@ try {
   const got = await fetch(href);
   assert.equal(got.status, 200);
   assert.equal(got.headers.get("content-type"), "image/png");
+  await openSceneMenu(kp);
   await kp.getByLabel("배경 파일").setInputFiles(file);
   await pl.getByTestId("board-bg").waitFor();
   await kp.getByRole("button", { name: "배경 떼기" }).click();
+  await kp.keyboard.press("Escape");
   await pl.getByTestId("board-bg").waitFor({ state: "detached" });
   await kp.getByTestId("obj-토큰1").click();
   await kp.getByRole("button", { name: "이미지 떼기" }).click();
@@ -448,6 +456,7 @@ try {
   step("KP가 돌아와 이어하기 하면 PL 입력이 다시 열림");
 
   // 판정 효과: KP가 "어려운 성공"까지 켜면 PL 화면에 효과가 재생되고, PL이 개인 설정으로 끌 수 있음
+  await openSettings(kp2);
   await kp2.getByRole("button", { name: "판정 효과" }).click();
   const hardBox = kp2.getByLabel("어려운 성공", { exact: true });
   await hardBox.click(); // 서버가 확정해야 체크되는 입력이라 check() 대신 click 후 확인한다
@@ -466,7 +475,9 @@ try {
   assert.ok(["critical", "extreme", "hard", "fumble"].includes(level), `효과가 재생되지 않음: ${level}`);
   step(`판정 효과가 PL 화면에 재생됨 (${level})`);
 
+  await openSettings(pl);
   await pl.getByRole("button", { name: /^효과 켜짐/ }).click();
+  await pl.keyboard.press("Escape");
   await pl.getByTestId("roll-effect").waitFor({ state: "detached", timeout: 4000 }).catch(() => {});
   for (let i = 0; i < 25; i++) {
     await rollOnce();
@@ -576,7 +587,10 @@ try {
   step("세션 종료 뒤 변경된 HP가 보관함 원본에 반영됨");
 
   // 시작 장면: 지정해 두면 다음 세션을 시작할 때 그 장면이 열린다
+  const summary = kp2.getByRole("dialog", { name: "세션 정산" });
+  if (await summary.count()) await summary.getByRole("button", { name: "닫기" }).click();
   await kp2.getByRole("tab", { name: "장면 1" }).click();
+  await openSceneMenu(kp2);
   await kp2.getByRole("button", { name: "시작 장면으로" }).click();
   await kp2.getByLabel("시작 장면").waitFor();
   assert.equal(await pl.getByLabel("시작 장면").count(), 0);
@@ -664,11 +678,13 @@ try {
   await track.getByRole("button", { name: "재생", exact: true }).click();
   await track.getByTestId("audio-playing").waitFor();
   await kp2.getByTestId("audio-now-name").getByText("비 오는 밤 " + run).waitFor();
+  await openSettings(pl);
   await pl.getByTestId("sound-toggle").click();
   await pl.getByLabel("전체 음소거").check();
-  await pl.getByTestId("sound-toggle").getByText("소리 꺼짐").waitFor();
+  // 소리 설정 창이 열려 있는 동안 메뉴 목록은 가려지므로 글자만 확인한다.
+  await pl.waitForFunction(() => document.querySelector('[data-testid="sound-toggle"]')?.textContent?.includes("소리 꺼짐"));
   await pl.getByLabel("전체 음소거").uncheck();
-  await pl.getByTestId("sound-toggle").click();
+  await pl.keyboard.press("Escape");
   await kp2.getByRole("button", { name: "정지", exact: true }).click();
   await track.getByTestId("audio-playing").waitFor({ state: "detached" });
   step("음향: KP가 올린 배경음을 재생·정지하고, PL은 음향 탭 없이 내 소리 설정만 만짐");
@@ -685,7 +701,9 @@ try {
   await kp2.getByRole("button", { name: "정지", exact: true }).click();
   await track.getByTestId("audio-playing").waitFor({ state: "detached" });
   await kp2.getByRole("tab", { name: "서재" }).click();
+  await openSceneMenu(kp2);
   await kp2.getByLabel("장면 배경음").selectOption({ label: "♪ 비 오는 밤 " + run });
+  await kp2.keyboard.press("Escape");
   await kp2.getByRole("button", { name: "바로 전환" }).click();
   await pl.getByTestId("scene-name").getByText("서재").waitFor();
   await kp2.getByRole("tab", { name: /^음향/ }).click();
@@ -693,6 +711,30 @@ try {
   await track.getByRole("button", { name: /삭제$/ }).click();
   await track.waitFor({ state: "detached" });
   step("음향: 비트 큐에 묶은 배경음이 비트에 들어가면 흐르고, 음원을 지우면 목록에서 사라짐");
+
+  // KP 전용 노트: PL에게 안 보이고, 펼쳐 보이기 버튼도 없다
+  await kp2.getByRole("tab", { name: "핸드아웃" }).click();
+  await kp2.getByRole("button", { name: "새 핸드아웃" }).click();
+  await kp2.getByLabel("핸드아웃 제목").fill("진상 " + run);
+  await kp2.getByLabel("핸드아웃 내용").fill("범인은 이웃");
+  await kp2.getByLabel("공개 범위").selectOption("note");
+  await kp2.getByRole("button", { name: "저장", exact: true }).click();
+  const note = kp2.getByTestId("handout-item").filter({ hasText: "진상 " + run });
+  await note.getByText("KP 노트").waitFor();
+  assert.equal(await note.getByRole("button", { name: "펼쳐 보이기" }).count(), 0);
+  await pl.getByRole("tab", { name: "핸드아웃" }).click();
+  await pl.waitForTimeout(400);
+  assert.equal(await pl.getByText("진상 " + run).count(), 0);
+  step("KP 전용 노트는 PL에게 보이지 않고 펼쳐 보일 수도 없음");
+
+  // 룸 삭제: 로비 카드에서 두 번 눌러 지우면 목록에서 사라지고, 열려 있던 룸은 끊긴다
+  await kp2.goto(WEB);
+  const card = kp2.getByTestId("room-card").filter({ hasText: ROOM });
+  await card.getByRole("button", { name: /룸 삭제$/ }).click();
+  await card.getByRole("button", { name: "지우기" }).click();
+  await card.waitFor({ state: "detached" });
+  await pl.getByText("룸을 찾을 수 없어요").waitFor();
+  step("룸 주인이 룸을 지우면 목록에서 사라지고 참가자 화면은 안내로 바뀜");
 
   await pl.screenshot({ path: process.env.SHOT ?? "/tmp/room-pl.png" });
   await kp2.screenshot({ path: process.env.SHOT_KP ?? "/tmp/room-kp.png" });

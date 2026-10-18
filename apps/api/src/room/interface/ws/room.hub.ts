@@ -45,7 +45,13 @@ export class RoomHub {
     private readonly auth: AuthService,
     private readonly joinTimeoutMs = 5000,
     private readonly notifier?: DiscordNotifier,
-  ) {}
+  ) {
+    // 룸이 지워지면 붙어 있던 연결을 모두 끊는다. 4404라 다시 붙으려 하지 않는다.
+    registry.onRemoved((roomId) => {
+      for (const c of this.conns.get(roomId) ?? []) c.ws.close(CLOSE.notFound, "room_removed");
+      this.conns.delete(roomId);
+    });
+  }
 
   private send(ws: WebSocket, msg: ServerMessage) {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));

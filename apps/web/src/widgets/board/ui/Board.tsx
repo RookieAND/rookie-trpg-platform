@@ -91,7 +91,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
               <rect width={W} height={H} fill="#000" opacity={0.55} mask="url(#fog-mask-now)" data-testid="fog-explored" data-count={fog.explored.length} />
             </>
           )}
-          {fog.preview && fog.areas.map((a, i) => <circle key={i} cx={a.x} cy={a.y} r={a.r} fill="none" stroke="#5fd3a4" strokeWidth="1.5" strokeDasharray="6 5" opacity="0.8" />)}
+          {fog.preview && fog.areas.map((a, i) => <circle key={i} cx={a.x} cy={a.y} r={a.r} fill="none" stroke="#7c86f7" strokeWidth="1.5" strokeDasharray="6 5" opacity="0.8" />)}
           {fog.preview && fog.explored?.map((a, i) => <circle key={`e${i}`} cx={a.x} cy={a.y} r={a.r} fill="none" stroke="#e3a94a" strokeWidth="1" strokeDasharray="2 6" opacity="0.5" data-testid="fog-explored-ring" />)}
         </g>
       )}
@@ -116,7 +116,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
               }
             }}
           >
-            {selectedId === o.id && <circle cx={pos.x} cy={pos.y} r={R + 8} fill="none" stroke="#5fd3a4" strokeWidth="2" />}
+            {selectedId === o.id && <circle cx={pos.x} cy={pos.y} r={R + 8} fill="none" stroke="#7c86f7" strokeWidth="2" />}
             {o.image ? (
               <>
                 <clipPath id={`clip-${o.id}`}>

@@ -24,7 +24,7 @@ export function EffectSettingsButton({ effects, send }: { effects: EffectSetting
           {EFFECT_LEVELS.map((level) => (
             <div key={level} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center" }}>
               <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input type="checkbox" checked={effects[level].enabled} onChange={(e) => set(level, { enabled: e.target.checked })} style={{ accentColor: "#5fd3a4" }} />
+                <input type="checkbox" checked={effects[level].enabled} onChange={(e) => set(level, { enabled: e.target.checked })} style={{ accentColor: "#7c86f7" }} />
                 {LEVEL_LABEL_KO[level]}
               </label>
               <select className="input" style={{ width: 96, height: 30 }} aria-label={`${LEVEL_LABEL_KO[level]} 세기`} value={effects[level].intensity} disabled={!effects[level].enabled} onChange={(e) => set(level, { intensity: Number(e.target.value) as 1 | 2 | 3 })}>

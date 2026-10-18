@@ -45,7 +45,7 @@ export function MacroBar({ error: syncError, macros, isKp, disabled, onRoll, onA
           </div>
           {isKp && (
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
-              <input type="checkbox" checked={secret} onChange={(e) => setSecret(e.target.checked)} style={{ accentColor: "#5fd3a4" }} />
+              <input type="checkbox" checked={secret} onChange={(e) => setSecret(e.target.checked)} style={{ accentColor: "#7c86f7" }} />
               비밀 굴림으로 굴리기
             </label>
           )}

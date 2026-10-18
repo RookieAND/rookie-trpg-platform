@@ -96,7 +96,7 @@ export function OccupationManager({ error: syncError, occupations, onAdd, onEdit
             <legend style={{ fontSize: 12, color: "var(--muted)" }}>직업 기능 ({skills.length}/{MAX_OCCUPATION_SKILLS}) · 신용도는 늘 포함돼요</legend>
             {SKILL_NAMES.map((s) => (
               <label key={s} style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 13 }}>
-                <input type="checkbox" checked={skills.includes(s)} disabled={!skills.includes(s) && skills.length >= MAX_OCCUPATION_SKILLS} onChange={(e) => setSkills(e.target.checked ? [...skills, s] : skills.filter((x) => x !== s))} style={{ accentColor: "#5fd3a4" }} />
+                <input type="checkbox" checked={skills.includes(s)} disabled={!skills.includes(s) && skills.length >= MAX_OCCUPATION_SKILLS} onChange={(e) => setSkills(e.target.checked ? [...skills, s] : skills.filter((x) => x !== s))} style={{ accentColor: "#7c86f7" }} />
                 {s}
               </label>
             ))}

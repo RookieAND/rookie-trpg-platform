@@ -13,6 +13,10 @@ export class MemoryRoomRepository implements RoomRepository {
     this.rooms.set(room.meta.id, JSON.stringify(room));
   }
 
+  async remove(id: string) {
+    this.rooms.delete(id);
+  }
+
   async listFor(userId: string) {
     return [...this.rooms.values()].map((r) => JSON.parse(r) as StoredRoom).filter((r) => involvesUser(r, userId));
   }
