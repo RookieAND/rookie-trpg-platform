@@ -103,7 +103,7 @@ export function FlowPanel({ flow, scenes, handouts, tracks, status, enabled, sen
 
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <strong style={{ flex: 1 }}>비트 {flow.beats.length}개</strong>
-        <button className="btn primary" disabled={!enabled} onClick={() => setEditing({ kind: "beat" })}>비트 추가</button>
+        <button className="btn sm primary" disabled={!enabled} onClick={() => setEditing({ kind: "beat" })}>비트 추가</button>
       </div>
       {flow.beats.length === 0 && <div style={{ color: "var(--muted)" }}>아직 비트가 없어요. 시작 비트부터 만들어 보세요.</div>}
 

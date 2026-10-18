@@ -30,8 +30,9 @@ export function SanPanel({ character: c, canAct, isKp, onCheck, onSetMadness, on
   };
 
   return (
-    <div style={{ display: "grid", gap: 8 }} data-testid="san-panel">
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+    <div className="sheet-sec" data-testid="san-panel">
+      <div className="section-title">SAN</div>
+      <div className="row">
         <input
           className="input"
           aria-label="SAN 손실"
@@ -48,7 +49,7 @@ export function SanPanel({ character: c, canAct, isKp, onCheck, onSetMadness, on
           placeholder="성공 시/실패 시 (예: 0/1d6)"
         />
         <Hint term="sanLoss" />
-        <button className="btn primary" disabled={!canAct || bad || confirming} onClick={ask}>SAN 체크</button>
+        <button className="btn" disabled={!canAct || bad || confirming} onClick={ask}>SAN 체크</button>
       </div>
       {confirming && (
         <div className="card" role="group" aria-label="SAN 체크 확인" data-testid="san-confirm" style={{ padding: 10, gap: 6 }}>
@@ -64,7 +65,7 @@ export function SanPanel({ character: c, canAct, isKp, onCheck, onSetMadness, on
           </span>
         </div>
       )}
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", color: "var(--muted)", fontSize: 12.5 }}>
+      <div className="row" style={{ color: "var(--muted)", fontSize: 12.5 }}>
         <span data-testid="san-day">오늘 손실 {day.lost}{threshold > 0 ? ` / ${threshold}` : ""}</span>
         <Hint term="sanDay" />
         {c.madness && c.madness !== "none" && (
@@ -74,7 +75,7 @@ export function SanPanel({ character: c, canAct, isKp, onCheck, onSetMadness, on
         )}
         <Hint term="manualSan">SAN·HP를 직접 바꾸면?</Hint>
         {isKp && (
-          <select className="input" style={{ height: 24, padding: "0 6px" }} aria-label="광기 상태" value={c.madness ?? "none"} onChange={(e) => onSetMadness(e.target.value as Madness)}>
+          <select className="input" style={{ width: "auto" }} aria-label="광기 상태" value={c.madness ?? "none"} onChange={(e) => onSetMadness(e.target.value as Madness)}>
             <option value="none">정상</option>
             <option value="temporary">{MADNESS_LABEL_KO.temporary}</option>
             <option value="indefinite">{MADNESS_LABEL_KO.indefinite}</option>
@@ -82,12 +83,12 @@ export function SanPanel({ character: c, canAct, isKp, onCheck, onSetMadness, on
           </select>
         )}
         {isKp && (
-          <button className="btn" style={{ height: 24, padding: "0 8px" }} onClick={onNewDay}>하루 지남</button>
+          <button className="btn sm" onClick={onNewDay}>하루 지남</button>
         )}
         {isKp && c.madness && c.madness !== "none" && (
           <>
-            <button className="btn" style={{ height: 24, padding: "0 8px" }} onClick={() => onMadnessRoll("realtime")}>증상 굴리기(실시간)</button>
-            <button className="btn" style={{ height: 24, padding: "0 8px" }} onClick={() => onMadnessRoll("summary")}>증상 굴리기(요약)</button>
+            <button className="btn sm" onClick={() => onMadnessRoll("realtime")}>증상 굴리기(실시간)</button>
+            <button className="btn sm" onClick={() => onMadnessRoll("summary")}>증상 굴리기(요약)</button>
           </>
         )}
       </div>

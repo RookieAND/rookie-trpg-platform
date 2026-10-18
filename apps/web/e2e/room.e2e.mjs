@@ -21,6 +21,9 @@ const CHAR = `윤서하 ${run}`;
 const step = (m) => console.log("✓", m);
 // 설정·장면 설정 메뉴 안의 항목은 메뉴를 먼저 열어야 보인다. 쓰고 나면 Esc로 닫아 아래 화면을 가리지 않게 한다.
 const openSettings = async (page) => { if (!(await page.getByRole("menu").count())) await page.getByTestId("settings-menu").click(); };
+// 판정 요청 폼과 안개 더보기는 접혀 있다. 필요할 때 펼친다.
+const openAsk = async (page) => { if (!(await page.getByLabel("요청할 기능").count())) await page.getByRole("button", { name: "판정 요청" }).click(); };
+const openFogMore = async (page) => { const b = page.getByTestId("fog-toolbar").getByRole("button", { name: /^더보기|^접기/ }); if ((await b.getAttribute("aria-expanded")) !== "true") await b.click(); };
 const openSceneMenu = async (page) => { if (!(await page.getByRole("menu").count())) await page.getByRole("button", { name: /장면 설정/ }).click(); };
 
 // 이전 실행이 남긴 룸이 사용자별 룸 수 한도를 채우지 않게, 시작할 때 이 시험의 사용자들 룸을 비운다.
@@ -333,6 +336,7 @@ try {
   step("광기 상태 표시, 증상 굴림은 주인과 KP에게만, 해제하면 사라짐");
 
   // 판정 요청: KP가 요청하면 PL 화면에 배너가 뜨고, 누르면 내 캐릭터로 굴려짐
+  await openAsk(kp);
   await kp.getByLabel("요청할 기능").fill("도서관 이용");
   await kp.getByRole("button", { name: "요청 보내기" }).click();
   const askBanner = pl.getByTestId("roll-ask-banner");
@@ -478,6 +482,7 @@ try {
   await plProps.first().waitFor({ state: "detached" });
   await pl.getByTestId("obj-서하").waitFor();
   await kp.getByTestId("obj-서하").click();
+  await openFogMore(kp);
   await kp.getByLabel("시야 반지름").fill("400");
   await kp.getByRole("button", { name: "시야 주기", exact: true }).click();
   await plProps.first().waitFor();

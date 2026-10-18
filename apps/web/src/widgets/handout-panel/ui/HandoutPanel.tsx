@@ -15,8 +15,13 @@ export function HandoutPanel({ me, handouts, isKp, canEdit, canShow = canEdit, p
   const [openId, setOpenId] = useState<string | null>(null);
 
   return (
-    <div style={{ overflow: "auto", padding: 16, display: "grid", gap: 12, alignContent: "start", flex: 1 }} data-testid="handouts">
-      {isKp && !editing && <button className="btn primary" disabled={!canEdit} onClick={() => setEditing({ mode: "new" })}>새 핸드아웃</button>}
+    <div className="panel" data-testid="handouts">
+      {!editing && (
+        <div className="panel-head">
+          <span className="section-title">핸드아웃 {handouts.length}</span>
+          {isKp && <button className="btn sm primary" disabled={!canEdit} onClick={() => setEditing({ mode: "new" })}>새 핸드아웃</button>}
+        </div>
+      )}
 
       {editing && (
         <HandoutEditor

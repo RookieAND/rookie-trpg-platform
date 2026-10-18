@@ -30,58 +30,65 @@ export function FogToolbar({
   const zones = fog?.zones ?? [];
   const explored = fog?.explored?.length ?? 0;
   const [vision, setVision] = useState(120);
+  const [more, setMore] = useState(false);
 
   return (
-    <div className="dock" data-testid="fog-toolbar" style={{ bottom: 100, flexWrap: "wrap", justifyContent: "center", maxWidth: "calc(100% - 24px)" }}>
+    <div className="dock" data-testid="fog-toolbar" style={{ bottom: 100 }}>
       <span className="dock-label" title="안개를 켜면 PL은 밝힌 영역과 시야 안만 볼 수 있어요">안개</span>
       <button className="btn" aria-pressed={on} disabled={!enabled} onClick={() => send({ type: "scene.fog", data: { id: scene.id, enabled: !on } })}>
         안개 {on ? "끄기" : "켜기"}
       </button>
       {on && (
         <>
-          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>
-            반지름 {radius}
-            <input type="range" min={20} max={FOG_MAX_RADIUS} step={10} value={radius} aria-label="밝힐 반지름" onChange={(e) => onRadius(Number(e.target.value))} style={{ accentColor: "#7c86f7" }} />
-          </label>
           <button className="btn" aria-pressed={picking} disabled={!enabled || zones.length >= MAX_FOG_ZONES} onClick={() => onPicking(!picking)}>
             {picking ? "보드를 눌러 밝히는 중…" : "영역 밝히기"}
           </button>
-          {partyTokens.length > 0 && (
-            <button
-              className="btn"
-              disabled={!enabled || !(vision >= 10 && vision <= FOG_MAX_RADIUS)}
-              title="이 장면의 PL 토큰 모두에게 아래 시야 반지름을 줘요"
-              onClick={() => partyTokens.forEach((t) => send({ type: "object.update", data: { id: t.id, vision: Math.round(vision) } }))}
-            >
-              PL 전원 시야 주기 ({vision})
-            </button>
-          )}
-          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>
-            시야
-            <input className="input mono" style={{ width: 70, height: 28 }} type="number" min={10} max={FOG_MAX_RADIUS} aria-label="시야 반지름" value={vision} onChange={(e) => setVision(Number(e.target.value))} />
+          <label className="dock-field">
+            반지름 <span className="mono">{radius}</span>
+            <input type="range" min={20} max={FOG_MAX_RADIUS} step={10} value={radius} aria-label="밝힐 반지름" onChange={(e) => onRadius(Number(e.target.value))} style={{ accentColor: "#7c86f7" }} />
           </label>
-          <span style={{ color: "var(--muted)", fontSize: 12.5 }} data-testid="fog-zones">밝힌 영역 {zones.length}</span>
-          <span style={{ color: "var(--muted)", fontSize: 12.5 }} data-testid="fog-explored-count">탐험 기록 {explored}</span>
-          {explored > 0 && (
-            <button className="btn" disabled={!enabled} onClick={() => window.confirm("PL이 지나온 곳의 기억(탐험 기록)을 지울까요?") && send({ type: "fog.forget", data: { sceneId: scene.id } })}>
-              탐험 기록 지우기
-            </button>
-          )}
-          {zones.length > 0 && (
+          <span className="dock-note" data-testid="fog-zones">밝힌 영역 {zones.length}</span>
+          <span className="dock-note" data-testid="fog-explored-count">탐험 기록 {explored}</span>
+          <button className="btn ghost" aria-expanded={more} onClick={() => setMore((m) => !m)}>{more ? "접기 ▴" : "더보기 ▾"}</button>
+          {more && (
             <>
-              <button className="btn" disabled={!enabled} onClick={() => send({ type: "fog.remove", data: { sceneId: scene.id, zoneId: zones[zones.length - 1]!.id } })}>
-                마지막 영역 되돌리기
-              </button>
-              <button className="btn" disabled={!enabled} onClick={() => window.confirm("밝힌 영역을 모두 지울까요?") && send({ type: "fog.clear", data: { sceneId: scene.id } })}>
-                영역 모두 지우기
-              </button>
+              <span className="sep" />
+              <label className="dock-field">
+                시야
+                <input className="input mono" style={{ width: 64, height: 28 }} type="number" min={10} max={FOG_MAX_RADIUS} aria-label="시야 반지름" value={vision} onChange={(e) => setVision(Number(e.target.value))} />
+              </label>
+              {partyTokens.length > 0 && (
+                <button
+                  className="btn"
+                  disabled={!enabled || !(vision >= 10 && vision <= FOG_MAX_RADIUS)}
+                  title="이 장면의 PL 토큰 모두에게 옆의 시야 반지름을 줘요"
+                  onClick={() => partyTokens.forEach((t) => send({ type: "object.update", data: { id: t.id, vision: Math.round(vision) } }))}
+                >
+                  PL 전원 시야 주기 ({vision})
+                </button>
+              )}
+              {explored > 0 && (
+                <button className="btn" disabled={!enabled} onClick={() => window.confirm("PL이 지나온 곳의 기억(탐험 기록)을 지울까요?") && send({ type: "fog.forget", data: { sceneId: scene.id } })}>
+                  탐험 기록 지우기
+                </button>
+              )}
+              {zones.length > 0 && (
+                <>
+                  <button className="btn" disabled={!enabled} onClick={() => send({ type: "fog.remove", data: { sceneId: scene.id, zoneId: zones[zones.length - 1]!.id } })}>
+                    마지막 영역 되돌리기
+                  </button>
+                  <button className="btn" disabled={!enabled} onClick={() => window.confirm("밝힌 영역을 모두 지울까요?") && send({ type: "fog.clear", data: { sceneId: scene.id } })}>
+                    영역 모두 지우기
+                  </button>
+                </>
+              )}
             </>
           )}
         </>
       )}
       {selected && selected.sceneId === scene.id && (
-        <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-          <span style={{ color: "var(--muted)", fontSize: 12.5 }}>{selected.name} 시야 {selected.vision ?? "없음"}</span>
+        <span className="dock-group">
+          <span className="dock-note">{selected.name} 시야 {selected.vision ?? "없음"}</span>
           <button className="btn" disabled={!enabled || !(vision >= 10 && vision <= FOG_MAX_RADIUS)} onClick={() => send({ type: "object.update", data: { id: selected.id, vision: Math.round(vision) } })}>시야 주기</button>
           {selected.vision ? <button className="btn" disabled={!enabled} onClick={() => send({ type: "object.update", data: { id: selected.id, vision: 0 } })}>시야 없애기</button> : null}
         </span>
