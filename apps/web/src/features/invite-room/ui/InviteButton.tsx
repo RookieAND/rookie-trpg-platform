@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { getRoom, regenerateInvite, type Invite } from "@/entities/room";
 import type { Identity } from "@/entities/user";
+import { Dialog } from "@/shared/ui";
 
 const EXPIRY: Array<{ label: string; minutes: number | null }> = [
   { label: "만료 없음", minutes: null },
@@ -49,14 +50,6 @@ export function InviteButton({ me, roomId }: { me: Identity; roomId: string }) {
     }
   };
 
-  // Esc로 닫을 수 있어야 아래 화면을 가리지 않는다.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
   const link = invite ? `${window.location.origin}/join/${roomId}?invite=${invite.code}` : "";
   const copy = async () => {
     try {
@@ -71,7 +64,7 @@ export function InviteButton({ me, roomId }: { me: Identity; roomId: string }) {
     <>
       <button className="btn keep" onClick={show} title="초대 링크를 보고 PL을 불러요">초대</button>
       {open && (
-        <div className="dialog" role="dialog" aria-label="초대 링크">
+        <Dialog label="초대 링크" onClose={() => setOpen(false)} className="dialog">
           <strong>초대 링크</strong>
           {invite && (
             <>
@@ -104,7 +97,7 @@ export function InviteButton({ me, roomId }: { me: Identity; roomId: string }) {
           )}
           {error && <div className="err" role="alert">{error}</div>}
           {!invite && <button className="btn ghost" onClick={() => setOpen(false)}>닫기</button>}
-        </div>
+        </Dialog>
       )}
     </>
   );

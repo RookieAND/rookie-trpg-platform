@@ -115,6 +115,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
       role="application"
       aria-label="게임 보드. 토큰을 고르고 방향키로 움직일 수 있어요. + − 키로 확대·축소하고, P 키나 길게 누르기로 모두에게 가리킬 수 있어요."
       tabIndex={0}
+      id="game-board"
       data-testid="board"
       onWheel={(e) => {
         if (!e.ctrlKey && !e.metaKey && !e.altKey) return;
@@ -315,6 +316,26 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
       })}
       {pings && sceneId !== undefined && <Pings pings={pings} sceneId={sceneId} animate={animate} />}
     </svg>
+    <ul className="sr-only" aria-label="보드 위 토큰 목록" data-testid="board-token-list">
+      {objects.map((o) => (
+        <li key={o.id}>
+          <button
+            type="button"
+            aria-pressed={selectedId === o.id}
+            data-testid={`pick-${o.name}`}
+            onClick={() => {
+              onSelect(o.id);
+              svg.current?.focus();
+            }}
+          >
+            {o.name}
+            {o.kind === "token" && o.ownerId === me.userId ? " (내 토큰)" : ""}
+            {o.layer === "gm" || o.visibleTo === "gm" ? " (GM 전용)" : ""}
+            {canMove(o) ? "" : " (움직일 수 없음)"}
+          </button>
+        </li>
+      ))}
+    </ul>
     <div className="zoom-ctl" role="group" aria-label="보드 확대·이동">
       <button type="button" className="btn sm" aria-label="확대" onClick={() => zoomAt(1.25)} disabled={view.w <= W / MAX_ZOOM + 0.5}>＋</button>
       <button type="button" className="btn sm" aria-label="축소" onClick={() => zoomAt(0.8)} disabled={!zoomed}>－</button>

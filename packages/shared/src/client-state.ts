@@ -49,7 +49,7 @@ export interface RoomState {
   /** 서버 시계 − 내 시계(ms). 접속할 때 맞춘다. */
   clockOffset: number;
   /** 방금 울릴 효과음. n이 바뀌면 새로 울린다. */
-  lastSe: { assetId: string; volume: number; n: number } | null;
+  lastSe: { assetId: string; volume: number; n: number; startedAt: number } | null;
   /** 가장 최근 광기 증상 굴림(시트 주인과 KP만 받는다). n은 같은 결과가 또 와도 새로 보이게 하는 번호다. */
   lastMadness: { result: MadnessResult; n: number } | null;
   /** 장면이 바뀔 때마다 n이 오른다. 화면 효과를 다시 재생하는 신호로 쓴다. */
@@ -175,7 +175,7 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       return { ...next, audioLibrary: ev.data.tracks };
     case "audio.play":
       if (ev.data.channel === "bgm") return { ...next, bgm: { assetId: ev.data.assetId, volume: ev.data.volume, startedAt: ev.data.startedAt, fadeMs: ev.data.fadeMs } };
-      return { ...next, lastSe: { assetId: ev.data.assetId, volume: ev.data.volume, n: msg.seq } };
+      return { ...next, lastSe: { assetId: ev.data.assetId, volume: ev.data.volume, n: msg.seq, startedAt: ev.data.startedAt } };
     case "audio.stopped":
       return { ...next, bgm: null, stopFadeMs: ev.data.fadeMs };
     case "audio.volume":

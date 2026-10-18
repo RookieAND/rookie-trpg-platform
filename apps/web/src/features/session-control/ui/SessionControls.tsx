@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ClientCommand } from "@coc-vtt/shared";
 import type { SessionStatus } from "@/entities/room";
+import { Dialog } from "@/shared/ui";
 
 /** KP의 세션 버튼. 상태에 따라 시작/일시정지/이어하기/종료가 바뀐다. 종료는 정산 창을 거친다. */
 export interface EndingDefaults {
@@ -28,12 +29,6 @@ function EndDialog({ onClose, send, defaults }: { onClose: () => void; send: (c:
   const [san, setSan] = useState(defaults?.sanReward ?? "");
   const [growth, setGrowth] = useState(true);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const submit = () => {
     const ok = send({
       type: "session.end",
@@ -43,7 +38,7 @@ function EndDialog({ onClose, send, defaults }: { onClose: () => void; send: (c:
   };
 
   return (
-    <div className="dialog" role="dialog" aria-label="세션 종료">
+    <Dialog label="세션 종료" onClose={onClose} className="dialog">
       <strong>세션을 끝낼까요?</strong>
       <label style={{ display: "grid", gap: 4 }}>
         엔딩 이름 (선택)
@@ -61,6 +56,6 @@ function EndDialog({ onClose, send, defaults }: { onClose: () => void; send: (c:
         <button className="btn danger" onClick={submit}>정산하고 종료</button>
         <button className="btn" onClick={onClose}>취소</button>
       </div>
-    </div>
+    </Dialog>
   );
 }

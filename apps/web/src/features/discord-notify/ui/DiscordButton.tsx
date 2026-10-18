@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { getDiscord, saveDiscord, testDiscord, type DiscordSettings } from "@/entities/room";
 import type { Identity } from "@/entities/user";
 import { ApiError } from "@/shared/api";
+import { Dialog } from "@/shared/ui";
 
 /** KP가 디스코드 채널 웹훅을 연결하고 알림 종류를 고른다. */
 export function DiscordButton({ me, roomId }: { me: Identity; roomId: string }) {
@@ -10,13 +11,6 @@ export function DiscordButton({ me, roomId }: { me: Identity; roomId: string }) 
   const [cfg, setCfg] = useState<DiscordSettings | null>(null);
   const [url, setUrl] = useState("");
   const [msg, setMsg] = useState("");
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
 
   const fail = (e: unknown) => setMsg(e instanceof ApiError ? e.message : "처리하지 못했어요.");
 
@@ -62,7 +56,7 @@ export function DiscordButton({ me, roomId }: { me: Identity; roomId: string }) 
     <>
       <button className="btn" onClick={show}>디스코드</button>
       {open && (
-        <div className="dialog" role="dialog" aria-label="디스코드 알림">
+        <Dialog label="디스코드 알림" onClose={() => setOpen(false)} className="dialog">
           <strong>디스코드 알림</strong>
           <span style={{ color: "var(--muted)", fontSize: 12.5 }}>
             {cfg?.connected ? "채널이 연결돼 있어요. 주소는 안전을 위해 다시 보여 주지 않아요." : "채널 설정 → 연동 → 웹훅에서 URL을 복사해 붙여 넣어 주세요."}
@@ -81,7 +75,7 @@ export function DiscordButton({ me, roomId }: { me: Identity; roomId: string }) 
             <button className="btn" disabled={!cfg?.connected} onClick={() => save(null)}>해제</button>
             <button className="btn" onClick={() => setOpen(false)}>닫기</button>
           </div>
-        </div>
+        </Dialog>
       )}
     </>
   );

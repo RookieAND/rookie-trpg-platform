@@ -31,6 +31,7 @@ export function RoomHeader({
   effectsEnabled,
   onToggleEffects,
   soundControl,
+  soundHint,
   send,
 }: {
   me: Identity;
@@ -50,6 +51,8 @@ export function RoomHeader({
   onToggleEffects: () => void;
   /** 내 소리 설정 버튼 */
   soundControl?: ReactNode;
+  /** 소리가 막혔을 때만 보이는 작은 안내 */
+  soundHint?: ReactNode;
   send: (c: ClientCommand) => unknown;
 }) {
   const isKp = role === "kp";
@@ -64,6 +67,7 @@ export function RoomHeader({
         {SESSION_STATUS_LABEL[status]}
       </span>
       <span className="badge plain conn" data-testid="connection" data-state={connection}>{CONNECTION_LABEL[connection]}</span>
+      {soundHint}
       <div className="spacer" />
       <span className="presence" title={members.filter((m) => m.online).map((m) => m.name).join(", ")}>접속 {members.filter((m) => m.online).map((m) => m.name).join(", ")}</span>
       <span className="sep" />

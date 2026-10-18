@@ -2,17 +2,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BgmState } from "@coc-vtt/shared";
 import { audioUrl } from "@/shared/api";
+import { isStaleEvent } from "@/shared/lib";
+import { isAudioBlocked } from "./blocked";
 import type { AudioPrefs } from "./useAudioPreference";
 
 interface Input {
   bgm: BgmState | null;
   /** 배경음 정지 페이드(ms) */
   stopFadeMs?: number;
-  lastSe: { assetId: string; volume: number; n: number } | null;
+  lastSe: { assetId: string; volume: number; n: number; startedAt: number } | null;
   /** 서버 시계 − 내 시계(ms) */
   clockOffset: number;
   /** 가장 최근 굴림 id. 접속 직후의 기존 굴림에는 울리지 않는다. */
   lastRollId: string | null;
+  /** 가장 최근 굴림의 서버 시각. 재접속으로 다시 받은 오래된 굴림에는 울리지 않는다. */
+  lastRollAt?: number | null;
   ready: boolean;
   prefs: AudioPrefs;
 }
@@ -23,12 +27,13 @@ interface Input {
  * 배경음은 서버가 시작한 시각(startedAt)에서 지금까지 흐른 만큼 건너뛴 자리부터 틀어 모두가 같은 소절을 듣는다.
  * 브라우저는 사용자가 한 번 누르기 전에는 소리를 막으므로, 첫 입력(또는 버튼)에서 풀어 준다.
  */
-export function useAudioEngine({ bgm, stopFadeMs = 600, lastSe, clockOffset, lastRollId, ready, prefs }: Input) {
+export function useAudioEngine({ bgm, stopFadeMs = 600, lastSe, clockOffset, lastRollId, lastRollAt = null, ready, prefs }: Input) {
   const ctxRef = useRef<AudioContext | null>(null);
   const buffers = useRef(new Map<string, Promise<AudioBuffer>>());
   const current = useRef<{ key: string; source: AudioBufferSourceNode; gain: GainNode } | null>(null);
   const [unlocked, setUnlocked] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [ctxState, setCtxState] = useState<AudioContextState | "none">("none");
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
 
@@ -37,9 +42,13 @@ export function useAudioEngine({ bgm, stopFadeMs = 600, lastSe, clockOffset, las
       if (!ctxRef.current) {
         const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (!Ctor) return;
-        ctxRef.current = new Ctor();
+        const ctx = new Ctor();
+        ctx.onstatechange = () => setCtxState(ctx.state);
+        ctxRef.current = ctx;
       }
-      void ctxRef.current.resume();
+      const ctx = ctxRef.current;
+      setCtxState(ctx.state);
+      ctx.resume().then(() => setCtxState(ctx.state), () => setCtxState(ctx.state));
       setUnlocked(true);
     } catch {
       /* 소리를 쓸 수 없는 환경이면 조용히 둔다 */
@@ -49,11 +58,10 @@ export function useAudioEngine({ bgm, stopFadeMs = 600, lastSe, clockOffset, las
   useEffect(() => {
     if (unlocked) return;
     const h = () => unlock();
-    document.addEventListener("pointerdown", h, { once: true });
-    document.addEventListener("keydown", h, { once: true });
+    const evs = ["pointerdown", "keydown", "click", "touchend"] as const;
+    for (const ev of evs) document.addEventListener(ev, h, { once: true });
     return () => {
-      document.removeEventListener("pointerdown", h);
-      document.removeEventListener("keydown", h);
+      for (const ev of evs) document.removeEventListener(ev, h);
     };
   }, [unlocked, unlock]);
 
@@ -154,6 +162,8 @@ export function useAudioEngine({ bgm, stopFadeMs = 600, lastSe, clockOffset, las
     lastN.current = lastSe.n;
     const ctx = ctxRef.current;
     if (!unlocked || !ctx) return;
+    // 재접속으로 다시 받은 오래된 효과음은 울리지 않는다.
+    if (isStaleEvent(lastSe.startedAt, Date.now() + offsetRef.current)) return;
     load(lastSe.assetId)
       .then((buf) => {
         const source = ctx.createBufferSource();
@@ -178,6 +188,8 @@ export function useAudioEngine({ bgm, stopFadeMs = 600, lastSe, clockOffset, las
     lastRoll.current = lastRollId;
     const ctx = ctxRef.current;
     if (!unlocked || !ctx) return;
+    // 재접속으로 다시 받은 오래된 굴림에는 소리를 내지 않는다.
+    if (lastRollAt !== null && isStaleEvent(lastRollAt, Date.now() + offsetRef.current)) return;
     const vol = gainOf(100, "roll");
     if (vol <= 0) return;
     const t0 = ctx.currentTime;
@@ -208,5 +220,6 @@ export function useAudioEngine({ bgm, stopFadeMs = 600, lastSe, clockOffset, las
     [],
   );
 
-  return { unlocked, unlock, playing };
+  const blocked = isAudioBlocked({ wantsSound: !!bgm && !prefs.muted, unlocked, ctxState });
+  return { unlocked, unlock, playing, blocked };
 }
