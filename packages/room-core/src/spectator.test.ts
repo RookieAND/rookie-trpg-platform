@@ -359,3 +359,32 @@ describe("GM이 관전자를 내보낸다", () => {
     expect(w.room.toData().members.some((m) => m.userId === "sp1")).toBe(false);
   });
 });
+
+/** GM만 쓸 수 있는 명령. PL이 보내면 룸이 바뀌지 않고 거절돼야 한다. */
+const GM_ONLY = [
+  "member.remove", "object.add", "scene.fog", "scene.grid", "fog.reveal", "fog.remove", "fog.clear", "fog.forget",
+  "undo.last", "roll.ask", "handout.create", "handout.update", "handout.remove", "handout.show", "settings.effects",
+  "scene.create", "scene.rename", "scene.setStart", "scene.setBgm", "scene.background", "scene.remove", "scene.duplicate",
+  "scene.reorder", "scene.activate", "damage.apply", "san.newDay", "flow.beat.upsert", "flow.beat.remove", "flow.branch.upsert",
+  "flow.branch.remove", "flow.goto", "flow.ending.choose", "flow.dismiss", "audio.track.add", "audio.track.remove", "audio.play",
+  "audio.stop", "audio.volume", "initiative.start", "initiative.add", "initiative.remove", "initiative.dex", "initiative.next",
+  "initiative.end", "settings.madness", "madness.roll", "settings.chat", "session.start", "session.pause", "session.resume", "session.end",
+] as const;
+
+describe("PL의 GM 전용 명령은 거절된다", () => {
+  for (const state of ["ACTIVE", "IDLE", "PAUSED"] as const) {
+    it(`세션이 ${state}일 때 GM 전용 ${GM_ONLY.length}개가 하나도 통하지 않고 룸이 그대로다`, () => {
+      const w = world();
+      if (state !== "IDLE") must(w.room.handle(kp, cmd("session.start", {})));
+      if (state === "PAUSED") must(w.room.handle(kp, cmd("session.pause", {})));
+      const s = samples(w);
+      const before = JSON.stringify(w.room.toData());
+      for (const t of GM_ONLY) {
+        const r = w.room.handle(pl2, { type: t, data: s[t] } as ClientCommand);
+        expect(r.ok, `${t}가 PL에게 통했어요`).toBe(false);
+        if (!r.ok) expect(r.out ?? [], t).toEqual([]);
+      }
+      expect(JSON.stringify(w.room.toData())).toBe(before);
+    });
+  }
+});
