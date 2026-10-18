@@ -28,6 +28,9 @@ for (const who of ["하늘", "서하", "낯선이"]) {
   const h = { "x-dev-user": encodeURIComponent(who), "x-dev-name": encodeURIComponent(who) };
   const list = await fetch(`${API}/rooms`, { headers: h }).then((r) => (r.ok ? r.json() : [])).catch(() => []);
   for (const r of list) if (r.role === "kp") await fetch(`${API}/rooms/${r.id}`, { method: "DELETE", headers: h }).catch(() => {});
+  // 보관함도 한도가 있으니 이전 실행이 남긴 캐릭터를 비운다.
+  const vault = await fetch(`${API}/characters`, { headers: h }).then((r) => (r.ok ? r.json() : [])).catch(() => []);
+  for (const c of vault) if (c.id) await fetch(`${API}/characters/${c.id}`, { method: "DELETE", headers: h }).catch(() => {});
 }
 
 const login = async (page, name) => {
