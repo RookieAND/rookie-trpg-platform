@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import type { AudioTrack, ClientCommand, Scene } from "@coc-vtt/shared";
+import { BGM_STOP, type AudioTrack, type ClientCommand, type Scene } from "@coc-vtt/shared";
 import type { Caller } from "@/shared/api";
 import { ImageUploadButton, Menu, MenuLabel, onTabListKeyDown } from "@/shared/ui";
 
@@ -52,7 +52,8 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
                 {viewing.background && <button className="btn" disabled={!enabled} onClick={() => { send({ type: "scene.background", data: { id: viewing.id, image: null } }); close(); }}>배경 떼기</button>}
                 {tracks.some((t) => t.kind === "bgm") && (
                   <select className="input" aria-label="장면 배경음" value={viewing.bgmTrackId ?? ""} disabled={!enabled} onChange={(e) => send({ type: "scene.setBgm", data: { id: viewing.id, trackId: e.target.value || null } })}>
-                    <option value="">배경음 없음</option>
+                    <option value="">배경음 그대로 둠</option>
+                    <option value={BGM_STOP}>■ 음악 정지</option>
                     {tracks.filter((t) => t.kind === "bgm").map((t) => (
                       <option key={t.id} value={t.id}>♪ {t.label}</option>
                     ))}

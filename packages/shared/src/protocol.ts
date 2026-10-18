@@ -266,6 +266,9 @@ export interface Snapshot {
 
 export const MAX_MADNESS_ENTRIES = 10;
 
+/** 장면·비트의 배경음 자리에 쓰는 특별한 값: 들어갈 때 흐르는 음악을 멈춘다. */
+export const BGM_STOP = "__stop__";
+
 const id = z.string().min(1).max(64);
 const coord = z.number().finite().min(-100_000).max(100_000);
 

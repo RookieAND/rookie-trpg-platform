@@ -6,6 +6,8 @@ import type { AudioPrefs } from "./useAudioPreference";
 
 interface Input {
   bgm: BgmState | null;
+  /** 배경음 정지 페이드(ms) */
+  stopFadeMs?: number;
   lastSe: { assetId: string; volume: number; n: number } | null;
   /** 서버 시계 − 내 시계(ms) */
   clockOffset: number;
@@ -15,14 +17,13 @@ interface Input {
   prefs: AudioPrefs;
 }
 
-const STOP_FADE_S = 0.6;
 
 /**
  * 서버가 알려 준 배경음·효과음을 Web Audio로 재생한다.
  * 배경음은 서버가 시작한 시각(startedAt)에서 지금까지 흐른 만큼 건너뛴 자리부터 틀어 모두가 같은 소절을 듣는다.
  * 브라우저는 사용자가 한 번 누르기 전에는 소리를 막으므로, 첫 입력(또는 버튼)에서 풀어 준다.
  */
-export function useAudioEngine({ bgm, lastSe, clockOffset, lastRollId, ready, prefs }: Input) {
+export function useAudioEngine({ bgm, stopFadeMs = 600, lastSe, clockOffset, lastRollId, ready, prefs }: Input) {
   const ctxRef = useRef<AudioContext | null>(null);
   const buffers = useRef(new Map<string, Promise<AudioBuffer>>());
   const current = useRef<{ key: string; source: AudioBufferSourceNode; gain: GainNode } | null>(null);
@@ -99,7 +100,7 @@ export function useAudioEngine({ bgm, lastSe, clockOffset, lastRollId, ready, pr
   useEffect(() => {
     if (!unlocked || !ctxRef.current) return;
     if (!key) {
-      stopCurrent(STOP_FADE_S);
+      stopCurrent(Math.max(0.05, stopFadeMs / 1000));
       return;
     }
     if (current.current?.key === key) return;

@@ -43,6 +43,8 @@ export interface RoomState {
   /** KP만 받는다. */
   audioLibrary: AudioTrack[];
   bgm: BgmState | null;
+  /** 마지막 배경음 정지의 페이드(ms). 엔진이 이 길이로 줄인다. */
+  stopFadeMs: number;
   /** 서버 시계 − 내 시계(ms). 접속할 때 맞춘다. */
   clockOffset: number;
   /** 방금 울릴 효과음. n이 바뀌면 새로 울린다. */
@@ -83,6 +85,7 @@ export const initialRoomState = (roomId = ""): RoomState => ({
   flow: null,
   audioLibrary: [],
   bgm: null,
+  stopFadeMs: 600,
   clockOffset: 0,
   lastSe: null,
   lastMadness: null,
@@ -123,6 +126,7 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       flow: d.flow ?? null,
       audioLibrary: d.audioLibrary ?? [],
       bgm: d.bgm ?? null,
+      stopFadeMs: 600,
       clockOffset: (d.now ?? Date.now()) - Date.now(),
       lastSe: null,
       lastMadness: null,
@@ -161,7 +165,7 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       if (ev.data.channel === "bgm") return { ...next, bgm: { assetId: ev.data.assetId, volume: ev.data.volume, startedAt: ev.data.startedAt, fadeMs: ev.data.fadeMs } };
       return { ...next, lastSe: { assetId: ev.data.assetId, volume: ev.data.volume, n: msg.seq } };
     case "audio.stopped":
-      return { ...next, bgm: null };
+      return { ...next, bgm: null, stopFadeMs: ev.data.fadeMs };
     case "audio.volume":
       return { ...next, bgm: next.bgm ? { ...next.bgm, volume: ev.data.volume } : null };
     case "flow.updated":

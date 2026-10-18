@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { BEAT_KIND_LABEL_KO, type AudioTrack, type Beat, type Branch, type ClientCommand, type Flow, type Handout, type Scene } from "@coc-vtt/shared";
+import { BEAT_KIND_LABEL_KO, BGM_STOP, type AudioTrack, type Beat, type Branch, type ClientCommand, type Flow, type Handout, type Scene } from "@coc-vtt/shared";
 import { BeatEditor } from "./BeatEditor";
 import { BranchEditor } from "./BranchEditor";
 
@@ -119,7 +119,7 @@ export function FlowPanel({ flow, scenes, handouts, tracks, status, enabled, sen
             <div style={{ color: "var(--muted)", fontSize: 12 }}>
               {b.sceneId ? `장면 ${scenes.find((s) => s.id === b.sceneId)?.name ?? "?"}` : "장면 그대로"}
               {b.handoutIds.length > 0 && ` · 핸드아웃 ${b.handoutIds.length}개`}
-              {b.bgmTrackId && ` · 배경음 ${tracks.find((t) => t.id === b.bgmTrackId)?.label ?? "?"}`}
+              {b.bgmTrackId && ` · 배경음 ${b.bgmTrackId === BGM_STOP ? "정지" : (tracks.find((t) => t.id === b.bgmTrackId)?.label ?? "?")}`}
               {b.sanReward && ` · SAN 보상 ${b.sanReward}`}
               {branches.length > 0 && ` · 분기 ${branches.length}개`}
             </div>

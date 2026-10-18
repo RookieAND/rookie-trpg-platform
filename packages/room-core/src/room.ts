@@ -1,4 +1,5 @@
 import {
+  BGM_STOP,
   MAX_SKILLS,
   SAN_CAP,
   SKILL_CAP,
@@ -705,6 +706,13 @@ export class Room {
     return ok(this.startTrack(track, d.volume ?? track.volume, d.fadeMs));
   }
 
+  /** 흐르는 배경음이 있으면 멈추는 이벤트를 돌려준다(장면·비트의 '음악 정지'). */
+  private stopBgm(fadeMs: number): Out[] {
+    if (!this.bgm) return [];
+    this.bgm = null;
+    return [this.emit({ type: "audio.stopped", data: { fadeMs } }, { roles: ALL_ROLES })];
+  }
+
   private audioStop(who: Actor, fadeMs: number): Result {
     const denied = this.audioGuard(who);
     if (denied) return denied;
@@ -749,6 +757,7 @@ export class Room {
     }
     const track = beat.bgmTrackId ? this.audio.find((t) => t.id === beat.bgmTrackId && t.kind === "bgm") : undefined;
     if (track) out.push(this.startTrack(track, track.volume, 0));
+    else if (beat.bgmTrackId === BGM_STOP) out.push(...this.stopBgm(1000));
     return out;
   }
 
@@ -760,7 +769,7 @@ export class Room {
       const probe = parseSumExpression(d.sanReward);
       if (!probe.ok) return fail("bad_message", `SAN 보상은 1d6+1d4처럼 주사위 식으로 적어 주세요. ${probe.error}`);
     }
-    if (d.bgmTrackId && this.audio.find((t) => t.id === d.bgmTrackId)?.kind !== "bgm") return fail("not_found", "배경음을 찾을 수 없어요.");
+    if (d.bgmTrackId && d.bgmTrackId !== BGM_STOP && this.audio.find((t) => t.id === d.bgmTrackId)?.kind !== "bgm") return fail("not_found", "배경음을 찾을 수 없어요.");
     if (d.handoutIds.some((hid) => this.handouts.get(hid)?.kpOnly)) return fail("bad_message", "KP 전용 노트는 비트에 붙일 수 없어요.");
     const existing = d.id ? this.flow.beats.find((b) => b.id === d.id) : undefined;
     if (d.id && !existing) return fail("not_found", "비트를 찾을 수 없어요.");
@@ -1143,7 +1152,8 @@ export class Room {
     if (who.role !== "kp") return fail("forbidden", "KP만 장면 배경음을 정할 수 있어요.");
     const scene = this.scenes.get(d.id);
     if (!scene) return fail("not_found", "장면을 찾을 수 없어요.");
-    if (d.trackId) {
+    if (d.trackId === BGM_STOP) scene.bgmTrackId = BGM_STOP;
+    else if (d.trackId) {
       if (this.audio.find((t) => t.id === d.trackId)?.kind !== "bgm") return fail("not_found", "배경음을 찾을 수 없어요.");
       scene.bgmTrackId = d.trackId;
     } else delete scene.bgmTrackId;
@@ -1241,6 +1251,7 @@ export class Room {
     // 장면에 묶은 배경음. 이미 같은 곡이 흐르고 있으면 끊지 않고 그대로 둔다.
     const track = scene.bgmTrackId ? this.audio.find((t) => t.id === scene.bgmTrackId && t.kind === "bgm") : undefined;
     if (track && this.bgm?.assetId !== track.assetId) out.push(this.startTrack(track, track.volume, transition === "fade" ? 1500 : 0));
+    else if (scene.bgmTrackId === BGM_STOP) out.push(...this.stopBgm(transition === "fade" ? 1500 : 600));
     return out;
   }
 

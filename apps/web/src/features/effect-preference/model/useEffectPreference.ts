@@ -8,7 +8,10 @@ export function useEffectPreference() {
   const [enabled, setEnabled] = useState(true);
   useEffect(() => {
     try {
-      if (localStorage.getItem(KEY) === "off") setEnabled(false);
+      const saved = localStorage.getItem(KEY);
+      if (saved === "off") setEnabled(false);
+      // 저장한 선택이 없고 기기가 '움직임 줄이기'면 기본을 끈다.
+      else if (saved === null && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) setEnabled(false);
     } catch {
       /* 저장소를 못 쓰면 기본값(켜짐)을 쓴다 */
     }

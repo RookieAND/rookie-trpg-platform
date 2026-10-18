@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameObject, Role } from "@coc-vtt/shared";
 import { beginDiscordLogin, refreshStoredSession, useIdentity, type Identity } from "@/entities/user";
 import { SUPABASE_URL } from "@/shared/config";
@@ -58,6 +58,11 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   useEffect(() => setPlGuideClosed(readGuideClosed(roomId)), [roomId]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const fx = useEffectPreference();
+  // 재접속한 시각. 그 직후 다시 받은 장면 전환은 연출하지 않는다.
+  const reconnectedAt = useRef(0);
+  useEffect(() => {
+    if (reconnected > 0) reconnectedAt.current = Date.now();
+  }, [reconnected]);
   const sound = useAudioPreference();
   const [tab, setTab] = useState<"roll" | "sheet" | "handout" | "combat" | "flow" | "sound">("roll");
   const [sheetId, setSheetId] = useState<string | null>(null);
@@ -103,7 +108,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     }
     return shownScene?.fogAreas ? { areas: shownScene.fogAreas, preview: false, explored: shownScene.fogExplored } : undefined;
   }, [isKp, shownScene, objects]);
-  const audio = useAudioEngine({ bgm: state.bgm, lastSe: state.lastSe, clockOffset: state.clockOffset, lastRollId: state.rolls.at(-1)?.id ?? null, ready: state.ready, prefs: sound.prefs });
+  const audio = useAudioEngine({ bgm: state.bgm, stopFadeMs: state.stopFadeMs, lastSe: state.lastSe, clockOffset: state.clockOffset, lastRollId: state.rolls.at(-1)?.id ?? null, ready: state.ready, prefs: sound.prefs });
 
   const handoutIds = useMemo(() => handoutList.map((h) => h.id), [handoutList]);
   // 새로 받은 핸드아웃(PL만). 핸드아웃 탭을 보고 있으면 본 것으로 친다.
@@ -175,7 +180,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
           {role === "pl" && state.ready && !hasToken && state.sessionStatus !== "PAUSED" && (
             <div className="dock dock-hint" role="status" data-testid="no-token-hint">아직 내 토큰이 없어요. KP에게 요청하거나 기다려요</div>
           )}
-          <SceneTransition transition={state.transition} />
+          <SceneTransition transition={state.transition} reconnectedAt={reconnectedAt.current} enabled={fx.enabled} />
           {!isKp && state.scenes[state.activeSceneId] && <div className="scene-name" data-testid="scene-name">{state.scenes[state.activeSceneId]!.name}</div>}
           {!isKp && fogView && (
             <div style={{ position: "absolute", right: 12, bottom: 12, zIndex: 2, color: "var(--muted)", fontSize: 12.5 }} data-testid="fog-note">

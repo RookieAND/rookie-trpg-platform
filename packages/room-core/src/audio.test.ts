@@ -164,3 +164,28 @@ describe("장면 묶음의 배경음", () => {
     expect(room.snapshot(kp).scenes.find((s) => s.id === sc.data.id)?.bgmTrackId).toBeUndefined();
   });
 });
+
+describe("장면·비트의 음악 정지", () => {
+  it("'음악 정지'를 묶은 장면으로 가면 흐르던 곡이 페이드로 멈춘다", () => {
+    const { room, add } = setup();
+    const bgm = add("추격", "bgm", A1);
+    must(room.handle(kp, cmd("session.start", {})));
+    must(room.handle(kp, cmd("audio.play", { trackId: bgm.id, fadeMs: 0 })));
+    const sc = must(room.handle(kp, cmd("scene.create", { name: "조용한 방" })))[0]!.event;
+    if (sc.type !== "scene.added") throw new Error();
+    must(room.handle(kp, cmd("scene.setBgm", { id: sc.data.id, trackId: "__stop__" })));
+    const out = must(room.handle(kp, cmd("scene.activate", { id: sc.data.id, transition: "fade" })));
+    const stop = out.find((o) => o.event.type === "audio.stopped");
+    expect(stop?.event.type === "audio.stopped" && stop.event.data.fadeMs).toBe(1500);
+    expect(room.snapshot(seo).bgm).toBeNull();
+  });
+  it("흐르는 곡이 없으면 정지 이벤트도 없다", () => {
+    const { room } = setup();
+    must(room.handle(kp, cmd("session.start", {})));
+    const sc = must(room.handle(kp, cmd("scene.create", { name: "방" })))[0]!.event;
+    if (sc.type !== "scene.added") throw new Error();
+    must(room.handle(kp, cmd("scene.setBgm", { id: sc.data.id, trackId: "__stop__" })));
+    const out = must(room.handle(kp, cmd("scene.activate", { id: sc.data.id, transition: "cut" })));
+    expect(out.some((o) => o.event.type === "audio.stopped")).toBe(false);
+  });
+});

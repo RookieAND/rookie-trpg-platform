@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { BEAT_KINDS, BEAT_KIND_LABEL_KO, MAX_BEAT_HANDOUTS, type AudioTrack, type Beat, type BeatKind, type Handout, type Scene } from "@coc-vtt/shared";
+import { BEAT_KINDS, BGM_STOP, BEAT_KIND_LABEL_KO, MAX_BEAT_HANDOUTS, type AudioTrack, type Beat, type BeatKind, type Handout, type Scene } from "@coc-vtt/shared";
 
 export interface BeatDraft {
   id?: string;
@@ -40,6 +40,7 @@ export function BeatEditor({ initial, scenes, handouts, tracks, onSave, onCancel
       </select>
       <select className="input" aria-label="들어갈 때 틀 배경음" value={bgmTrackId} onChange={(e) => setBgmTrackId(e.target.value)}>
         <option value="">배경음은 그대로</option>
+        <option value={BGM_STOP}>■ 음악 정지</option>
         {tracks.filter((t) => t.kind === "bgm").map((t) => (
           <option key={t.id} value={t.id}>{t.label}</option>
         ))}
