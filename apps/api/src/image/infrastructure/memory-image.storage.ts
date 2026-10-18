@@ -2,6 +2,10 @@ import type { ImageStorage, StoredImage } from "../domain/image-storage";
 
 export class MemoryImageStorage implements ImageStorage {
   private readonly files = new Map<string, StoredImage>();
+  /** 저장된 파일 수(시험용) */
+  get size() {
+    return this.files.size;
+  }
   async put(id: string, image: StoredImage) {
     this.files.set(id, image);
   }

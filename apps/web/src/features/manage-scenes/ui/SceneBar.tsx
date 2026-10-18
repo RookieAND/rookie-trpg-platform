@@ -1,6 +1,6 @@
 "use client";
-import { useState } from "react";
-import { josa, BGM_STOP, type AudioTrack, type ClientCommand, type Scene } from "@coc-vtt/shared";
+import { useEffect, useRef, useState } from "react";
+import { josa, BGM_STOP, MAX_SCENES, type AudioTrack, type ClientCommand, type Scene } from "@coc-vtt/shared";
 import type { Caller } from "@/shared/api";
 import { ImageUploadButton, Menu, MenuLabel, onTabListKeyDown, useAsk } from "@/shared/ui";
 
@@ -12,6 +12,24 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
   const viewing = scenes.find((s) => s.id === viewId);
   const isActive = viewId === activeId;
   const partyOpt = bringParty ? {} : { bringParty: false };
+  const index = scenes.findIndex((s) => s.id === viewId);
+
+  // 복제하면 새로 생긴 장면(원본 바로 뒤)을 바로 보여 준다.
+  const copyFrom = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const before = copyFrom.current;
+    if (!before) return;
+    const added = scenes.find((s) => !before.has(s.id));
+    if (!added) return;
+    copyFrom.current = null;
+    onView(added.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenes]);
+  const duplicate = (id: string) => {
+    copyFrom.current = new Set(scenes.map((s) => s.id));
+    if (send({ type: "scene.duplicate", data: { id } }) === false) copyFrom.current = null;
+  };
+  const move = (to: number) => viewing && send({ type: "scene.reorder", data: { id: viewing.id, index: to } });
 
   const create = () => {
     if (!name.trim()) return;
@@ -47,6 +65,11 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
             </>
           )}
           {!isActive && <span className="scene-hint">준비 중 — PL에게 안 보여요</span>}
+          <span className="scene-move" role="group" aria-label="장면 순서">
+            <button type="button" className="btn sm" data-testid="scene-move-up" aria-label="장면을 앞으로 옮기기" title="이 장면을 앞으로 옮겨요" disabled={!enabled || index <= 0} onClick={() => move(index - 1)}>◀</button>
+            <button type="button" className="btn sm" data-testid="scene-move-down" aria-label="장면을 뒤로 옮기기" title="이 장면을 뒤로 옮겨요" disabled={!enabled || index < 0 || index >= scenes.length - 1} onClick={() => move(index + 1)}>▶</button>
+          </span>
+          <button type="button" className="btn sm" data-testid="scene-duplicate" title="이 장면의 토큰·소품·안개·배경을 그대로 복사해요" disabled={!enabled || scenes.length >= MAX_SCENES} onClick={() => duplicate(viewing.id)}>복제</button>
           <Menu label="장면 설정" title="이 장면의 시작 지정, 배경, 배경음, 이름, 삭제" align="right">
             {(close) => (
               <>

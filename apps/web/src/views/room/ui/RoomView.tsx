@@ -2,20 +2,22 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { GameObject, Role } from "@coc-vtt/shared";
+import { countsLine, type GameObject, type Role } from "@coc-vtt/shared";
 import { SheetCsvImport } from "@/entities/character";
 import { beginDiscordLogin, refreshStoredSession, useIdentity, type Identity } from "@/entities/user";
-import { getRoom } from "@/entities/room";
+import { getRoom, type ScenarioImportResult } from "@/entities/room";
 import { SERVICE_NAME, SUPABASE_URL } from "@/shared/config";
 import { roomTitle, useDocumentTitle } from "@/shared/lib";
 import { ObjectToolbar, uniqueName, useBoardInteractions } from "@/features/board-objects";
 import { FogToolbar } from "@/features/manage-fog";
 import { Hint, ImageLibraryProvider, onTabListKeyDown, roomImageIds, useImageLibraryStore } from "@/shared/ui";
 import { SceneBar } from "@/features/manage-scenes";
+import { importedText } from "@/features/scenario-prep";
 import { StageCues } from "@/features/stage-cues";
 import { useEffectPreference } from "@/features/effect-preference";
 import { SoundBlockedHint, SoundControl, useAudioEngine, useAudioPreference } from "@/features/audio-playback";
 import { LoadCharacter } from "@/features/load-character";
+import { NpcSheetButton } from "@/features/npc-sheet";
 import { useRoom } from "@/features/room-realtime";
 import { UndoButton, useUndo } from "@/features/undo-last";
 import { ConnectionBanner, MyTurnBadge, Toasts, findTurnTokens, isMyTurn, offTurnNotice, useRoomNotices, useUnseen } from "@/features/room-notices";
@@ -112,6 +114,11 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   const objects = useMemo(() => Object.values(state.objects).filter((o) => o.sceneId === shownSceneId), [state.objects, shownSceneId]);
   const characters = useMemo(() => Object.values(state.characters), [state.characters]);
   const sheet = characters.find((c) => c.id === sheetId) ?? characters[0];
+  // GM에게 보이는 시트 중 PL의 것이 아닌 것이 NPC 시트다(서버는 PL에게 NPC 시트를 보내지 않는다).
+  const npcIds = useMemo(() => {
+    const pls = new Set(state.members.filter((m) => m.role === "pl").map((m) => m.userId));
+    return new Set(isKp ? characters.filter((c) => !pls.has(c.ownerId)).map((c) => c.id) : []);
+  }, [isKp, characters, state.members]);
   const hasToken = Object.values(state.objects).some((o) => o.kind === "token" && o.ownerId === me.userId);
   const hasOwn = characters.some((c) => c.ownerId === me.userId);
   const spot = state.spotlight && state.spotlight.n > dismissedN ? state.handouts[state.spotlight.id] : undefined;
@@ -164,6 +171,25 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   // 키보드(지우기·복제·선택 이동), 오른쪽 클릭 메뉴, 이미지 끌어놓기·붙여넣기
   const interactions = useBoardInteractions({ me, isKp, sceneId: shownSceneId, objects, selectedId, onSelect: setSelectedId, send: sendWithHint, notify: notices.notify, remember: library.remember });
 
+  // 방금 만든 NPC 시트를 열고, 원하면 시트를 이은 토큰도 놓는다(새로 생긴 시트의 id는 서버가 정해서 도착한 뒤에야 안다).
+  const npcPending = useRef<{ before: Set<string>; place: boolean } | null>(null);
+  useEffect(() => {
+    const p = npcPending.current;
+    if (!p) return;
+    const added = characters.find((c) => !p.before.has(c.id));
+    if (!added) return;
+    npcPending.current = null;
+    setSheetId(added.id);
+    setTab("sheet");
+    if (p.place) send({ type: "object.add", data: { kind: "token", name: uniqueName(added.name, objects.map((o) => o.name)), x: 500, y: 400, layer: "object", visibleTo: "all", sceneId: shownSceneId, autoPlace: true, characterId: added.id } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [characters]);
+  const openSheet = (characterId: string) => {
+    setSheetId(characterId);
+    setTab("sheet");
+    setPanelOpen(true);
+  };
+
   if (authExpired) {
     return (
       <main className="login">
@@ -183,6 +209,10 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     );
   }
 
+  // 가져온 직후 토스트의 "되돌리기"로 방금 가져온 것을 지운다(서버가 기억하는 마지막 가져오기만 되돌릴 수 있다).
+  const onImported = (r: ScenarioImportResult) => {
+    notices.notify(importedText(countsLine(r.counts), r.warnings.length), { label: "되돌리기", run: () => send({ type: "scenario.revert", data: { importId: r.importId } }) });
+  };
   const ping = (x: number, y: number) => {
     const t = Date.now();
     if (t - lastPing.current < 600) return; // 서버 제한(초당 2회)에 걸리지 않게 화면에서 먼저 거른다
@@ -212,7 +242,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
       >
         보드로 건너뛰기
       </a>
-      <RoomHeader me={me} roomId={roomId} role={role} status={state.sessionStatus} kpAway={kpAway} sessionNumber={state.sessionNumber} connection={connection} members={state.members} effects={state.effects} madnessTable={state.madnessTable} endingDefaults={endingDefaults} effectsEnabled={fx.enabled} onToggleEffects={fx.toggle} soundControl={<SoundControl prefs={sound.prefs} onChange={sound.update} unlocked={audio.unlocked} onUnlock={audio.unlock} playing={audio.playing} />} soundHint={<SoundBlockedHint blocked={audio.blocked} onUnlock={audio.unlock} />} send={send} />
+      <RoomHeader me={me} roomId={roomId} roomName={roomName ?? ""} onRenamed={(n) => { setRoomName(n); notices.notify("룸 이름을 바꿨어요."); }} notify={notices.notify} onImported={onImported} role={role} status={state.sessionStatus} kpAway={kpAway} sessionNumber={state.sessionNumber} connection={connection} members={state.members} effects={state.effects} madnessTable={state.madnessTable} endingDefaults={endingDefaults} effectsEnabled={fx.enabled} onToggleEffects={fx.toggle} soundControl={<SoundControl prefs={sound.prefs} onChange={sound.update} unlocked={audio.unlocked} onUnlock={audio.unlock} playing={audio.playing} />} soundHint={<SoundBlockedHint blocked={audio.blocked} onUnlock={audio.unlock} />} send={send} />
 
       <Toasts toasts={notices.toasts} onDismiss={notices.dismiss} />
       <EndSummaryCard summary={state.lastEnd} />
@@ -249,7 +279,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
             />
           )}
           {isKp && <SceneBar me={me} scenes={scenes} tracks={state.audioLibrary} activeId={state.activeSceneId} viewId={shownSceneId} onView={setViewSceneId} enabled canActivate={!paused} send={send} />}
-          <Board objects={board.objects} background={board.background} me={{ userId: me.userId, role }} canInteract={canEditBoard} onMove={move} selectedId={selectedId} onSelect={setSelectedId} fog={board.fog} onPing={canPing ? ping : undefined} pings={state.pings} sceneId={board.sceneId} turnTokenIds={turnTokenIds} onDragStart={onDragStart} animate={fx.enabled} onPick={isKp && fogPicking ? (x, y) => send({ type: "fog.reveal", data: { sceneId: shownSceneId, x, y, r: fogRadius } }) : undefined} {...interactions.boardProps} {...(isKp && !board.background ? { hint: "이미지를 끌어다 놓아 배경을 정해요" } : {})} />
+          <Board onOpenSheet={(o) => o.characterId && (isKp || o.ownerId === me.userId) && state.characters[o.characterId] && openSheet(o.characterId)} objects={board.objects} background={board.background} me={{ userId: me.userId, role }} canInteract={canEditBoard} onMove={move} selectedId={selectedId} onSelect={setSelectedId} fog={board.fog} onPing={canPing ? ping : undefined} pings={state.pings} sceneId={board.sceneId} turnTokenIds={turnTokenIds} onDragStart={onDragStart} animate={fx.enabled} onPick={isKp && fogPicking ? (x, y) => send({ type: "fog.reveal", data: { sceneId: shownSceneId, x, y, r: fogRadius } }) : undefined} {...interactions.boardProps} {...(isKp && !board.background ? { hint: "이미지를 끌어다 놓아 배경을 정해요" } : {})} />
           {interactions.ui}
           {isKp && (
             <StageCues roomId={roomId} enabled={state.sessionStatus !== "PAUSED"} send={send} source={cueSource} />
@@ -276,6 +306,8 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               objects={objects}
               players={state.members.filter((m) => m.role === "pl")}
               selected={selected}
+              characters={characters}
+              onOpenSheet={openSheet}
               send={sendWithHint}
               onDeselect={() => setSelectedId(null)}
             />
@@ -348,6 +380,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                   onMadnessRoll={(characterId, mode) => send({ type: "madness.roll", data: { characterId, mode } })}
                   onApplyDamage={isKp ? (characterId, amount, armor) => send({ type: "damage.apply", data: { characterId, amount, armor } }) : undefined}
                   onHeal={isKp ? (characterId, kind, amount) => send({ type: "hp.heal", data: { characterId, kind, ...(amount !== undefined ? { amount } : {}) } }) : undefined}
+                  npcIds={npcIds}
                   onRemove={isKp || (role === "pl" && state.sessionStatus === "IDLE" && state.sessionNumber === 0 && sheet?.ownerId === me.userId) ? (characterId) => send({ type: "character.remove", data: { id: characterId } }) : undefined}
                   onRoll={(characterId, name, o: RollOptions) => {
                     // 시트를 보던 자리에서 결과를 토스트로 알려 주고, 굴림 탭으로 옮기지 않는다(굴림 기록에는 그대로 쌓인다).
@@ -360,16 +393,26 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                   <button
                     className="btn"
                     disabled={!canEditBoard}
-                    title="이 캐릭터의 이름·소유자로 지금 보는 장면에 토큰을 놓아요"
+                    title="이 시트에 이어진 토큰을 지금 보는 장면에 놓아요"
                     onClick={() => {
                       const owner = state.members.find((m) => m.userId === sheet.ownerId && m.role === "pl");
-                      send({ type: "object.add", data: { kind: "token", name: uniqueName(sheet.name, objects.map((o) => o.name)), x: 500, y: 400, layer: "object", visibleTo: "all", sceneId: shownSceneId, autoPlace: true, ...(owner ? { ownerId: owner.userId } : {}) } });
+                      send({ type: "object.add", data: { kind: "token", name: uniqueName(sheet.name, objects.map((o) => o.name)), x: 500, y: 400, layer: "object", visibleTo: "all", sceneId: shownSceneId, autoPlace: true, characterId: sheet.id, ...(owner ? { ownerId: owner.userId } : {}) } });
                     }}
                   >
                     토큰으로 놓기
                   </button>
                 )}
-                {role !== "spectator" && (isKp || !hasOwn) && <LoadCharacter me={me} send={send} disabled={paused && !isKp} />}
+                {isKp && (
+                  <NpcSheetButton
+                    count={characters.length}
+                    disabled={!canEditBoard}
+                    onCreate={(data, place) => {
+                      npcPending.current = { before: new Set(characters.map((c) => c.id)), place };
+                      if (send({ type: "character.add", data }) === false) npcPending.current = null;
+                    }}
+                  />
+                )}
+                {role !== "spectator" && (isKp || !hasOwn) && <LoadCharacter me={me} send={send} disabled={paused && !isKp} {...(isKp ? { title: "보관함에서 NPC·캐릭터 불러오기" } : {})} />}
                 {role !== "spectator" && (isKp || !hasOwn) && (
                   <SheetCsvImport me={me} applyLabel="룸에 등록" disabled={paused && !isKp} onApply={(data) => send({ type: "character.add", data })} />
                 )}

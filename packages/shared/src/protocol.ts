@@ -31,6 +31,11 @@ export interface Scene {
 }
 
 export const MAX_FOG_ZONES = 60;
+/** 한 룸에 둘 수 있는 장면·오브젝트·캐릭터·핸드아웃 수 */
+export const MAX_SCENES = 30;
+export const MAX_OBJECTS = 500;
+export const MAX_CHARACTERS = 30;
+export const MAX_HANDOUTS = 100;
 export const FOG_MAX_RADIUS = 600;
 /** 장면마다 남기는 탐험 기록 원의 최대 개수(넘치면 오래된 것부터 버린다) */
 export const MAX_FOG_EXPLORED = 200;
@@ -92,9 +97,24 @@ export interface GameObject {
   vision?: number;
   /** 이 오브젝트를 움직일 수 있는 사용자(토큰의 주인). GM은 항상 가능. */
   ownerId?: string;
+  /**
+   * 이어진 캐릭터 시트. GM은 늘 받고, PL은 자기 시트에 이어진 토큰에서만 받는다(NPC 시트 id는 보내지 않는다).
+   */
+  characterId?: string;
+  /** GM이 켜면 PL에게도 이 토큰의 HP 막대를 보여 준다(NPC용). PL에게는 보내지 않는다. */
+  hpPublic?: boolean;
+  /** 이어진 시트의 HP·상태 요약. 저장하지 않고 서버가 보내는 사람마다 만들어 붙인다. PL은 PC 토큰과 HP 공개한 토큰에서만 받는다. */
+  vitals?: TokenVitals;
   locked: boolean;
   /** 변경될 때마다 1씩 오른다. 오래된 명령을 거절하는 데 쓴다. */
   rev: number;
+}
+
+/** 토큰 아래에 그리는 HP 막대와 상태 칩에 쓰는 요약 */
+export interface TokenVitals {
+  hp: number;
+  max: number;
+  status?: StatusKey[];
 }
 
 export interface RollLogEntry {
@@ -369,6 +389,9 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
       layer: z.enum(["background", "object", "gm"]).default("object"),
       visibleTo: visibility.default("all"),
       ownerId: id.optional(),
+      /** 이어 둘 캐릭터 시트 */
+      characterId: id.optional(),
+      hpPublic: z.boolean().optional(),
       /** 비우면 지금 활성 장면에 놓는다. */
       sceneId: id.optional(),
       /** 켜면 (x,y)에서 가장 가까운, 같은 장면의 다른 오브젝트와 겹치지 않는 빈자리에 놓는다. */
@@ -393,6 +416,10 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
       locked: z.boolean().optional(),
       /** 시야 반지름. 0이면 없앤다. */
       vision: z.number().int().min(0).max(FOG_MAX_RADIUS).optional(),
+      /** 이어 둘 캐릭터 시트. null이면 연결을 푼다. */
+      characterId: id.nullable().optional(),
+      /** PL에게 HP 막대를 보여 줄지(NPC 토큰) */
+      hpPublic: z.boolean().optional(),
     }),
   }),
   /** 보드의 한 곳을 모두에게 가리킨다(저장하지 않는 일회성 신호). sceneId는 보고 있는 장면이고 활성 장면과 같아야 한다. */
@@ -493,6 +520,12 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("scene.setBgm"), data: z.object({ id, trackId: id.nullable() }) }),
   z.object({ type: z.literal("scene.background"), data: z.object({ id, image: imageId.nullable() }) }),
   z.object({ type: z.literal("scene.remove"), data: z.object({ id }) }),
+  /** 장면을 통째로 복사한다(오브젝트·안개·배경·배경음). 이름은 "… 복사"이고 원본 바로 뒤에 놓인다. */
+  z.object({ type: z.literal("scene.duplicate"), data: z.object({ id }) }),
+  /** 장면의 순서를 바꾼다. index는 옮긴 뒤 위치(0부터)다. */
+  z.object({ type: z.literal("scene.reorder"), data: z.object({ id, index: z.number().int().min(0).max(MAX_SCENES - 1) }) }),
+  /** 방금 가져온 시나리오가 만든 것들을 지운다. importId는 가져오기 응답에 담겨 온 번호다. */
+  z.object({ type: z.literal("scenario.revert"), data: z.object({ importId: id }) }),
   z.object({
     type: z.literal("scene.activate"),
     data: z.object({
@@ -733,6 +766,8 @@ export type ServerEvent =
   | { type: "scene.added"; data: Scene }
   | { type: "scene.updated"; data: Scene }
   | { type: "scene.removed"; data: { id: string } }
+  /** 장면 순서가 바뀜. GM에게만 간다. */
+  | { type: "scene.order"; data: { ids: string[] } }
   /** 활성 장면이 바뀜. GM이 아닌 사람에게는 새 장면에서 보이는 오브젝트 전체가 함께 간다. */
   | { type: "scene.activated"; data: { scene: Scene; transition: Transition; objects?: GameObject[] } }
   | { type: "handout.added"; data: Handout }

@@ -144,6 +144,13 @@ export class RoomHub {
     }
   }
 
+  /** HTTP 요청 같은 바깥에서 룸 엔진을 움직여 생긴 이벤트를 접속자에게 퍼뜨리고 저장을 예약한다. */
+  publish(entry: LoadedRoom, outs: Out[]) {
+    this.deliver(entry.meta.id, outs);
+    this.notifier?.publish(entry.meta, outs);
+    this.registry.markChanged(entry);
+  }
+
   /** 새 ws 연결을 붙인다. 룸을 불러오는 동안 온 메시지는 순서대로 쌓아 둔다. */
   attach(ws: WebSocket, req: IncomingMessage): void {
     const url = new URL(req.url ?? "/", "http://localhost");

@@ -1,15 +1,24 @@
 export type ToastKind = "error" | "info";
 
+/** 토스트 안의 버튼(예: 되돌리기). 누르면 run을 부르고 토스트를 닫는다. */
+export interface ToastAction {
+  label: string;
+  run: () => void;
+}
+
 export interface Toast {
   id: number;
   kind: ToastKind;
   text: string;
   /** 사라지기까지(ms) */
   ttl: number;
+  action?: ToastAction;
 }
 
 export const ERROR_TTL = 5000;
 export const INFO_TTL = 3000;
+/** 버튼이 붙은 안내는 누를 시간을 더 준다. */
+export const ACTION_TTL = 10000;
 /** 한꺼번에 쌓아 두는 토스트 수. 넘으면 오래된 것부터 밀어낸다. */
 export const MAX_TOASTS = 4;
 

@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ERROR_TTL, INFO_TTL, humanizeError, pushToast, RECONNECTED_TEXT, SEND_FAILED_TEXT, type Toast } from "./toasts";
+import { ACTION_TTL, ERROR_TTL, INFO_TTL, humanizeError, pushToast, RECONNECTED_TEXT, SEND_FAILED_TEXT, type Toast, type ToastAction } from "./toasts";
 
 interface Input {
   lastError: { code: string; message?: string } | null;
@@ -16,8 +16,8 @@ interface Input {
 export function useRoomNotices({ lastError, sendFailed, reconnected, lastUndo }: Input) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
-  const push = useCallback((kind: Toast["kind"], text: string) => {
-    setToasts((l) => pushToast(l, { kind, text, ttl: kind === "error" ? ERROR_TTL : INFO_TTL }, nextId.current++));
+  const push = useCallback((kind: Toast["kind"], text: string, action?: ToastAction) => {
+    setToasts((l) => pushToast(l, { kind, text, ttl: action ? ACTION_TTL : kind === "error" ? ERROR_TTL : INFO_TTL, ...(action ? { action } : {}) }, nextId.current++));
   }, []);
   const dismiss = useCallback((id: number) => setToasts((l) => l.filter((t) => t.id !== id)), []);
 
@@ -36,8 +36,8 @@ export function useRoomNotices({ lastError, sendFailed, reconnected, lastUndo }:
     if (lastUndo) push("info", `되돌렸어요 · ${lastUndo.label}`);
   }, [lastUndo, push]);
 
-  /** 화면에서 직접 띄우는 한 줄 안내 */
-  const notify = useCallback((text: string) => push("info", text), [push]);
+  /** 화면에서 직접 띄우는 한 줄 안내. action을 주면 토스트 안에 버튼(예: 되돌리기)이 붙는다. */
+  const notify = useCallback((text: string, action?: ToastAction) => push("info", text, action), [push]);
 
   return { toasts, dismiss, notify };
 }

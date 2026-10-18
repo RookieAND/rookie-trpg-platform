@@ -211,6 +211,13 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       const objects = Object.fromEntries(Object.entries(state.objects).filter(([, o]) => o.sceneId !== ev.data.id));
       return { ...next, scenes: rest, objects };
     }
+    case "scene.order": {
+      // 알려진 장면을 새 순서로 다시 세운다(모르는 id는 건너뛰고, 목록에 없는 장면은 뒤에 둔다).
+      const ordered: Record<string, Scene> = {};
+      for (const id of ev.data.ids) if (state.scenes[id]) ordered[id] = state.scenes[id]!;
+      for (const [id, sc] of Object.entries(state.scenes)) if (!ordered[id]) ordered[id] = sc;
+      return { ...next, scenes: ordered };
+    }
     case "scene.activated": {
       const { scene, transition, objects } = ev.data;
       const base = { ...next, activeSceneId: scene.id, transition: { kind: transition, n: (state.transition?.n ?? 0) + 1 } };

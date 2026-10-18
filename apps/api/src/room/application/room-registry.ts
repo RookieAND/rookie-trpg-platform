@@ -85,6 +85,16 @@ export class RoomRegistry {
     return { ok: true as const };
   }
 
+  /** 룸 이름을 바꾼다. 룸 주인만 할 수 있다. */
+  async rename(id: string, requesterId: string, name: string) {
+    const entry = await this.get(id);
+    if (!entry) return { ok: false as const, reason: "not_found" as const };
+    if (entry.meta.ownerId !== requesterId) return { ok: false as const, reason: "forbidden" as const };
+    entry.meta.name = name.trim().slice(0, 60);
+    await this.save(entry);
+    return { ok: true as const, name: entry.meta.name };
+  }
+
   /** 이 사용자가 만든 룸 수(저장된 것과 방금 만들어 아직 저장 전인 것 포함) */
   private async countOwned(userId: string): Promise<number> {
     const stored = await this.opts.store.listFor(userId);

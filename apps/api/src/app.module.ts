@@ -18,6 +18,7 @@ import { DiscordNotifier, type NotifierOptions } from "./room/application/discor
 import type { DiscordGateway } from "./room/domain/discord";
 import { HttpDiscordGateway } from "./room/infrastructure/http-discord.gateway";
 import { RoomRegistry, type RegistryOptions } from "./room/application/room-registry";
+import { ScenarioService } from "./room/application/scenario.service";
 import type { RoomRepository } from "./room/domain/room.repository";
 import { MemoryRoomRepository } from "./room/infrastructure/memory-room.repository";
 import { RoomsController } from "./room/interface/http/rooms.controller";
@@ -99,6 +100,7 @@ export class AppModule {
         { provide: VaultService, useFactory: () => new VaultService(options.vault ?? new MemoryVaultRepository()) },
         { provide: LibraryService, useFactory: () => new LibraryService(options.library ?? new MemoryLibraryRepository()) },
         { provide: ImageService, useFactory: () => new ImageService(options.images ?? new MemoryImageStorage(), options.imageOptions) },
+        { provide: ScenarioService, inject: [ImageService], useFactory: (images: ImageService) => new ScenarioService(images) },
         { provide: SheetImportService, useFactory: () => new SheetImportService(options.sheetImport?.fetch ?? ((url, init) => fetch(url, init)), options.sheetImport?.options) },
         RoomGateway,
         Lifecycle,

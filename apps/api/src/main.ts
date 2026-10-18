@@ -41,7 +41,7 @@ async function bootstrap() {
   const app = await NestFactory.create(
     AppModule.register({ authenticate: authenticateFor(config), store, vault, library, images, trustProxyHops: config.trustProxyHops, kpAwayGraceMs }),
   );
-  app.enableCors({ origin: config.webOrigin });
+  app.enableCors({ origin: config.webOrigin, exposedHeaders: ["x-export-notes"] });
   app.useWebSocketAdapter(new WsAdapter(app));
   app.enableShutdownHooks(); // SIGTERM/SIGINT 때 연결을 닫고 마지막 상태를 저장한 뒤 종료한다.
   if (db) process.once("beforeExit", () => void db.close());

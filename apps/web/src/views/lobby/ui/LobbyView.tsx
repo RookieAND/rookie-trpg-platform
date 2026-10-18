@@ -7,6 +7,7 @@ import { useIdentity, type Identity } from "@/entities/user";
 import { LoginForm } from "@/features/auth";
 import { CreateRoomForm } from "@/features/create-room";
 import { JoinByLinkForm } from "@/features/join-by-link";
+import { ImportRoomButton } from "@/features/scenario-prep";
 import { ApiError } from "@/shared/api";
 import { SERVICE_NAME, SUPABASE_URL } from "@/shared/config";
 
@@ -51,6 +52,7 @@ function Lobby({ me, onLogout }: { me: Identity; onLogout: () => void }) {
           <h1>내 룸</h1>
           <span className="count">{rooms ? `${rooms.length}개` : ""}</span>
           <div style={{ flex: 1 }} />
+          <ImportRoomButton me={me} onCreated={(id) => router.push(`/room/${id}`)} onError={setError} />
           <CreateRoomForm me={me} onCreated={(id) => router.push(`/room/${id}`)} onError={setError} />
         </div>
 

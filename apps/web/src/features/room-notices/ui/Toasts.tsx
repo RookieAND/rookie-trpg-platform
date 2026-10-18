@@ -11,6 +11,11 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number)
   return (
     <div className={`toast ${toast.kind}`} role={toast.kind === "error" ? "alert" : "status"} data-testid="toast">
       <span className="toast-text">{toast.text}</span>
+      {toast.action && (
+        <button type="button" className="btn sm" data-testid="toast-action" onClick={() => (toast.action!.run(), onDismiss(toast.id))}>
+          {toast.action.label}
+        </button>
+      )}
       <button type="button" className="toast-x" aria-label="알림 닫기" onClick={() => onDismiss(toast.id)}>×</button>
     </div>
   );

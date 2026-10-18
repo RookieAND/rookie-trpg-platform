@@ -40,3 +40,38 @@ export async function http<T>(me: Caller, method: string, path: string, body?: u
   if (!res.ok) throw new ApiError(res.status, json?.message ?? "요청에 실패했어요.", json);
   return json as T;
 }
+
+/**
+ * 본문을 글 그대로(JSON 글자) 보내고 JSON을 받는다. 시나리오·백업 파일처럼 커서 웹소켓으로 못 보내는 것에 쓴다.
+ * 오류 본문의 errors(위치별 문제 목록)는 ApiError.body로 받는다.
+ */
+export async function httpText<T>(me: Caller, method: string, path: string, text: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, { method, headers: { "content-type": "text/plain", ...authHeaders(me) }, body: text });
+  const raw = await res.text();
+  let json: { message?: string } | null = null;
+  try {
+    json = raw ? JSON.parse(raw) : null;
+  } catch {
+    /* 서버가 아닌 곳(프록시)의 오류 글 */
+  }
+  if (!res.ok) throw new ApiError(res.status, json?.message ?? "요청에 실패했어요.", json);
+  return json as T;
+}
+
+/** 파일로 받을 글(JSON 글자)과 서버가 머리글로 알려 준 안내를 돌려준다. */
+export async function httpDownload(me: Caller, path: string): Promise<{ text: string; notes: string[] }> {
+  const res = await fetch(`${API_URL}${path}`, { headers: authHeaders(me) });
+  const text = await res.text();
+  if (!res.ok) {
+    let message = "요청에 실패했어요.";
+    try {
+      message = (JSON.parse(text) as { message?: string }).message ?? message;
+    } catch {
+      /* 글 그대로 */
+    }
+    throw new ApiError(res.status, message);
+  }
+  const header = res.headers.get("x-export-notes");
+  const notes = header ? decodeURIComponent(header).split("|").filter(Boolean) : [];
+  return { text, notes };
+}

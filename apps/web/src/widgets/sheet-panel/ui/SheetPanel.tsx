@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { StatInput } from "./StatInput";
 import { VitalsPanel } from "./VitalsPanel";
 import { SyncedTextarea } from "./SyncedTextarea";
+import { SkillAdd, SkillValueInput, WeaponAdd } from "./GmSheetEdit";
 import { stepDelta } from "../model/stat-input";
 import { downloadCharacterCsv } from "@/entities/character";
 import { SanPanel } from "@/features/san-check";
@@ -41,6 +42,8 @@ interface Props {
   onHeal?: (characterId: string, kind: HealKind, amount?: number) => void;
   /** 이 캐릭터를 룸에서 뺄 수 있을 때만 준다(GM은 늘, PL은 첫 세션 전) */
   onRemove?: (characterId: string) => void;
+  /** GM의 NPC 시트들(PL에게는 전해지지 않는 시트). 목록과 기본 정보에 표시한다. */
+  npcIds?: ReadonlySet<string>;
 }
 
 const BARS: Array<{ path: StatPath; label: string }> = [
@@ -51,7 +54,7 @@ const BARS: Array<{ path: StatPath; label: string }> = [
 ];
 
 /** 캐릭터 시트: 기본 정보 / 파생 수치(상태 바) / 특성치 / 무기 / 기능 / 소지품 / 비고 묶음. 묶음 제목을 눌러 접고 펼친다. */
-export function SheetPanel({ characters, selectedId, onSelect, canAct, rollWhy, canEdit = canAct, canEditText = canEdit, onPatch, onRoll, isKp, onSanCheck, onNewDay, onMadnessRoll, onDamage, onApplyDamage, onHeal, onRemove }: Props) {
+export function SheetPanel({ characters, selectedId, onSelect, canAct, rollWhy, canEdit = canAct, canEditText = canEdit, onPatch, onRoll, isKp, onSanCheck, onNewDay, onMadnessRoll, onDamage, onApplyDamage, onHeal, onRemove, npcIds }: Props) {
   const ask = useAsk();
   const c = characters.find((x) => x.id === selectedId) ?? characters[0];
   const [bonus, setBonus] = useState(0);
@@ -84,12 +87,13 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, rollWhy, 
         <div className="sheet-head">
           {characters.length > 1 ? (
             <select className="input" aria-label="캐릭터 선택" value={c.id} onChange={(e) => onSelect(e.target.value)}>
-              {characters.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              {characters.map((x) => <option key={x.id} value={x.id}>{x.name}{npcIds?.has(x.id) ? " (NPC)" : ""}</option>)}
             </select>
           ) : (
             <strong style={{ fontSize: 15 }}>{c.name}</strong>
           )}
           <span className="sheet-sub">{c.occupation || "직업 없음"} · {c.age}세 · MOV {d.mov} · DB {d.damageBonus} · 체격 {d.build}</span>
+          {npcIds?.has(c.id) && <span className="sheet-sub" data-testid="npc-badge">NPC 시트 · PL에게는 보이지 않아요</span>}
         </div>
       </Group>
 
@@ -177,17 +181,19 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, rollWhy, 
         </div>
       </Group>
 
-      {(c.weapons?.length ?? 0) > 0 && (
-        <Group title="무기" meta={c.weapons!.length} testId="weapons">
-          {c.weapons!.map((w, i) => (
-            <div key={i} className="line">
+      {((c.weapons?.length ?? 0) > 0 || (isKp && canEditText)) && (
+        <Group title="무기" meta={c.weapons?.length ?? 0} testId="weapons">
+          {(c.weapons ?? []).map((w, i) => (
+            <div key={i} className="line" data-testid={`weapon-${w.name}`}>
               <span>
                 {w.name} <span className="mono" style={{ color: "var(--muted)", fontSize: 12 }}>{w.skill} · {w.damage}</span>
               </span>
               <button className="btn sm" disabled={!canAct} onClick={() => roll(c.id, w.skill, opts)} aria-label={`${w.name} 공격`}>공격</button>
               <button className="btn sm" disabled={!canAct} onClick={() => onDamage(c.id, i)} aria-label={`${w.name} 피해`}>피해</button>
+              {isKp && <button className="btn sm danger" disabled={!canEditText} aria-label={`${w.name} 빼기`} onClick={() => onPatch(c.id, [{ path: "weapons", value: (c.weapons ?? []).filter((_, j) => j !== i) }])}>빼기</button>}
             </div>
           ))}
+          {isKp && <WeaponAdd skills={all.map(([n]) => n).sort((a, b) => a.localeCompare(b, "ko"))} count={c.weapons?.length ?? 0} disabled={!canEditText} onAdd={(w) => onPatch(c.id, [{ path: "weapons", value: [...(c.weapons ?? []), w] }])} />}
         </Group>
       )}
 
@@ -208,11 +214,18 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, rollWhy, 
             <div key={name} data-testid={`skill-${name}`} className="line skill-row">
               <input type="checkbox" title="이번 세션에서 성공했어요 (행운으로 성공한 건 제외). 세션 끝에 성장 굴림을 해요." aria-label={`${name} 성장 표시`} checked={s.grown} disabled={!canEdit} onChange={(e) => onPatch(c.id, [{ path: "skill", name, grown: e.target.checked }])} style={{ accentColor: "#7c86f7" }} />
               <span>{name}</span>
-              <span className="mono" style={{ color: "var(--muted)" }}>{s.value} <span style={{ fontSize: 11 }}>({half(s.value)}/{fifth(s.value)})</span></span>
+              {isKp ? (
+                <span className="mono" style={{ color: "var(--muted)" }}>
+                  <SkillValueInput key={`${c.id}-${name}-${s.value}`} name={name} value={s.value} disabled={!canEdit} onCommit={(value) => onPatch(c.id, [{ path: "skill", name, value }])} /> <span style={{ fontSize: 11 }}>({half(s.value)}/{fifth(s.value)})</span>
+                </span>
+              ) : (
+                <span className="mono" style={{ color: "var(--muted)" }}>{s.value} <span style={{ fontSize: 11 }}>({half(s.value)}/{fifth(s.value)})</span></span>
+              )}
               <button className="btn sm" disabled={!canAct} onClick={() => roll(c.id, name, opts)} aria-label={`${name} 굴리기`}>굴리기</button>
             </div>
           ))}
           {skills.length === 0 && <div style={{ color: "var(--muted)" }}>일치하는 기능이 없어요.</div>}
+          {isKp && <SkillAdd disabled={!canEdit} onAdd={(name, value) => onPatch(c.id, [{ path: "skill", name, value }])} />}
         </div>
       </Group>
 

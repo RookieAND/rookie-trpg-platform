@@ -2,6 +2,7 @@ import { Controller, Get, HttpException, Inject, NotFoundException, Param, Post,
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { AuthService } from "../../../identity/application/auth.service";
 import { ClientIpResolver } from "../../../identity/application/client-ip";
+import { readBody } from "../../../platform/read-body";
 import { ImageService } from "../../application/image.service";
 import { IMAGE_ID, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES } from "../../domain/image-storage";
 
@@ -11,20 +12,6 @@ const MESSAGE = {
   rate_limited: "파일을 너무 많이 올렸어요. 잠시 뒤에 다시 해 주세요.",
   empty: "빈 파일이에요.",
 } as const;
-
-async function readBody(req: IncomingMessage, max: number): Promise<Buffer | "too_large"> {
-  const declared = Number(req.headers["content-length"] ?? 0);
-  if (declared > max) return "too_large";
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of req) {
-    const b = chunk as Buffer;
-    size += b.length;
-    if (size > max) return "too_large";
-    chunks.push(b);
-  }
-  return Buffer.concat(chunks);
-}
 
 /** 이미지 올리기와 보기. 올리기는 로그인이 필요하고, 보기는 추측할 수 없는 id가 곧 열쇠다(<img>는 헤더를 못 싣는다). */
 @Controller("images")

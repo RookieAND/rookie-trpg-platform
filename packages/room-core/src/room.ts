@@ -34,6 +34,10 @@ import {
   DEFAULT_EFFECTS,
   DEFAULT_SCENE_ID,
   MAX_AUDIO_TRACKS,
+  MAX_CHARACTERS,
+  MAX_HANDOUTS,
+  MAX_OBJECTS,
+  MAX_SCENES,
   MAX_FOG_ZONES,
   type FogArea,
   MAX_FOG_EXPLORED,
@@ -43,6 +47,12 @@ import {
   MAX_MADNESS_ENTRIES,
   applyLuck,
   josa,
+  classifyRef,
+  countScenario,
+  defaultSkillValues,
+  splitNoteTitle,
+  type ScenarioCounts,
+  type ScenarioDoc,
   luckNeeded,
   luckBlockReason,
   pushBlockReason,
@@ -68,6 +78,7 @@ import {
   type SessionStatus,
   type PauseReason,
   type Snapshot,
+  type TokenVitals,
   type Visibility,
 } from "@coc-vtt/shared";
 import { UndoLog } from "./undo";
@@ -110,10 +121,6 @@ export interface RoomOptions {
 
 const ALL_ROLES: Role[] = ["kp", "pl", "spectator"];
 const MAX_ROLL_LOG = 200;
-const MAX_OBJECTS = 500;
-const MAX_CHARACTERS = 30;
-const MAX_HANDOUTS = 100;
-const MAX_SCENES = 30;
 const SHEET_PATCHES_PER_SECOND = 10;
 
 export function canSeeHandout(h: Pick<Handout, "visibleTo" | "kpOnly">, viewer: Pick<Member, "userId" | "role">): boolean {
@@ -203,6 +210,40 @@ export const KP_BLOCKED_WHILE_PAUSED: ReadonlySet<ClientCommand["type"]> = new S
   "flow.ending.choose",
 ]);
 
+/** 시나리오 가져오기로 룸이 만든 것들. 되돌릴 때 이 목록을 보고 지운다. */
+interface ImportRecord {
+  id: string;
+  sceneIds: string[];
+  /** 비어 있던 기본 장면을 첫 장면으로 쓴 경우, 쓰기 전 모습 */
+  reused?: { id: string; before: Scene };
+  objectIds: string[];
+  characterIds: string[];
+  handoutIds: string[];
+  trackIds: string[];
+  beatIds: string[];
+  branchIds: string[];
+  madnessBefore?: string[];
+}
+
+export interface ImportOptions {
+  /** 새로 만든 룸에 채우는 경우: 룸 설정(효과)도 적용하고, 소유자를 못 찾는 경고를 내지 않는다. */
+  newRoom?: boolean;
+  /** 서버 안에서 부를 때(by가 null) 시트·메모를 맡을 GM의 사용자 id */
+  ownerId?: string;
+  /** true면 검사만 하고 룸은 바꾸지 않는다. */
+  dryRun?: boolean;
+}
+
+export interface ImportReport {
+  importId: string;
+  counts: ScenarioCounts;
+  warnings: string[];
+  /** 비어 있던 첫 장면에 첫 장면을 겹쳐 썼다 */
+  reusedScene: boolean;
+}
+
+export type ImportResult = { ok: true; out: Out[]; report: ImportReport } | { ok: false; code: ErrorCode; message: string; errors: string[] };
+
 export class Room {
   readonly roomId: string;
   private seq = 0;
@@ -231,6 +272,10 @@ export class Room {
   private rollTimes = new Map<string, number[]>();
   /** 굴림 id → 이미 피해를 적용한 캐릭터 id들(같은 피해를 두 번 적용하지 않게) */
   private damageApplied = new Map<string, Set<string>>();
+  /** 시트에 이어진 토큰마다 마지막으로 알린 HP 요약. 바뀌면 보이는 사람에게 토큰 갱신을 보낸다(저장하지 않는다). */
+  private vitalsSig = new Map<string, string>();
+  /** 방금 가져온 시나리오가 만든 것들(되돌리기용). 메모리에만 둔다. */
+  private lastImport: ImportRecord | null = null;
 
   private readonly rng: Rng;
   private readonly now: () => number;
@@ -381,7 +426,7 @@ export class Room {
       pauseReason: this.status === "PAUSED" ? this.pauseReason : null,
       kpAwaySince: this.kpAwaySince,
       sessionNumber: this.sessionNumber,
-      objects: [...this.objects.values()].filter((o) => this.visibleTo(o, viewer)).map((o) => ({ ...o })),
+      objects: [...this.objects.values()].filter((o) => this.visibleTo(o, viewer)).map((o) => this.view(o, viewer)),
       scenes: [...this.scenes.values()].filter((sc) => viewer.role === "kp" || sc.id === this.activeSceneId).map((sc) => this.sceneFor(sc, viewer.role === "kp")),
       activeSceneId: this.activeSceneId,
       effects: cloneEffects(this.effects),
@@ -418,12 +463,18 @@ export class Room {
     this.fogBefore = this.fogAreas();
     this.fanned = new Set();
     this.exploredChanged = false;
+    this.primeVitals();
     const pending = this.members.get(actor.userId)?.role === "kp" ? this.undoLog.capture(command, this.undoMaps()) : null;
     const first = this.dispatch(actor, command);
     if (first.ok && sceneBefore === this.activeSceneId) this.recordExplored();
     if (first.ok && pending) this.undoLog.commit(pending, this.undoMaps());
     // 안개 안의 오브젝트는 시야가 바뀌면 다른 오브젝트도 새로 보이거나 사라진다.
-    const r = first.ok && sceneBefore === this.activeSceneId ? this.withFogDiff(first) : first;
+    let r = first.ok && sceneBefore === this.activeSceneId ? this.withFogDiff(first) : first;
+    // 시트가 바뀌어 HP·상태가 달라졌으면 이어진 토큰을 새로 알린다.
+    if (r.ok) {
+      const vit = this.vitalsUpdates();
+      if (vit.length) r = ok(...r.out, ...vit);
+    }
     if (!r.ok || this.flow.current === null) return r;
     const extra = this.flowSuggest(r.out);
     return extra.length ? ok(...r.out, ...extra) : r;
@@ -492,6 +543,12 @@ export class Room {
         return this.sceneRename(who, command.data);
       case "scene.remove":
         return this.sceneRemove(who, command.data.id);
+      case "scene.duplicate":
+        return this.sceneDuplicate(who, command.data.id);
+      case "scene.reorder":
+        return this.sceneReorder(who, command.data);
+      case "scenario.revert":
+        return this.scenarioRevert(who, command.data.importId);
       case "scene.activate":
         return this.sceneActivate(who, command.data);
       case "undo.last":
@@ -1161,7 +1218,7 @@ export class Room {
         if (this.fanned.has(o.id) || !canSee(o, m, this.activeSceneId)) continue;
         const was = this.passesFog(o, m, before);
         const now = this.passesFog(o, m, after);
-        if (!was && now) added.push({ ...o });
+        if (!was && now) added.push(this.view(o, m));
         else if (was && !now) removed.push(o.id);
       }
       for (const o of added) out.push(this.emit({ type: "object.added", data: o }, { users: [m.userId] }));
@@ -1326,7 +1383,8 @@ export class Room {
     }
     for (const src of sources.values()) {
       if (this.objects.size >= MAX_OBJECTS) break;
-      const spot = this.freeSpot(scene.id, 500, 400);
+      // 이전 장면에서 서 있던 자리와 같은 자리에 두고(겹치면 가장 가까운 빈자리), 장면마다 토큰이 따로 남아 돌아오면 마지막 자리 그대로다.
+      const spot = this.freeSpot(scene.id, src.x, src.y);
       const obj: GameObject = {
         id: this.newId(),
         sceneId: scene.id,
@@ -1341,6 +1399,7 @@ export class Room {
         ownerId: src.ownerId!,
         ...(src.image ? { image: src.image } : {}),
         ...(src.vision ? { vision: src.vision } : {}),
+        ...(src.characterId && this.characters.has(src.characterId) ? { characterId: src.characterId } : {}),
       };
       this.objects.set(obj.id, obj);
       out.push(...this.fanOutObject(null, obj));
@@ -1354,7 +1413,7 @@ export class Room {
     for (const m of this.members.values()) {
       const data: Extract<Out["event"], { type: "scene.activated" }>["data"] = { scene: this.sceneFor(scene, m.role === "kp"), transition };
       if (m.role !== "kp") {
-        data.objects = [...this.objects.values()].filter((o) => this.visibleTo(o, m)).map((o) => ({ ...o }));
+        data.objects = [...this.objects.values()].filter((o) => this.visibleTo(o, m)).map((o) => this.view(o, m));
       }
       out.push(this.emit({ type: "scene.activated", data }, { users: [m.userId] }));
     }
@@ -1365,6 +1424,488 @@ export class Room {
     return out;
   }
 
+
+  // ── 시트 연결 토큰 ──────────────────────────────────────
+
+  /** 이어진 시트의 HP·상태 요약 */
+  private vitalsOf(c: Character): TokenVitals {
+    const status = statusKeys(c);
+    return { hp: c.hp, max: deriveCharacter(c).limits.hp, ...(status.length ? { status } : {}) };
+  }
+
+  /**
+   * 보는 사람에게 보낼 오브젝트 모양. 시트 연결은 GM과 시트 주인만 알고(NPC 시트 id는 PL에게 보내지 않는다),
+   * HP 요약은 GM, PC 토큰(PL의 시트), GM이 HP를 공개한 토큰에서만 붙는다.
+   */
+  private view(o: GameObject, m: Pick<Member, "userId" | "role">): GameObject {
+    const { vitals: _v, characterId, hpPublic, ...base } = o;
+    const c = characterId ? this.characters.get(characterId) : undefined;
+    if (!characterId || !c) return base;
+    if (m.role === "kp") return { ...base, characterId, ...(hpPublic ? { hpPublic } : {}), vitals: this.vitalsOf(c) };
+    const mine = m.role === "pl" && c.ownerId === m.userId;
+    const showHp = !this.isNpcSheet(c) || hpPublic === true;
+    return { ...base, ...(mine ? { characterId } : {}), ...(showHp ? { vitals: this.vitalsOf(c) } : {}) };
+  }
+
+  private vitalsKey(o: GameObject, c: Character): string {
+    return JSON.stringify([this.vitalsOf(c), o.hpPublic ?? false, this.isNpcSheet(c)]);
+  }
+
+  /** 명령을 처리하기 전의 HP 요약을 기억해 둔다(처음 보는 토큰만). */
+  private primeVitals(): void {
+    for (const o of this.objects.values()) {
+      if (!o.characterId || this.vitalsSig.has(o.id)) continue;
+      const c = this.characters.get(o.characterId);
+      if (c) this.vitalsSig.set(o.id, this.vitalsKey(o, c));
+    }
+  }
+
+  /** 명령 뒤에 HP 요약이 달라진 토큰을 보이는 사람에게 다시 알린다. */
+  private vitalsUpdates(): Out[] {
+    const out: Out[] = [];
+    for (const o of this.objects.values()) {
+      if (!o.characterId) {
+        this.vitalsSig.delete(o.id);
+        continue;
+      }
+      const c = this.characters.get(o.characterId);
+      if (!c) continue;
+      const sig = this.vitalsKey(o, c);
+      const prev = this.vitalsSig.get(o.id);
+      this.vitalsSig.set(o.id, sig);
+      if (prev === undefined || prev === sig || this.fanned.has(o.id)) continue;
+      out.push(...this.fanOutObject(o, o));
+    }
+    return out;
+  }
+
+  // ── 장면 복제·순서 ──────────────────────────────────────
+
+  private freeSceneName(base: string): string {
+    const taken = new Set([...this.scenes.values()].map((s) => s.name));
+    const stem = base.slice(0, 33);
+    let name = `${stem} 복사`;
+    for (let i = 2; taken.has(name); i++) name = `${stem} 복사 ${i}`;
+    return name;
+  }
+
+  private sceneDuplicate(who: Actor, id: string): Result {
+    if (who.role !== "kp") return fail("forbidden", "GM만 장면을 복제할 수 있어요.");
+    const src = this.scenes.get(id);
+    if (!src) return fail("not_found", "장면을 찾을 수 없어요.");
+    if (this.scenes.size >= MAX_SCENES) return fail("bad_message", `장면은 ${MAX_SCENES}개까지 둘 수 있어요.`);
+    const objs = [...this.objects.values()].filter((o) => o.sceneId === id);
+    if (this.objects.size + objs.length > MAX_OBJECTS) return fail("bad_message", `오브젝트는 ${MAX_OBJECTS}개까지 둘 수 있어서 복제할 수 없어요.`);
+    const copy: Scene = {
+      id: this.newId(),
+      name: this.freeSceneName(src.name),
+      ...(src.background ? { background: src.background } : {}),
+      ...(src.bgmTrackId ? { bgmTrackId: src.bgmTrackId } : {}),
+      ...(src.fog ? { fog: { enabled: src.fog.enabled, zones: src.fog.zones.map((z) => ({ ...z, id: this.newId() })) } } : {}),
+    };
+    // 원본 바로 뒤에 놓는다.
+    const next = new Map<string, Scene>();
+    for (const [k, v] of this.scenes) {
+      next.set(k, v);
+      if (k === id) next.set(copy.id, copy);
+    }
+    this.scenes = next;
+    const out: Out[] = [
+      this.emit({ type: "scene.added", data: this.sceneFor(copy, true) }, { roles: ["kp"] }),
+      this.emit({ type: "scene.order", data: { ids: [...this.scenes.keys()] } }, { roles: ["kp"] }),
+    ];
+    for (const o of objs) {
+      const dup: GameObject = { ...o, id: this.newId(), sceneId: copy.id, rev: 0 };
+      this.objects.set(dup.id, dup);
+      out.push(...this.fanOutObject(null, dup));
+    }
+    return ok(...out);
+  }
+
+  private sceneReorder(who: Actor, d: { id: string; index: number }): Result {
+    if (who.role !== "kp") return fail("forbidden", "GM만 장면 순서를 바꿀 수 있어요.");
+    const ids = [...this.scenes.keys()];
+    const from = ids.indexOf(d.id);
+    if (from < 0) return fail("not_found", "장면을 찾을 수 없어요.");
+    const to = clamp(d.index, 0, ids.length - 1);
+    if (to === from) return ok();
+    ids.splice(from, 1);
+    ids.splice(to, 0, d.id);
+    this.scenes = new Map(ids.map((k) => [k, this.scenes.get(k)!]));
+    return ok(this.emit({ type: "scene.order", data: { ids } }, { roles: ["kp"] }));
+  }
+
+  // ── 시나리오 가져오기 ───────────────────────────────────
+
+  /** 첫 장면 자리에 쓸 수 있는, 아직 아무것도 꾸미지 않은 장면 */
+  private blankScene(): Scene | undefined {
+    if (this.scenes.size !== 1) return undefined;
+    const sc = [...this.scenes.values()][0]!;
+    const used = [...this.objects.values()].some((o) => o.sceneId === sc.id);
+    return used || sc.background || sc.bgmTrackId || sc.fog || sc.start ? undefined : sc;
+  }
+
+  /**
+   * 시나리오·백업 문서를 이 룸에 더한다. 검사를 모두 통과한 뒤에야 바꾸므로 전부 들어가거나 하나도 안 들어간다.
+   * 파일 안의 key는 모두 새 id로 바뀌고, 이미지·음원은 호출한 쪽이 서버에 저장한 id로 바꿔서 넘긴다.
+   * by가 null이면 서버가 새 룸을 채우는 경우다(opts.ownerId가 GM).
+   */
+  importScenario(by: string | null, doc: ScenarioDoc, opts: ImportOptions = {}): ImportResult {
+    const bad = (message: string, errors: string[] = [message]): ImportResult => ({ ok: false, code: "bad_message", message, errors });
+    let ownerId = opts.ownerId ?? "";
+    if (by !== null) {
+      const m = this.members.get(by);
+      if (!m || m.role !== "kp") return { ok: false, code: "forbidden", message: "GM만 시나리오를 가져올 수 있어요.", errors: ["GM만 시나리오를 가져올 수 있어요."] };
+      ownerId = by;
+    }
+    if (!ownerId) return bad("GM을 알 수 없어요.");
+
+    const warnings: string[] = [];
+    const errors: string[] = [];
+    const warn = (m: string) => warnings.includes(m) || warnings.push(m);
+
+    // 1) 한도
+    const reuse = this.blankScene();
+    const sceneTotal = this.scenes.size + doc.scenes.length - (reuse ? 1 : 0);
+    const need: Array<[string, number, number, string]> = [
+      ["장면", sceneTotal, MAX_SCENES, "개"],
+      ["토큰·소품", this.objects.size + doc.tokens.length, MAX_OBJECTS, "개"],
+      ["시트", this.characters.size + doc.characters.length, MAX_CHARACTERS, "개"],
+      ["핸드아웃", this.handouts.size + doc.handouts.length, MAX_HANDOUTS, "개"],
+      ["음원", this.audio.length + (doc.audio?.length ?? 0), MAX_AUDIO_TRACKS, "개"],
+      ["비트", this.flow.beats.length + doc.beats.length, MAX_BEATS, "개"],
+      ["분기", this.flow.branches.length + doc.branches.length, MAX_BRANCHES, "개"],
+    ];
+    for (const [label, total, max, unit] of need) {
+      if (total > max) errors.push(`${label}가 합쳐서 ${total}${unit}가 돼서 한도(${max}${unit})를 넘어요. 룸에서 안 쓰는 것을 지우거나 파일을 줄여 주세요.`);
+    }
+
+    // 2) 사람 찾기: PC 시트 이름, PL 이름, PL1·PL2 순번 순서로 맞춰 본다.
+    const pls = [...this.members.values()].filter((m) => m.role === "pl");
+    const resolvePl = (label: string): string | null => {
+      const t = label.trim();
+      const sheet = [...this.characters.values()].find((c) => c.name === t && pls.some((p) => p.userId === c.ownerId));
+      if (sheet) return sheet.ownerId;
+      const named = pls.find((p) => p.name === t);
+      if (named) return named.userId;
+      const slot = /^PL\s*(\d{1,2})$/i.exec(t);
+      return slot ? (pls[Number(slot[1]) - 1]?.userId ?? null) : null;
+    };
+
+    // 3) 이미지·음원 id
+    const isId = (r: string | undefined): r is string => r !== undefined && classifyRef(r).kind === "id";
+    let droppedImages = 0;
+    const image = (r: string | undefined): string | undefined => {
+      if (r === undefined) return undefined;
+      if (isId(r)) return r;
+      droppedImages += 1;
+      return undefined;
+    };
+
+    // 4) 장면
+    const startTaken = [...this.scenes.values()].some((s) => s.start);
+    let startUsed = startTaken;
+    const trackIdOf = new Map<string, string>();
+    const newTracks: AudioTrack[] = [];
+    for (const a of doc.audio ?? []) {
+      if (!a.assetId) {
+        warn(`음원 '${a.label}'은 파일이 없어서 건너뛰었어요.`);
+        continue;
+      }
+      const t: AudioTrack = { id: this.newId(), label: a.label, kind: a.kind, assetId: a.assetId, volume: a.volume ?? 80 };
+      newTracks.push(t);
+      trackIdOf.set(a.key, t.id);
+    }
+    const bgmOf = (key: string | undefined, where: string): string | undefined => {
+      if (key === undefined) return undefined;
+      if (key === BGM_STOP) return BGM_STOP;
+      const id = trackIdOf.get(key);
+      if (!id) warn(`${where}의 배경음 '${key}'를 쓸 수 없어서 비워 뒀어요.`);
+      return id;
+    };
+
+    const sceneIdOf = new Map<string, string>();
+    const newScenes: Scene[] = [];
+    doc.scenes.forEach((s, i) => {
+      const useReuse = reuse && i === 0;
+      const id = useReuse ? reuse.id : this.newId();
+      const bg = image(s.background);
+      const bgm = bgmOf(s.bgm, `장면 '${s.name}'`);
+      const sc: Scene = {
+        id,
+        name: s.name,
+        ...(bg ? { background: bg } : {}),
+        ...(bgm ? { bgmTrackId: bgm } : {}),
+        ...(s.fog ? { fog: { enabled: s.fog.enabled, zones: s.fog.zones.map((z) => ({ id: this.newId(), x: z.x, y: z.y, r: z.r })) } } : {}),
+      };
+      if (s.start) {
+        if (startUsed) warn(`장면 '${s.name}'은 시작 장면으로 정하지 않았어요. 이미 시작 장면이 있어요.`);
+        else {
+          sc.start = true;
+          startUsed = true;
+        }
+      }
+      sceneIdOf.set(s.key, id);
+      newScenes.push(sc);
+    });
+
+    // 5) 시트(GM 몫의 NPC 시트로 들어온다)
+    const charIdOf = new Map<string, string>();
+    const newChars: Character[] = [];
+    let pcCount = 0;
+    for (const c of doc.characters) {
+      const limits = deriveCharacter({ characteristics: c.characteristics, age: c.age }).limits;
+      const values = new Map(defaultSkillValues({ characteristics: c.characteristics }).map((s) => [s.name, { value: s.value, grown: false }]));
+      for (const sk of c.skills) values.set(sk.name, { value: sk.value, grown: sk.grown ?? false });
+      if (values.size > MAX_SKILLS) {
+        errors.push(`시트 '${c.name}'의 기능이 ${MAX_SKILLS}개를 넘어요.`);
+        continue;
+      }
+      const ch: Character = {
+        id: this.newId(),
+        ownerId,
+        name: c.name,
+        age: c.age,
+        occupation: c.occupation,
+        characteristics: { ...c.characteristics },
+        luck: c.luck ?? 0,
+        hp: clamp(c.hp ?? limits.hp, 0, limits.hp),
+        mp: clamp(c.mp ?? limits.mp, 0, limits.mp),
+        san: clamp(c.san ?? c.characteristics.POW, 0, SAN_CAP),
+        skills: Object.fromEntries(values),
+        notes: c.notes,
+        backstory: c.backstory,
+        possessions: c.possessions,
+        weapons: c.weapons.map((w) => ({ ...w })),
+        rev: 0,
+      };
+      if (c.pc) pcCount += 1;
+      newChars.push(ch);
+      if (c.key) charIdOf.set(c.key, ch.id);
+    }
+    if (pcCount > 0) warn(`PL의 캐릭터였던 시트 ${pcCount}개는 GM 몫으로 들어와요. PL은 보관함에서 직접 불러올 수 있어요.`);
+
+    // 6) 핸드아웃
+    const handoutIdOf = new Map<string, string>();
+    const newHandouts: Handout[] = [];
+    for (const h of doc.handouts) {
+      const note = splitNoteTitle(h.title);
+      const kpOnly = h.kpOnly === true || note.kpOnly;
+      let visibleTo: Visibility = h.visibleTo;
+      if (kpOnly) visibleTo = "gm";
+      else if (h.to) {
+        const ids: string[] = [];
+        for (const label of h.to) {
+          const uid = resolvePl(label);
+          if (uid) ids.push(uid);
+          else if (!opts.newRoom) warn(`핸드아웃 '${note.title}'의 공개 대상 ${josa(`'${label}'`, "을/를")} 찾지 못했어요.`);
+        }
+        visibleTo = ids.length ? [...new Set(ids)] : "gm";
+        if (!ids.length && !opts.newRoom) warn(`핸드아웃 '${note.title}'은 공개 대상을 찾지 못해 GM 전용으로 뒀어요.`);
+      }
+      const img = image(h.image);
+      const ho: Handout = { id: this.newId(), title: note.title, body: h.body, visibleTo, rev: 0, ...(img ? { image: img } : {}), ...(kpOnly ? { kpOnly: true } : {}) };
+      newHandouts.push(ho);
+      handoutIdOf.set(h.key, ho.id);
+    }
+
+    // 7) 토큰·소품
+    const newObjects: GameObject[] = [];
+    const lostOwners = new Map<string, number>();
+    for (const t of doc.tokens) {
+      const sceneId = sceneIdOf.get(t.scene);
+      if (!sceneId) continue;
+      let owner: string | undefined;
+      if (t.owner && t.kind === "token") {
+        owner = resolvePl(t.owner) ?? undefined;
+        if (!owner) lostOwners.set(t.owner, (lostOwners.get(t.owner) ?? 0) + 1);
+      }
+      const img = image(t.image);
+      const charId = t.character ? charIdOf.get(t.character) : undefined;
+      newObjects.push({
+        id: this.newId(),
+        sceneId,
+        kind: t.kind,
+        name: t.name,
+        x: t.x,
+        y: t.y,
+        layer: t.layer,
+        visibleTo: t.visibleTo,
+        locked: t.locked === true,
+        rev: 0,
+        ...(owner ? { ownerId: owner } : {}),
+        ...(img ? { image: img } : {}),
+        ...(t.vision ? { vision: t.vision } : {}),
+        ...(charId ? { characterId: charId } : {}),
+        ...(charId && t.hpPublic ? { hpPublic: true } : {}),
+      });
+    }
+    if (!opts.newRoom) for (const [label, n] of lostOwners) warn(`토큰 ${n}개의 소유자 ${josa(`'${label}'`, "을/를")} 찾지 못해 소유자 없음(NPC)으로 놓았어요.`);
+    if (droppedImages > 0) warn(`이미지 ${droppedImages}개를 쓸 수 없어서(올려 둔 파일이 아니에요) 건너뛰었어요.`);
+
+    // 8) 흐름
+    const beatIdOf = new Map<string, string>();
+    const newBeats: Beat[] = [];
+    let hasStart = this.flow.beats.some((b) => b.kind === "start");
+    for (const b of doc.beats) {
+      if (b.sanReward) {
+        const probe = parseSumExpression(b.sanReward);
+        if (!probe.ok) {
+          errors.push(`비트 '${b.name}'의 SAN 보상 식을 알아볼 수 없어요: ${probe.error}`);
+          continue;
+        }
+      }
+      let kind = b.kind;
+      if (kind === "start") {
+        if (hasStart) {
+          kind = "progress";
+          warn(`비트 '${b.name}'은 시작 비트가 이미 있어서 진행 비트로 넣었어요.`);
+        }
+        hasStart = true;
+      }
+      const bgm = bgmOf(b.bgm, `비트 '${b.name}'`);
+      const beat: Beat = {
+        id: this.newId(),
+        name: b.name,
+        kind,
+        memo: b.memo,
+        handoutIds: [...new Set(b.handouts.flatMap((k) => (handoutIdOf.has(k) ? [handoutIdOf.get(k)!] : [])))],
+        ...(b.scene && sceneIdOf.has(b.scene) ? { sceneId: sceneIdOf.get(b.scene)! } : {}),
+        ...(bgm ? { bgmTrackId: bgm } : {}),
+        ...(b.sanReward && kind === "ending" ? { sanReward: b.sanReward } : {}),
+      };
+      newBeats.push(beat);
+      beatIdOf.set(b.key, beat.id);
+    }
+    const newBranches: Branch[] = [];
+    for (const br of doc.branches) {
+      const from = beatIdOf.get(br.from);
+      const to = beatIdOf.get(br.to);
+      if (!from || !to) continue;
+      let condition: Branch["condition"] = { type: "manual" };
+      const c = br.condition;
+      if (c?.type === "handout") {
+        const hid = handoutIdOf.get(c.handout);
+        if (hid) condition = { type: "handout", handoutId: hid };
+        else warn(`분기 '${br.label}'의 핸드아웃 조건을 찾지 못해 직접 고르는 분기로 넣었어요.`);
+      } else if (c) condition = c;
+      newBranches.push({ id: this.newId(), from, to, label: br.label, condition });
+    }
+
+    // 9) 광기표·효과
+    let madness: string[] | undefined;
+    if (doc.madnessTable && doc.madnessTable.length > 0) {
+      if (this.madnessTable.length === 0) madness = doc.madnessTable.map((e) => e.trim()).slice(0, MAX_MADNESS_ENTRIES);
+      else warn("광기 증상표는 이미 있어서 그대로 뒀어요.");
+    }
+    if (doc.effects && !opts.newRoom) warn("판정 효과 설정은 새 룸에서만 적용해요.");
+
+    const counts = countScenario(doc);
+    if (errors.length) return bad(errors[0]!, errors);
+    const importId = this.newId();
+    const report: ImportReport = { importId, counts, warnings, reusedScene: Boolean(reuse) };
+    if (opts.dryRun) return { ok: true, out: [], report };
+
+    // ── 여기부터 룸을 바꾼다. 위에서 모두 확인했으므로 중간에 멈추지 않는다. ──
+    this.primeVitals();
+    this.fogBefore = this.fogAreas();
+    this.fanned = new Set();
+    this.exploredChanged = false;
+    const rec: ImportRecord = {
+      id: importId,
+      sceneIds: newScenes.filter((s) => s.id !== reuse?.id).map((s) => s.id),
+      objectIds: newObjects.map((o) => o.id),
+      characterIds: newChars.map((c) => c.id),
+      handoutIds: newHandouts.map((h) => h.id),
+      trackIds: newTracks.map((t) => t.id),
+      beatIds: newBeats.map((b) => b.id),
+      branchIds: newBranches.map((b) => b.id),
+      ...(reuse ? { reused: { id: reuse.id, before: { ...reuse } } } : {}),
+    };
+    const out: Out[] = [];
+    if (newTracks.length) {
+      this.audio.push(...newTracks);
+      out.push(this.libraryOut());
+    }
+    if (madness) {
+      rec.madnessBefore = [...this.madnessTable];
+      this.madnessTable = madness;
+      out.push(this.emit({ type: "settings.madness", data: { entries: [...this.madnessTable] } }, { roles: ["kp"] }));
+    }
+    if (opts.newRoom && doc.effects) {
+      this.effects = cloneEffects({ ...DEFAULT_EFFECTS, ...doc.effects });
+      out.push(this.emit({ type: "settings.effects", data: { effects: cloneEffects(this.effects) } }, { roles: ALL_ROLES }));
+    }
+    for (const sc of newScenes) {
+      const had = this.scenes.has(sc.id);
+      this.scenes.set(sc.id, sc);
+      if (had) out.push(...this.emitScene(sc));
+      else out.push(this.emit({ type: "scene.added", data: this.sceneFor(sc, true) }, { roles: ["kp"] }));
+    }
+    for (const c of newChars) {
+      this.characters.set(c.id, c);
+      out.push(this.emit({ type: "character.added", data: cloneCharacter(c) }, this.characterAudience(c)));
+    }
+    for (const h of newHandouts) {
+      this.handouts.set(h.id, h);
+      out.push(...this.fanOutHandout(null, h));
+    }
+    for (const o of newObjects) {
+      this.objects.set(o.id, o);
+      out.push(...this.fanOutObject(null, o));
+    }
+    if (newBeats.length || newBranches.length) {
+      this.flow.beats.push(...newBeats);
+      this.flow.branches.push(...newBranches);
+      out.push(this.flowOut());
+    }
+    this.lastImport = rec;
+    const res = this.withFogDiff({ ok: true, out });
+    return res.ok ? { ok: true, out: res.out, report } : bad(res.message);
+  }
+
+  /** 방금 가져온 시나리오가 만든 것을 모두 지운다. 가져온 뒤에 바꾼 내용도 함께 사라진다. */
+  private scenarioRevert(who: Actor, importId: string): Result {
+    if (who.role !== "kp") return fail("forbidden", "GM만 가져오기를 되돌릴 수 있어요.");
+    const rec = this.lastImport;
+    if (!rec || rec.id !== importId) return fail("not_found", "되돌릴 가져오기를 찾지 못했어요. 이미 되돌렸거나, 그 뒤에 다른 시나리오를 가져왔을 수 있어요.");
+    if (rec.sceneIds.includes(this.activeSceneId)) return fail("bad_message", "가져온 장면이 진행 중이라 되돌릴 수 없어요. 다른 장면으로 바꾼 뒤에 해 주세요.");
+    const out: Out[] = [];
+    const take = (r: Result) => {
+      if (r.ok) out.push(...r.out);
+    };
+    // 비트·분기 → 가져온 장면(안의 오브젝트와 함께) → 첫 장면에 놓였던 오브젝트 → 시트 → 핸드아웃 → 음원 → 광기표 순서로 지운다.
+    const beats = new Set(rec.beatIds);
+    const branches = new Set(rec.branchIds);
+    if (beats.size || branches.size) {
+      this.flow.beats = this.flow.beats.filter((b) => !beats.has(b.id));
+      this.flow.branches = this.flow.branches.filter((b) => !branches.has(b.id) && !beats.has(b.from) && !beats.has(b.to));
+      if (this.flow.current && beats.has(this.flow.current)) this.flow.current = null;
+      this.pruneSuggestions();
+      out.push(this.flowOut());
+    }
+    const inScenes = new Set(rec.sceneIds);
+    for (const id of rec.objectIds) {
+      const o = this.objects.get(id);
+      if (o && !inScenes.has(o.sceneId)) take(this.objectRemove(who, id));
+    }
+    for (const id of rec.sceneIds) if (this.scenes.has(id)) take(this.sceneRemove(who, id));
+    if (rec.reused && this.scenes.has(rec.reused.id)) {
+      this.scenes.set(rec.reused.id, { ...rec.reused.before });
+      out.push(...this.emitScene(this.scenes.get(rec.reused.id)!));
+    }
+    for (const id of rec.characterIds) if (this.characters.has(id)) take(this.characterRemove(who, id));
+    for (const id of rec.handoutIds) if (this.handouts.has(id)) take(this.handoutRemove(who, id));
+    for (const id of rec.trackIds) if (this.audio.some((t) => t.id === id)) take(this.audioTrackRemove(who, id));
+    if (rec.madnessBefore) {
+      this.madnessTable = [...rec.madnessBefore];
+      out.push(this.emit({ type: "settings.madness", data: { entries: [...this.madnessTable] } }, { roles: ["kp"] }));
+    }
+    this.lastImport = null;
+    out.push(this.emitTo({ type: "undo.done", data: { label: "시나리오 가져오기" } }, { users: [who.userId] }));
+    return ok(...out);
+  }
+
   // ── 오브젝트 ────────────────────────────────────────────
 
   private objectAdd(who: Actor, d: Extract<ClientCommand, { type: "object.add" }>["data"]): Result {
@@ -1373,6 +1914,7 @@ export class Room {
     const sceneId = d.sceneId ?? this.activeSceneId;
     if (!this.scenes.has(sceneId)) return fail("not_found", "장면을 찾을 수 없어요.");
     if (d.ownerId && this.members.get(d.ownerId)?.role !== "pl") return fail("bad_message", "소유자는 룸의 PL이어야 해요.");
+    if (d.characterId && !this.characters.has(d.characterId)) return fail("not_found", "캐릭터 시트를 찾을 수 없어요.");
     const spot = d.autoPlace ? this.freeSpot(sceneId, d.x, d.y) : { x: d.x, y: d.y };
     const obj: GameObject = {
       id: this.newId(),
@@ -1387,6 +1929,8 @@ export class Room {
       rev: 0,
       ...(d.ownerId ? { ownerId: d.ownerId } : {}),
       ...(d.image ? { image: d.image } : {}),
+      ...(d.characterId ? { characterId: d.characterId } : {}),
+      ...(d.hpPublic ? { hpPublic: true } : {}),
     };
     this.objects.set(obj.id, obj);
     return ok(...this.fanOutObject(null, obj));
@@ -1431,7 +1975,7 @@ export class Room {
     }
     if (d.rev !== obj.rev) {
       // 오래된 화면에서 온 명령. 최신 상태를 요청자에게만 다시 알려 준다.
-      const fix = this.emitTo({ type: "object.updated", data: { ...obj } }, { users: [who.userId] });
+      const fix = this.emitTo({ type: "object.updated", data: this.view(obj, who) }, { users: [who.userId] });
       return { ok: false, code: "stale", message: "다른 사람이 먼저 움직였어요.", out: [fix] };
     }
     const before = { ...obj };
@@ -1451,6 +1995,7 @@ export class Room {
     if (d.ownerId) {
       if (this.members.get(d.ownerId)?.role !== "pl") return fail("bad_message", "소유자는 룸의 PL이어야 해요.");
     }
+    if (d.characterId && !this.characters.has(d.characterId)) return fail("not_found", "캐릭터 시트를 찾을 수 없어요.");
     const before = { ...obj };
     if (d.name !== undefined) obj.name = d.name;
     if (d.ownerId !== undefined) {
@@ -1467,6 +2012,14 @@ export class Room {
     if (d.vision !== undefined) {
       if (d.vision > 0) obj.vision = d.vision;
       else delete obj.vision;
+    }
+    if (d.characterId !== undefined) {
+      if (d.characterId) obj.characterId = d.characterId;
+      else delete obj.characterId;
+    }
+    if (d.hpPublic !== undefined) {
+      if (d.hpPublic) obj.hpPublic = true;
+      else delete obj.hpPublic;
     }
     obj.rev += 1;
     return ok(...this.fanOutObject(before, obj));
@@ -1490,6 +2043,9 @@ export class Room {
     const r = this.undoLog.undo(this.undoMaps(), this.members, MAX_OBJECTS);
     if (!r.ok) return fail("stale", r.message);
     const out: Out[] = [];
+    // 되살린 토큰이 그사이 지워진 시트를 가리키고 있으면 연결을 푼다.
+    const back = r.obj?.after;
+    if (back?.characterId && !this.characters.has(back.characterId)) delete back.characterId;
     if (r.obj) out.push(...this.fanOutObject(r.obj.before, r.obj.after));
     if (r.scene) out.push(...this.emitScene(r.scene));
     out.push(this.emitTo({ type: "undo.done", data: { label: r.label } }, { users: [who.userId] }));
@@ -1514,8 +2070,23 @@ export class Room {
       else if (was && !now) removed.push(m.userId);
     }
     const out: Out[] = [];
-    if (after && added.length) out.push(this.emit({ type: "object.added", data: { ...after } }, { users: added }));
-    if (after && updated.length) out.push(this.emit({ type: "object.updated", data: { ...after } }, { users: updated }));
+    if (after) {
+      // 시트 연결·HP 요약은 보는 사람마다 달라서, 같은 모양끼리 묶어 보낸다.
+      const send = (type: "object.added" | "object.updated", ids: string[]) => {
+        const groups = new Map<string, { obj: GameObject; users: string[] }>();
+        for (const uid of ids) {
+          const m = this.members.get(uid)!;
+          const v = this.view(after, m);
+          const k = JSON.stringify(v);
+          const g = groups.get(k) ?? { obj: v, users: [] };
+          g.users.push(uid);
+          groups.set(k, g);
+        }
+        for (const g of groups.values()) out.push(this.emit({ type, data: g.obj }, { users: g.users }));
+      };
+      if (added.length) send("object.added", added);
+      if (updated.length) send("object.updated", updated);
+    }
     const gone = before ?? after;
     if (gone && removed.length) out.push(this.emit({ type: "object.removed", data: { id: gone.id } }, { users: removed }));
     return out;
@@ -2070,7 +2641,17 @@ export class Room {
     }
     if (!c) return fail("not_found", "캐릭터를 찾을 수 없어요.");
     this.characters.delete(id);
-    return ok(this.emit({ type: "character.removed", data: { id } }, this.characterAudience(c)));
+    const out: Out[] = [this.emit({ type: "character.removed", data: { id } }, this.characterAudience(c))];
+    // 이 시트에 이어진 토큰은 연결을 푼다(토큰은 그대로 둔다).
+    for (const o of this.objects.values()) {
+      if (o.characterId !== id) continue;
+      const before = { ...o };
+      delete o.characterId;
+      o.rev += 1;
+      this.vitalsSig.delete(o.id);
+      out.push(...this.fanOutObject(before, o));
+    }
+    return ok(...out);
   }
 
   /** 주인과 GM에게만 보낸다. */

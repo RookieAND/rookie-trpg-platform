@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import type { ClientCommand, GameObject, Member } from "@coc-vtt/shared";
+import type { Character, ClientCommand, GameObject, Member } from "@coc-vtt/shared";
 import type { Caller } from "@/shared/api";
 import { ImageUploadButton } from "@/shared/ui";
 import { newTokenName, uniqueName } from "../model/names";
@@ -13,6 +13,8 @@ export function ObjectToolbar({
   objects,
   players,
   selected,
+  characters = [],
+  onOpenSheet,
   send,
   onDeselect,
 }: {
@@ -25,6 +27,10 @@ export function ObjectToolbar({
   /** 룸의 PL 목록 */
   players: Member[];
   selected?: GameObject;
+  /** 룸의 시트들(토큰에 이어 줄 수 있는 것) */
+  characters?: Character[];
+  /** 이어진 시트를 시트 탭에서 연다 */
+  onOpenSheet?: (characterId: string) => void;
   send: (c: ClientCommand) => unknown;
   onDeselect: () => void;
 }) {
@@ -89,6 +95,23 @@ export function ObjectToolbar({
             {selected.ownerId && !players.some((p) => p.userId === selected.ownerId) && <option value={selected.ownerId}>(나간 사람)</option>}
             {players.map((p) => <option key={p.userId} value={p.userId}>{p.name}</option>)}
           </select>
+        )}
+        {selected.kind === "token" && characters.length > 0 && (
+          <select className="dock-input" aria-label="시트 연결" title="이 토큰에 캐릭터 시트를 이어요. 이으면 토큰 아래에 HP가 보이고, 토큰을 눌러 시트를 열 수 있어요" disabled={!enabled} value={selected.characterId ?? ""}
+            onChange={(e) => send({ type: "object.update", data: { id: selected.id, characterId: e.target.value || null } })}>
+            <option value="">시트 연결 없음</option>
+            {characters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        )}
+        {selected.kind === "token" && selected.characterId && (
+          <>
+            <button className="btn" data-testid="open-linked-sheet" disabled={!onOpenSheet} onClick={() => onOpenSheet?.(selected.characterId!)}>시트 열기</button>
+            <button className="btn" data-testid="hp-public" aria-pressed={Boolean(selected.hpPublic)} disabled={!enabled}
+              title="켜면 PL에게도 이 토큰의 HP 막대를 보여 줘요. NPC는 꺼 두면 GM에게만 보여요"
+              onClick={() => send({ type: "object.update", data: { id: selected.id, hpPublic: !selected.hpPublic } })}>
+              {selected.hpPublic ? "HP 공개 중" : "HP 공개"}
+            </button>
+          </>
         )}
         {selected.kind === "token" && (
           <button className="btn" aria-pressed={Boolean(selected.locked)} disabled={!enabled} title="잠그면 소유자도 이 토큰을 움직일 수 없어요"

@@ -10,7 +10,9 @@ import { InviteButton } from "@/features/invite-room";
 import { EffectSettingsButton } from "@/features/manage-effects";
 import { MadnessTableButton } from "@/features/manage-madness";
 import type { Connection } from "@/features/room-realtime";
+import { useScenarioPrep } from "@/features/scenario-prep";
 import { SessionControls, type EndingDefaults } from "@/features/session-control";
+import type { ScenarioImportResult } from "@/entities/room";
 import { SERVICE_NAME } from "@/shared/config";
 import { Menu, MenuLabel } from "@/shared/ui";
 
@@ -32,6 +34,10 @@ export function RoomHeader({
   onToggleEffects,
   soundControl,
   soundHint,
+  roomName,
+  onRenamed,
+  notify,
+  onImported,
   send,
 }: {
   me: Identity;
@@ -53,9 +59,15 @@ export function RoomHeader({
   soundControl?: ReactNode;
   /** 소리가 막혔을 때만 보이는 작은 안내 */
   soundHint?: ReactNode;
+  /** 룸 이름과, 주인이 이름을 바꾸거나 시나리오를 가져왔을 때 알려 줄 곳 */
+  roomName: string;
+  onRenamed: (name: string) => void;
+  notify: (text: string) => void;
+  onImported: (r: ScenarioImportResult) => void;
   send: (c: ClientCommand) => unknown;
 }) {
   const isKp = role === "kp";
+  const prep = useScenarioPrep({ me, roomId, roomName, onRenamed, notify, onImported });
   return (
     <header className="topbar">
       <Link href="/" className="brand" aria-label="로비로 가기">{SERVICE_NAME}</Link>
@@ -72,14 +84,21 @@ export function RoomHeader({
       <span className="presence" title={members.filter((m) => m.online).map((m) => m.name).join(", ")}>접속 {members.filter((m) => m.online).map((m) => m.name).join(", ")}</span>
       <span className="sep" />
       {isKp && <InviteButton me={me} roomId={roomId} />}
+      {isKp && prep.node}
       <Menu label="설정" title="효과·소리와 룸 설정" testId="settings-menu">
-        <MenuLabel>내 화면</MenuLabel>
-        <EffectToggle enabled={effectsEnabled} onToggle={onToggleEffects} />
-        {soundControl}
-        {isKp && <MenuLabel>룸 설정 (GM)</MenuLabel>}
-        {isKp && <EffectSettingsButton effects={effects} send={send} />}
-        {isKp && <MadnessTableButton entries={madnessTable} send={send} />}
-        {isKp && <DiscordButton me={me} roomId={roomId} />}
+        {(close) => (
+          <>
+            <MenuLabel>내 화면</MenuLabel>
+            <EffectToggle enabled={effectsEnabled} onToggle={onToggleEffects} />
+            {soundControl}
+            {isKp && <MenuLabel>룸 설정 (GM)</MenuLabel>}
+            {isKp && <EffectSettingsButton effects={effects} send={send} />}
+            {isKp && <MadnessTableButton entries={madnessTable} send={send} />}
+            {isKp && <DiscordButton me={me} roomId={roomId} />}
+            {isKp && <MenuLabel>준비 (GM)</MenuLabel>}
+            {isKp && prep.items(close)}
+          </>
+        )}
       </Menu>
       {isKp && <SessionControls status={status} send={send} endingDefaults={endingDefaults} />}
     </header>

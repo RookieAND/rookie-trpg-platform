@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import type { BoardPing, FogArea, GameObject, Role } from "@coc-vtt/shared";
+import { STATUS_LABEL_KO, type BoardPing, type FogArea, type GameObject, type Role } from "@coc-vtt/shared";
 import { imageUrl } from "@/shared/api";
 import { dragHasFiles } from "@/shared/ui";
 import { objectAt } from "../model/drop-target";
@@ -64,9 +64,11 @@ interface Props {
   onRequestImage?: (obj: GameObject, cx: number, cy: number) => void;
   /** 보드 위에 한 줄로 띄우는 안내(예: 배경이 비었을 때) */
   hint?: string;
+  /** 시트가 이어진 토큰을 (끌지 않고) 눌렀을 때. 열 수 있는 사람인지는 부르는 쪽이 정한다. */
+  onOpenSheet?: (obj: GameObject) => void;
 }
 
-export function Board({ objects, background, me, canInteract, onMove, selectedId, onSelect, fog, onPick, onPing, pings, sceneId, turnTokenIds, onDragStart, animate = true, onImageFile, onObjectMenu, onRequestImage, hint }: Props) {
+export function Board({ objects, background, me, canInteract, onMove, selectedId, onSelect, fog, onPick, onPing, pings, sceneId, turnTokenIds, onDragStart, animate = true, onImageFile, onObjectMenu, onRequestImage, hint, onOpenSheet }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
   const [view, setView] = useState<View>(FULL);
@@ -79,13 +81,15 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
     press.current = null;
   };
   useEffect(() => cancelPress, []);
+  // 토큰을 눌렀다 떼면(거의 움직이지 않고 짧게) 이어진 시트를 연다.
+  const tap = useRef<{ id: string; cx: number; cy: number; at: number } | null>(null);
   /** 길게 누르면 그 자리를 핑한다. 많이 움직이거나 손을 떼면 취소된다. */
   const startPress = (e: React.PointerEvent, obj?: GameObject) => {
     cancelPress();
     // 터치로 오브젝트를 길게 누르면 핑 대신 메뉴(오른쪽 클릭 대신). 마우스의 길게 누르기는 그대로 핑이다.
     if (obj && onObjectMenu && e.pointerType !== "mouse") {
       const { clientX: cx, clientY: cy } = e;
-      press.current = { cx, cy, timer: setTimeout(() => { press.current = null; setDrag(null); onObjectMenu(obj, cx, cy); }, LONG_PRESS_MS) };
+      press.current = { cx, cy, timer: setTimeout(() => { press.current = null; tap.current = null; setDrag(null); onObjectMenu(obj, cx, cy); }, LONG_PRESS_MS) };
       return;
     }
     if (!onPing || onPick) return;
@@ -226,8 +230,14 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         if (drag && e.buttons) setDrag({ ...drag, ...toBoard(e) });
       }}
       onPointerCancel={cancelPress}
-      onPointerUp={() => {
+      onPointerUp={(e) => {
         cancelPress();
+        const t = tap.current;
+        tap.current = null;
+        if (t && onOpenSheet && Math.hypot(e.clientX - t.cx, e.clientY - t.cy) < 6 && Date.now() - t.at < LONG_PRESS_MS) {
+          const o = objects.find((x) => x.id === t.id);
+          if (o?.characterId) onOpenSheet(o);
+        }
         if (pan.current) {
           pan.current = null;
           return;
@@ -285,7 +295,8 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
             data-y={Math.round(pos.y)}
             data-mine={mine ? "true" : undefined}
             data-locked={o.locked ? "true" : undefined}
-            style={{ cursor: canMove(o) ? "grab" : "default" }}
+            data-linked={o.characterId ? "true" : undefined}
+            style={{ cursor: canMove(o) ? "grab" : o.characterId && onOpenSheet ? "pointer" : "default" }}
             onContextMenu={(e) => {
               if (!onObjectMenu) return;
               e.preventDefault(); // 메뉴는 pointerdown 에서 이미 열었다
@@ -304,6 +315,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
                 return void onPing(Math.round(p.x), Math.round(p.y));
               }
               startPress(e, o);
+              tap.current = o.characterId && onOpenSheet ? { id: o.id, cx: e.clientX, cy: e.clientY, at: Date.now() } : null;
               onSelect(o.id);
               if (canMove(o)) {
                 onDragStart?.(o);
@@ -350,6 +362,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
               {hidden ? " · GM 전용" : ""}
               {o.locked ? " · 잠김" : ""}
             </text>
+            {o.kind === "token" && o.vitals && <TokenVitalsBar name={o.name} vitals={o.vitals} x={pos.x} y={pos.y} />}
             {selectedId === o.id && !o.image && onRequestImage && drag?.id !== o.id && (
               <g
                 data-testid="add-image-chip"
@@ -416,5 +429,29 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
       {mineToken && <button type="button" className="btn sm" data-testid="focus-mine" onClick={() => centerOn(mineToken.x, mineToken.y)}>내 토큰</button>}
     </div>
     </>
+  );
+}
+
+const STATUS_COLOR: Record<string, string> = { injured: "#e3a94a", majorWound: "#e07a3f", unconscious: "#8a93a6", dying: "#d9534f", dead: "#6b727c" };
+/** 칩에는 가장 무거운 상태 하나만 보인다. */
+const STATUS_ORDER = ["dead", "dying", "unconscious", "majorWound", "injured"] as const;
+
+/** 토큰 아래의 얇은 HP 막대와 왼쪽 위의 상태 칩. 서버가 보여도 되는 사람에게만 vitals를 보낸다. */
+function TokenVitalsBar({ name, vitals, x, y }: { name: string; vitals: NonNullable<GameObject["vitals"]>; x: number; y: number }) {
+  const ratio = vitals.max > 0 ? Math.max(0, Math.min(1, vitals.hp / vitals.max)) : 0;
+  const color = ratio > 0.5 ? "#4cc38a" : ratio > 0.25 ? "#e3a94a" : "#d9534f";
+  const status = STATUS_ORDER.find((k) => vitals.status?.includes(k));
+  const w = R * 2;
+  return (
+    <g pointerEvents="none" data-testid={`hp-${name}`} data-hp={vitals.hp} data-max={vitals.max} data-status={vitals.status?.join(",") || undefined} aria-hidden>
+      <rect x={x - R} y={y + R + 3} width={w} height={4} rx={2} fill="#0a0b0d" stroke="#3a3f47" strokeWidth="0.75" />
+      <rect x={x - R} y={y + R + 3} width={w * ratio} height={4} rx={2} fill={color} />
+      {status && (
+        <g data-testid={`status-${name}`}>
+          <rect x={x - R - 14} y={y - R - 6} width={34} height={16} rx={8} fill={STATUS_COLOR[status] ?? "#6b727c"} />
+          <text x={x - R + 3} y={y - R + 6} textAnchor="middle" fill="#08090a" fontSize="11" fontWeight="700">{STATUS_LABEL_KO[status]}</text>
+        </g>
+      )}
+    </g>
   );
 }

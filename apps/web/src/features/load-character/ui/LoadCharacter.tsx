@@ -6,7 +6,7 @@ import { listCharacters, type VaultCharacter } from "@/entities/character";
 import type { Identity } from "@/entities/user";
 
 /** 보관함의 캐릭터를 이 룸으로 불러온다(복사본이 만들어진다). */
-export function LoadCharacter({ me, send, disabled }: { me: Identity; send: (c: ClientCommand) => unknown; disabled?: boolean }) {
+export function LoadCharacter({ me, send, disabled, title = "내 캐릭터 불러오기" }: { me: Identity; send: (c: ClientCommand) => unknown; disabled?: boolean; title?: string }) {
   const [items, setItems] = useState<VaultCharacter[] | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -43,7 +43,7 @@ export function LoadCharacter({ me, send, disabled }: { me: Identity; send: (c: 
   if (!items) return <div style={{ color: "var(--muted)" }}>불러오는 중이에요…</div>;
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      <strong>내 캐릭터 불러오기</strong>
+      <strong>{title}</strong>
       {items.length === 0 && (
         <div style={{ color: "var(--muted)" }}>
           보관함이 비어 있어요. <Link href="/characters" target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>새 탭에서 캐릭터 만들기</Link>, 만든 뒤 이 화면으로 돌아와요

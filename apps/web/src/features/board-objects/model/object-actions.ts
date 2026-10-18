@@ -2,7 +2,7 @@ import type { ClientCommand, GameObject } from "@coc-vtt/shared";
 import { duplicateSpot } from "./shortcuts";
 import { uniqueName } from "./names";
 
-/** 오브젝트를 복제하는 명령과 새 이름. 이름은 겹치지 않게 번호를 붙이고, 소유자는 잇지 않는다(복제본은 NPC). */
+/** 오브젝트를 복제하는 명령과 새 이름. 이름은 겹치지 않게 번호를 붙이고, 소유자와 시트는 잇지 않는다(복제본은 시트 없는 NPC). */
 export function duplicateCommand(obj: GameObject, takenNames: ReadonlyArray<string>): { command: ClientCommand; name: string } {
   const name = uniqueName(obj.name, takenNames);
   const spot = duplicateSpot(obj.x, obj.y);

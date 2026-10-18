@@ -72,6 +72,40 @@ export class ImageService {
     for (const [k, v] of this.recent) if (v.every((x) => t - x >= this.windowMs)) this.recent.delete(k);
   }
 
+  /** 형식과 크기만 확인한다(저장하지 않는다). */
+  inspect(bytes: Buffer, kind: "image" | "audio"): "ok" | "empty" | "too_large" | "bad_type" {
+    if (bytes.length === 0) return "empty";
+    if (bytes.length > (kind === "audio" ? MAX_AUDIO_BYTES : MAX_IMAGE_BYTES)) return "too_large";
+    return (kind === "audio" ? sniffAudio(bytes) : sniffImage(bytes)) ? "ok" : "bad_type";
+  }
+
+  /**
+   * 서버 안에서 파일을 옮겨 담을 때 쓴다(시나리오 가져오기). 형식과 크기는 그대로 확인하지만,
+   * 사람이 올리는 길이 아니라서 업로드 횟수 제한에는 걸리지 않는다. 가져오기 쪽에서 횟수를 따로 제한한다.
+   */
+  async storeChecked(bytes: Buffer, kind: "image" | "audio"): Promise<{ ok: true; id: string } | { ok: false; code: "empty" | "too_large" | "bad_type" }> {
+    const verdict = this.inspect(bytes, kind);
+    if (verdict !== "ok") return { ok: false, code: verdict };
+    const mime = (kind === "audio" ? sniffAudio(bytes) : sniffImage(bytes))!;
+    const id = randomBytes(16).toString("hex");
+    await this.storage.put(id, { bytes, mime });
+    return { ok: true, id };
+  }
+
+  /** 이 id의 파일이 (kind가 맞게) 있는지 */
+  async exists(id: string, kind: "image" | "audio"): Promise<boolean> {
+    return (await this.get(id, kind)) !== null;
+  }
+
+  /** 있는 파일을 새 id로 복사한다. 룸을 지워도 다른 룸이 쓰는 파일이 같이 지워지지 않게 한다. 없으면 null. */
+  async copy(id: string, kind: "image" | "audio"): Promise<string | null> {
+    const found = await this.get(id, kind);
+    if (!found) return null;
+    const copy = randomBytes(16).toString("hex");
+    await this.storage.put(copy, { bytes: Buffer.from(found.bytes), mime: found.mime });
+    return copy;
+  }
+
   /** 룸을 지울 때 그 룸이 쓰던 파일을 치운다. 하나가 실패해도 나머지는 계속 지운다. */
   async removeMany(ids: Iterable<string>): Promise<number> {
     let removed = 0;
