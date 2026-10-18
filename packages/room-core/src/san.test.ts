@@ -161,3 +161,51 @@ describe("광기 증상표", () => {
     expect(back.snapshot(kp).madnessTable).toEqual(table);
   });
 });
+
+describe("시트에서 직접 바꾼 SAN", () => {
+  const mk = () => {
+    const room = new Room("r", { newId: () => `m-${++mid}`, rng: () => 0.5 });
+    const gm: Actor = { userId: "kp1", name: "하늘", role: "kp" };
+    const pl: Actor = { userId: "pl1", name: "서하", role: "pl" };
+    room.join(gm);
+    room.join(pl);
+    room.handle(gm, { type: "session.start", data: {} } as never);
+    const ev = room.handle(pl, {
+      type: "character.add",
+      data: { name: "서하", age: 27, occupation: "", characteristics: { STR: 50, CON: 60, SIZ: 60, DEX: 60, APP: 50, INT: 70, POW: 50, EDU: 70 }, luck: 50, skills: [], notes: "", backstory: "", possessions: "", weapons: [] },
+    } as never);
+    if (!ev.ok) throw new Error(ev.message);
+    const e = ev.out[0]!.event;
+    if (e.type !== "character.added") throw new Error();
+    const patch = (who: Actor, ops: unknown[]) => {
+      const r = room.handle(who, { type: "sheet.patch", data: { characterId: e.data.id, ops } } as never);
+      if (!r.ok) throw new Error(r.message);
+      return room.snapshot(gm).characters[0]!;
+    };
+    return { patch, gm, pl };
+  };
+  let mid = 0;
+
+  it("줄이면 오늘 손실이 늘고, 올리면 그만큼 줄어든다", () => {
+    const { patch, pl } = mk(); // SAN 50, 임계 10
+    expect(patch(pl, [{ path: "san", delta: -3 }]).sanDay).toEqual({ start: 50, lost: 3 });
+    expect(patch(pl, [{ path: "san", delta: -2 }]).sanDay).toEqual({ start: 50, lost: 5 });
+    expect(patch(pl, [{ path: "san", delta: 1 }]).sanDay).toEqual({ start: 50, lost: 4 });
+  });
+
+  it("하루 손실이 시작 SAN의 1/5 이상이면 장기 광기가 된다", () => {
+    const { patch, pl } = mk();
+    expect(patch(pl, [{ path: "san", value: 41 }]).madness).toBeUndefined();
+    const c = patch(pl, [{ path: "san", value: 40 }]);
+    expect(c.sanDay).toEqual({ start: 50, lost: 10 });
+    expect(c.madness).toBe("indefinite");
+  });
+
+  it("SAN 0은 영구 광기이고, 이미 더 무거운 광기는 낮추지 않는다", () => {
+    const { patch, pl, gm } = mk();
+    patch(gm, [{ path: "madness", value: "permanent" }]);
+    expect(patch(pl, [{ path: "san", value: 40 }]).madness).toBe("permanent");
+    const m = mk();
+    expect(m.patch(m.pl, [{ path: "san", value: 0 }]).madness).toBe("permanent");
+  });
+});

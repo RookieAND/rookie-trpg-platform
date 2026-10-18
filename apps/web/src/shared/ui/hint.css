@@ -1,0 +1,9 @@
+.hint { position: relative; display: inline-flex; align-items: center; vertical-align: middle; }
+.hint-btn { width: 16px; height: 16px; margin-left: 4px; padding: 0; border-radius: 50%; border: 1px solid var(--line-2); background: transparent; color: var(--muted);
+  font-size: 10.5px; font-weight: 600; line-height: 1; cursor: help; display: inline-grid; place-items: center; transition: color .12s, border-color .12s, background .12s; }
+.hint-btn:hover, .hint-btn[aria-expanded="true"] { color: var(--text); border-color: rgba(255,255,255,.25); background: var(--hover); }
+.hint-term { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: help; text-decoration: underline dotted; text-decoration-color: var(--muted); text-underline-offset: 3px; }
+.hint-term:hover, .hint-term[aria-expanded="true"] { text-decoration-color: var(--text); }
+.hint-pop { position: fixed; z-index: 60; display: grid; gap: 3px; padding: 9px 11px; border-radius: var(--radius-lg); border: 1px solid var(--line-2);
+  background: var(--panel-3); box-shadow: var(--shadow); color: var(--text-2); font-size: 12px; line-height: 1.5; font-weight: 400; text-align: left; white-space: normal; letter-spacing: 0; }
+.hint-pop strong { color: var(--text); font-size: 12px; font-weight: 600; }

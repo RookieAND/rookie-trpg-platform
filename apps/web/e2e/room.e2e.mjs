@@ -4,6 +4,7 @@ import { chromium } from "playwright-core";
 import assert from "node:assert/strict";
 
 const WEB = process.env.WEB_URL ?? "http://localhost:3000";
+const API = process.env.API_URL ?? "http://localhost:8787";
 const exe = process.env.CHROMIUM_PATH ?? "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
 const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
 const ctx = () => browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -101,7 +102,7 @@ try {
   await lobby.getByLabel("기능 값 6").fill("60");
   await lobby.getByRole("button", { name: "+ 무기 추가" }).click();
   await lobby.getByLabel("무기 이름 1").fill("주먹");
-  await lobby.getByLabel("무기 기능 1").fill("도서관 이용");
+  await lobby.getByLabel("무기 기능 1").fill("맨손 격투");
   await lobby.getByLabel("무기 피해 1").fill("1d3+db");
   await lobby.getByLabel("소지품").fill("손전등");
   assert.match(await lobby.getByTestId("derived").innerText(), /HP 10 · MP 10 · SAN 50/);
@@ -212,7 +213,14 @@ try {
   await pl.getByRole("tab", { name: "시트" }).click();
   const sanBefore = Number((await pl.getByTestId("stat-san").innerText()).split("/")[0]);
   await pl.getByLabel("SAN 손실").fill("2/2");
-  await pl.getByRole("button", { name: "SAN 체크" }).click();
+  await pl.getByRole("button", { name: "SAN 체크", exact: true }).click();
+  // 실수로 눌러도 바로 굴러가지 않는다: 확인 단계에서 값을 보여 주고, 취소하면 SAN이 그대로다
+  await pl.getByTestId("san-confirm").getByText("되돌릴 수 없어요").waitFor();
+  await pl.getByRole("button", { name: "취소" }).click();
+  assert.equal(await pl.getByTestId("san-confirm").count(), 0);
+  assert.equal(await pl.getByTestId("roll-entry").filter({ hasText: "SAN 체크" }).count(), 0);
+  await pl.getByRole("button", { name: "SAN 체크", exact: true }).click();
+  await pl.getByRole("button", { name: "SAN 체크 굴리기" }).click();
   await kp.getByTestId("roll-entry").getByText(`${CHAR} · SAN 체크`).waitFor();
   await pl.getByRole("tab", { name: "시트" }).click();
   await pl.getByTestId("stat-san").getByText(new RegExp(`^${sanBefore - 2}/`)).waitFor();
@@ -239,6 +247,10 @@ try {
       await push.click();
       await pl.getByText("푸시", { exact: true }).first().waitFor();
       pushed = true;
+      // 푸시한 굴림(맨 위 항목)에는 행운도 푸시도 붙지 않는다
+      await pl.waitForTimeout(250);
+      const top = pl.getByTestId("roll-entry").first();
+      assert.equal(await top.getByRole("button", { name: /행운 \d+ 쓰기|^푸시$/ }).count(), 0);
     }
   }
   assert.ok(pushed, "40번 안에 실패가 나오지 않았어요");
@@ -256,6 +268,26 @@ try {
   }
   assert.ok(spent, "행운을 쓸 수 있는 실패가 나오지 않았어요");
   step("행운을 쓰면 실패가 성공으로 바뀐 결과가 로그에 남음");
+
+  // 전투(격투) 판정은 실패해도 푸시 버튼이 없고 이유가 한 줄로 나온다
+  let combatChecked = false;
+  for (let i = 0; i < 40 && !combatChecked; i++) {
+    const entries = pl.getByTestId("roll-entry");
+    const before = await entries.count();
+    await pl.getByRole("tab", { name: "시트" }).click();
+    await pl.getByRole("button", { name: "맨손 격투 굴리기" }).click();
+    await pl.getByRole("tab", { name: "굴림" }).click();
+    await pl.waitForFunction((n) => document.querySelectorAll('[data-testid="roll-entry"]').length > n, before);
+    await pl.waitForTimeout(250);
+    const top = entries.first();
+    if (await top.locator('[data-level="failure"]').count()) {
+      assert.equal(await top.getByRole("button", { name: "푸시", exact: true }).count(), 0);
+      await top.getByTestId("rule-note").getByText("전투").waitFor();
+      combatChecked = true;
+    }
+  }
+  assert.ok(combatChecked, "격투 실패가 나오지 않았어요");
+  step("전투 판정은 푸시 버튼이 없고 이유가 보임");
 
   // 광기: KP가 상태를 지정하면 PL 시트에 표시, 증상표에서 굴리면 주인과 KP만 본다
   await openSettings(kp);
@@ -581,7 +613,7 @@ try {
   await pl.getByRole("button", { name: "보관함에 반영" }).click();
   await pl.getByText("보관함에 반영했어요").waitFor();
   const vault = await (
-    await fetch("http://localhost:8787/characters", { headers: { "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") } })
+    await fetch(`${API}/characters`, { headers: { "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") } })
   ).json();
   assert.equal(vault.find((c) => c.name === CHAR).hp, 9);
   step("세션 종료 뒤 변경된 HP가 보관함 원본에 반영됨");
@@ -602,8 +634,8 @@ try {
   // 이전 실행이 남긴 서재를 비워 개수 한도에 걸리지 않게 한다
   {
     const h = { "content-type": "application/json", "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") };
-    const cur = await (await fetch("http://localhost:8787/library", { headers: h })).json();
-    await fetch("http://localhost:8787/library", { method: "PUT", headers: h, body: JSON.stringify({ macros: [], occupations: cur.occupations, baseRevision: cur.revision }) });
+    const cur = await (await fetch(`${API}/library`, { headers: h })).json();
+    await fetch(`${API}/library`, { method: "PUT", headers: h, body: JSON.stringify({ macros: [], occupations: cur.occupations, baseRevision: cur.revision }) });
   }
 
   // 매크로: 이름 붙여 저장한 식을 한 번에 굴리고, 잘못된 식은 거절하며, 다시 열어도 남아 있다
@@ -621,13 +653,13 @@ try {
   await pl.waitForFunction((n) => [...document.querySelectorAll('[data-testid="roll-entry"]')].filter((e) => e.textContent.includes("3d6")).length > n, before);
   await pl.reload();
   await pl.getByTestId("macro").filter({ hasText: "한 방 " + run }).waitFor();
-  const serverLib = await (await fetch("http://localhost:8787/library", { headers: { "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") } })).json();
+  const serverLib = await (await fetch(`${API}/library`, { headers: { "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") } })).json();
   assert.ok(serverLib.macros.some((m) => m.name === "한 방 " + run && m.expr === "3d6"));
   step("매크로: 저장한 식을 한 번에 굴리고, 잘못된 식은 거절하며, 새로고침해도 남고 서버 서재에 저장됨");
 
   // 서재 충돌: 다른 기기가 먼저 저장해도 내 변경과 항목 단위로 합쳐지고 어느 쪽도 사라지지 않는다
   const dev = { "content-type": "application/json", "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") };
-  const otherPut = await fetch("http://localhost:8787/library", {
+  const otherPut = await fetch(`${API}/library`, {
     method: "PUT",
     headers: dev,
     body: JSON.stringify({ macros: [...serverLib.macros, { id: "other" + run, name: "다른 기기 " + run, expr: "1d4", secret: false }], occupations: serverLib.occupations, baseRevision: serverLib.revision }),
@@ -640,7 +672,7 @@ try {
   await pl.getByRole("button", { name: "닫기", exact: true }).click();
   await pl.getByTestId("macro").filter({ hasText: "다른 기기 " + run }).waitFor();
   await pl.getByTestId("macro").filter({ hasText: "이쪽 " + run }).waitFor();
-  const merged = await (await fetch("http://localhost:8787/library", { headers: dev })).json();
+  const merged = await (await fetch(`${API}/library`, { headers: dev })).json();
   assert.ok(merged.macros.some((m) => m.name === "다른 기기 " + run) && merged.macros.some((m) => m.name === "이쪽 " + run));
   step("서재 충돌: 다른 기기가 먼저 저장해도 항목 단위로 합쳐져 둘 다 남음");
 

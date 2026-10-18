@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { SanPanel } from "@/features/san-check";
+import { Hint } from "@/shared/ui";
 import { CHARACTERISTIC_KEYS, CONDITIONS, CONDITION_LABEL_KO, deriveCharacter, fifth, half, type Character, type SheetOp, type StatPath } from "@coc-vtt/shared";
 
 export interface RollOptions {
@@ -62,8 +63,8 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, 
           const max = d.limits[path];
           const cur = c[path];
           return (
-            <div key={path} style={{ display: "grid", gridTemplateColumns: "44px 1fr auto", gap: 8, alignItems: "center" }}>
-              <span>{label}</span>
+            <div key={path} style={{ display: "grid", gridTemplateColumns: "56px 1fr auto", gap: 8, alignItems: "center" }}>
+              <span>{label}{path === "san" && <Hint term="san" />}{path === "luck" && <Hint term="luck" />}</span>
               <div style={{ height: 8, borderRadius: 4, background: "var(--panel-2)", overflow: "hidden" }}>
                 <div style={{ width: `${Math.min(100, (cur / max) * 100)}%`, height: "100%", background: path === "hp" ? "var(--danger)" : "var(--accent)" }} />
               </div>
@@ -77,7 +78,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, 
         })}
       </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} data-testid="conditions">
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }} data-testid="conditions">
         {CONDITIONS.map((k) => {
           const on = c.conditions?.includes(k) ?? false;
           return (
@@ -93,6 +94,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, 
             </button>
           );
         })}
+        <Hint term="condition" />
       </div>
 
       <SanPanel
@@ -119,6 +121,10 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, 
           <option value="hard">어려움</option>
           <option value="extreme">극단적</option>
         </select>
+      </div>
+      <div className="res-sub" style={{ display: "flex", gap: 12, marginTop: -8 }}>
+        <span>보너스·페널티<Hint term="bonus" /></span>
+        <span>난이도<Hint term="difficulty" /></span>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
@@ -147,9 +153,13 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, 
 
       <div style={{ display: "grid", gap: 6 }}>
         <input className="input" aria-label="기능 찾기" placeholder="기능 찾기" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <div className="res-sub" style={{ display: "flex", alignItems: "center", gap: 6 }} data-testid="grown-legend">
+          <span aria-hidden>☑</span> 체크한 기능은 세션이 끝나면 성장 굴림을 해요
+          <Hint term="grown" />
+        </div>
         {skills.map(([name, s]) => (
           <div key={name} data-testid={`skill-${name}`} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 8, alignItems: "center" }}>
-            <input type="checkbox" aria-label={`${name} 성장 표시`} checked={s.grown} disabled={!canAct} onChange={(e) => onPatch(c.id, [{ path: "skill", name, grown: e.target.checked }])} style={{ accentColor: "#7c86f7" }} />
+            <input type="checkbox" title="이번 세션에서 성공했어요 (행운으로 성공한 건 제외). 세션 끝에 성장 굴림을 해요." aria-label={`${name} 성장 표시`} checked={s.grown} disabled={!canAct} onChange={(e) => onPatch(c.id, [{ path: "skill", name, grown: e.target.checked }])} style={{ accentColor: "#7c86f7" }} />
             <span>{name}</span>
             <span className="mono" style={{ color: "var(--muted)" }}>{s.value} <span style={{ fontSize: 11 }}>({half(s.value)}/{fifth(s.value)})</span></span>
             <button className="btn" style={{ height: 28, padding: "0 10px" }} disabled={!canAct} onClick={() => onRoll(c.id, name, opts)} aria-label={`${name} 굴리기`}>굴리기</button>

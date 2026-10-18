@@ -127,3 +127,107 @@ describe("행운 소비", () => {
     expect(logOf(outs).outcome).toMatchObject({ level: "hard", success: true, luckSpent: 29 });
   });
 });
+
+// ── C1: 푸시·행운 금지 규칙 ─────────────────────────────
+
+const addChar = (room: Room, who: Actor, skills: Array<{ name: string; value: number; grown: boolean }>, weapons: Array<{ name: string; skill: string; damage: string }> = []) => {
+  const ev = must(
+    room.handle(
+      who,
+      cmd("character.add", {
+        name: "테스트",
+        age: 27,
+        occupation: "기자",
+        characteristics: { STR: 50, CON: 60, SIZ: 60, DEX: 60, APP: 50, INT: 70, POW: 60, EDU: 70 },
+        luck: 55,
+        skills,
+        notes: "",
+        backstory: "",
+        possessions: "",
+        weapons,
+      }),
+    ),
+  )[0]!.event;
+  if (ev.type !== "character.added") throw new Error();
+  return ev.data.id;
+};
+const namedRoll = (room: Room, who: Actor, id: string, name: string) => {
+  const ev = must(room.handle(who, cmd("roll.request", { secret: false, skill: { characterId: id, name, bonus: 0 } })))[0]!.event;
+  if (ev.type !== "roll.result") throw new Error();
+  return ev.data;
+};
+const err = (r: ReturnType<Room["handle"]>) => (r.ok ? "" : r.message);
+
+describe("푸시·행운 금지 규칙", () => {
+  const start = (rng: Rng) => {
+    const room = new Room("r", { newId: () => `id-${++n}`, rng });
+    for (const a of [kp, seo]) room.join(a);
+    room.handle(kp, cmd("session.start", {}));
+    return room;
+  };
+
+  it("행운 판정은 푸시도 행운 사용도 할 수 없다", () => {
+    const room = start(seq(0.9, 0.8));
+    const id = addChar(room, seo, []);
+    const roll = namedRoll(room, seo, id, "행운"); // 행운 55, 굴림 89 → 실패
+    expect(roll.outcome).toMatchObject({ success: false });
+    expect(err(room.handle(seo, cmd("roll.push", { rollId: roll.id })))).toContain("행운 판정");
+    expect(err(room.handle(seo, cmd("luck.spend", { rollId: roll.id })))).toContain("행운 판정");
+    expect(room.snapshot(seo).characters[0]!.luck).toBe(55);
+  });
+
+  it("전투 판정은 푸시할 수 없다: 격투·사격 계열과 무기의 공격 기능", () => {
+    const room = start(seq(0.9, 0.8));
+    const id = addChar(
+      room,
+      seo,
+      [
+        { name: "맨손 격투", value: 50, grown: false },
+        { name: "사격(권총)", value: 40, grown: false },
+        { name: "투척", value: 40, grown: false },
+        { name: "도서관 이용", value: 40, grown: false },
+      ],
+      [{ name: "돌", skill: "투척", damage: "1d4" }],
+    );
+    for (const name of ["맨손 격투", "사격(권총)", "투척"]) {
+      const roll = namedRoll(room, seo, id, name);
+      expect(err(room.handle(seo, cmd("roll.push", { rollId: roll.id }))), name).toContain("전투");
+    }
+    const plain = namedRoll(room, seo, id, "도서관 이용");
+    expect(room.handle(seo, cmd("roll.push", { rollId: plain.id })).ok).toBe(true);
+  });
+
+  it("전투 판정에도 행운은 쓸 수 있다(룰북이 막지 않는다)", () => {
+    const room = start(seq(0.9, 0.8));
+    const id = addChar(room, seo, [{ name: "사격(권총)", value: 60, grown: false }]);
+    const roll = namedRoll(room, seo, id, "사격(권총)");
+    expect(room.handle(seo, cmd("luck.spend", { rollId: roll.id })).ok).toBe(true);
+  });
+
+  it("푸시한 굴림에는 행운을 쓸 수 없고, 푸시 전 원래 굴림도 푸시했다면 쓸 수 없다", () => {
+    const room = start(seq(0.9, 0.8));
+    const id = addChar(room, seo, [{ name: "도서관 이용", value: 60, grown: false }]);
+    const first = namedRoll(room, seo, id, "도서관 이용");
+    const pushed = logOf(must(room.handle(seo, cmd("roll.push", { rollId: first.id }))));
+    expect(pushed.outcome).toMatchObject({ success: false });
+    expect(err(room.handle(seo, cmd("luck.spend", { rollId: pushed.id })))).toContain("푸시한 굴림");
+    expect(err(room.handle(seo, cmd("luck.spend", { rollId: first.id })))).toContain("푸시한 굴림");
+    expect(room.snapshot(seo).characters[0]!.luck).toBe(55);
+  });
+
+  it("행운을 쓴 굴림은 푸시할 수 없다", () => {
+    const room = start(seq(0.9, 0.8));
+    const id = addChar(room, seo, [{ name: "도서관 이용", value: 60, grown: false }]);
+    const first = namedRoll(room, seo, id, "도서관 이용");
+    must(room.handle(seo, cmd("luck.spend", { rollId: first.id })));
+    expect(err(room.handle(seo, cmd("roll.push", { rollId: first.id })))).toContain("행운을 쓴");
+  });
+
+  it("대실패(기능 50 미만 96~100)는 푸시할 수 없다", () => {
+    const room = start(seq(0.6, 0.9));
+    const id = addChar(room, seo, [{ name: "도서관 이용", value: 40, grown: false }]);
+    const roll = namedRoll(room, seo, id, "도서관 이용");
+    expect(roll.outcome).toMatchObject({ level: "fumble" });
+    expect(err(room.handle(seo, cmd("roll.push", { rollId: roll.id })))).toContain("대실패");
+  });
+});

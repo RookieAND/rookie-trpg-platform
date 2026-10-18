@@ -11,6 +11,6 @@ const run = (expr: string, v: number) => {
 describe("describeOutcome", () => {
   it("일반 주사위", () => expect(describeOutcome(run("2d6+1", 0.5))).toBe("[4, 4]+1 = 9"));
   it("CC 판정은 결과 단계를 말해 준다", () => expect(describeOutcome(run("CC<=60", 0.39))).toBe("33 → 성공"));
-  it("난이도를 정하면 통과/미달", () => expect(describeOutcome(run("CC<=60h", 0.39))).toBe("33 → 성공 · 미달"));
+  it("난이도를 정하면 통과 여부를 풀어 쓴다", () => expect(describeOutcome(run("CC<=60h", 0.39))).toBe("33 → 성공 · 어려움에 못 미침"));
   it("목표값이 없으면 숫자만", () => expect(describeOutcome(run("CC", 0.39))).toBe("33"));
 });
