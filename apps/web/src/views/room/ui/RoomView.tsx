@@ -329,9 +329,9 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
           <button type="button" className="side-toggle" aria-expanded={panelOpen} onClick={() => setPanelOpen((o) => !o)}>{panelOpen ? "패널 접기" : "패널 펴기"}{!panelOpen && chatUnread > 0 && <span className="tab-dot" data-testid="chat-unread-toggle" aria-label={`안 읽은 대화 ${chatUnread}개`}>{chatUnread > 99 ? "99+" : chatUnread}</span>}</button>
           <div className="tabs" role="tablist" aria-label="패널" onKeyDown={onTabListKeyDown}>
             <button role="tab" aria-selected={tab === "roll"} onClick={() => setTab("roll")}>굴림</button>
-            <button role="tab" aria-selected={tab === "chat"} data-testid="tab-chat" onClick={() => setTab("chat")}>대화{chatUnread > 0 && <span className="tab-dot" data-testid="chat-unread" aria-label={`안 읽은 대화 ${chatUnread}개`}>{chatUnread > 99 ? "99+" : chatUnread}</span>}</button>
             <button role="tab" aria-selected={tab === "sheet"} onClick={() => setTab("sheet")}>시트</button>
             <button role="tab" aria-selected={tab === "handout"} onClick={() => setTab("handout")}>핸드아웃{newHandouts.length > 0 && <span className="tab-dot" data-testid="handout-new" aria-label={`새 핸드아웃 ${newHandouts.length}개`}>{newHandouts.length}</span>}</button>
+            <button role="tab" aria-selected={tab === "chat"} data-testid="tab-chat" onClick={() => setTab("chat")}>대화{chatUnread > 0 && <span className="tab-dot" data-testid="chat-unread" aria-label={`안 읽은 대화 ${chatUnread}개`}>{chatUnread > 99 ? "99+" : chatUnread}</span>}</button>
             {isKp && state.flow && (
               <button role="tab" aria-selected={tab === "flow"} onClick={() => setTab("flow")}>흐름{state.flow.suggestions.length > 0 ? " ●" : ""}</button>
             )}

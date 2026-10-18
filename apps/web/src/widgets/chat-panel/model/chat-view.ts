@@ -33,14 +33,14 @@ export function chatTargets(members: readonly Member[], meId: string, role: Role
 export type DraftCheck = { kind: "send" } | { kind: "help" } | { kind: "error"; message: string };
 
 /** 보내기 전에 화면에서 먼저 검사한다. 서버가 같은 규칙으로 다시 검사한다. */
-export function checkDraft(text: string, o: { targets: ChatTarget[]; whisperTo: string; canRoll: boolean; rollWhy: string | null; canWhisper: boolean }): DraftCheck {
+export function checkDraft(text: string, o: { targets: ChatTarget[]; whisperTo: string; canRoll: boolean; rollWhy: string | null; recipientIds: readonly string[] }): DraftCheck {
   if (!text.trim()) return { kind: "error", message: "보낼 내용을 적어 주세요." };
   if (o.whisperTo) return { kind: "send" }; // 받는 사람을 골랐으면 글은 그대로 귓속말이다
   const p: ChatInput = parseChatInput(text, o.targets);
   if (p.type === "help") return { kind: "help" };
   if (p.type === "error") return { kind: "error", message: p.message };
   if (p.type === "roll" && !o.canRoll) return { kind: "error", message: o.rollWhy ?? "지금은 굴릴 수 없어요." };
-  if (p.type === "whisper" && !o.canWhisper) return { kind: "error", message: "귓속말을 보낼 수 없어요." };
+  if (p.type === "whisper" && !o.recipientIds.includes(p.to)) return { kind: "error", message: o.recipientIds.length === 0 ? "귓속말을 보낼 수 없어요." : "PL끼리 귓속말은 GM이 허용했을 때만 보낼 수 있어요." };
   return { kind: "send" };
 }
 

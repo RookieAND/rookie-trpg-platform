@@ -29,7 +29,7 @@ describe("chatTargets", () => {
 });
 
 describe("checkDraft", () => {
-  const base = { targets: chatTargets(members, "b", "pl", []), whisperTo: "", canRoll: true, rollWhy: null, canWhisper: true };
+  const base = { targets: chatTargets(members, "b", "pl", []), whisperTo: "", canRoll: true, rollWhy: null, recipientIds: ["kp"] };
   it("말은 보내고, 빈 글은 오류", () => {
     expect(checkDraft("안녕", base)).toEqual({ kind: "send" });
     expect(checkDraft("   ", base)).toMatchObject({ kind: "error" });
@@ -48,6 +48,9 @@ describe("checkDraft", () => {
   it("귓속말 이름 풀기", () => {
     expect(checkDraft("/w GM 안녕", base)).toEqual({ kind: "send" });
     expect(checkDraft("/w 없는사람 안녕", base)).toMatchObject({ kind: "error" });
+    // PL끼리는 GM이 허용하기 전에는 이름을 알아도 보낼 수 없다
+    expect(checkDraft("/w 서하 안녕", base)).toEqual({ kind: "error", message: "PL끼리 귓속말은 GM이 허용했을 때만 보낼 수 있어요." });
+    expect(checkDraft("/w 서하 안녕", { ...base, recipientIds: ["kp", "a"] })).toEqual({ kind: "send" });
   });
 });
 

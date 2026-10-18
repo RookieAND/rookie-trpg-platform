@@ -1715,6 +1715,155 @@ try {
     }
     step("PL 전원 토큰 만들기: 이름대로 3개가 겹치지 않게 놓이고 각자 자기 토큰만 '나'로 표시됨");
 
+    // ── 대화·귓속말·세션 기록 ──
+    {
+      const chatTab = (p) => p.getByRole("tab", { name: /^대화/ });
+      const openChat = async (p) => { await chatTab(p).click(); await p.getByTestId("chat-input").waitFor(); };
+      const msgs = (p) => p.getByTestId("chat-list").getByTestId("chat-msg");
+      // 서버는 한 사람이 초당 3번까지만 받으므로 같은 사람의 연속 전송은 간격을 둔다.
+      const lastSay = new WeakMap();
+      const say = async (p, text) => {
+        const wait = 450 - (Date.now() - (lastSay.get(p) ?? 0));
+        if (wait > 0) await p.waitForTimeout(wait);
+        await p.getByTestId("chat-input").fill(text);
+        await p.getByTestId("chat-input").press("Enter");
+        lastSay.set(p, Date.now());
+      };
+      const readDownload = async (p, testid) => {
+        const [dl] = await Promise.all([p.waitForEvent("download"), p.getByTestId(testid).click()]);
+        return (await import("node:fs/promises")).readFile(await dl.path(), "utf8");
+      };
+
+      // PL이 말하면 GM 화면 대화 탭에 안 읽은 표시가 뜨고, 열면 메시지가 보임
+      await openChat(pls[0]);
+      await say(pls[0], "안녕하세요 GM님");
+      await kpT.getByTestId("chat-unread").waitFor();
+      assert.equal((await kpT.getByTestId("chat-unread").innerText()).trim(), "1");
+      await openChat(kpT);
+      await kpT.getByTestId("chat-list").getByText("안녕하세요 GM님").waitFor();
+      assert.equal(await kpT.getByTestId("chat-unread").count(), 0);
+      await openChat(pls[1]);
+      await openChat(pls[2]);
+      await pls[1].getByTestId("chat-list").getByText("안녕하세요 GM님").waitFor();
+      step("대화: PL이 보낸 말이 GM에게 보이고 안 읽은 표시는 열면 사라짐");
+
+      // Shift+Enter는 줄바꿈, 글자 조합 중 Enter는 보내지 않음
+      const box = pls[0].getByTestId("chat-input");
+      await box.fill("첫 줄");
+      await box.press("Shift+Enter");
+      await box.pressSequentially("둘째 줄");
+      assert.equal(await box.inputValue(), "첫 줄\n둘째 줄");
+      const before = await msgs(pls[0]).count();
+      await box.evaluate((el) => el.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true })));
+      await box.press("Enter");
+      await pls[0].waitForTimeout(300);
+      assert.equal(await msgs(pls[0]).count(), before, "조합 중 Enter로 보내면 안 돼요");
+      await box.evaluate((el) => el.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true })));
+      await box.press("Enter");
+      lastSay.set(pls[0], Date.now());
+      await pls[1].getByTestId("chat-list").getByText("둘째 줄").waitFor();
+      step("대화: Shift+Enter는 줄바꿈, 글자 조합 중 Enter는 보내지 않음");
+
+      // 슬래시 도움말, 모르는 명령은 오류
+      await pls[0].getByTestId("chat-help-btn").click();
+      await pls[0].getByTestId("chat-help").getByText(/\/w 이름 내용/).waitFor();
+      await pls[0].getByTestId("chat-help-btn").click();
+      await say(pls[0], "/zzz");
+      await pls[0].getByTestId("chat-error").getByText(/알 수 없는 명령/).waitFor();
+      await box.fill("");
+      step("대화: ? 버튼으로 명령어 도움말, 모르는 명령은 오류 안내");
+
+      // /r 은 대화와 굴림 기록에 함께 남고 모두에게 보임
+      await say(pls[0], "/r 1d100");
+      const rollMsg = pls[1].getByTestId("chat-list").locator('[data-kind="roll"]');
+      await rollMsg.first().waitFor();
+      assert.match(await rollMsg.first().innerText(), /1d100/);
+      await pls[0].getByRole("tab", { name: "굴림" }).click();
+      await pls[0].getByTestId("roll-log").getByTestId("roll-entry").filter({ hasText: "1d100" }).first().waitFor();
+      await openChat(pls[0]);
+      step("대화: /r 1d100 굴림이 대화와 굴림 기록에 함께 남고 다른 PL에게도 보임");
+
+      // 귓속말: 기본은 PL→GM만. 다른 PL은 받는 사람 목록에도, 대화에도 없음
+      const toOptions = async (p) => p.getByTestId("chat-to").locator("option").allInnerTexts();
+      const gmLabel = `하늘${run} (GM)`;
+      assert.deepEqual(await toOptions(pls[0]), ["모두", gmLabel]);
+      await pls[0].getByTestId("chat-to").selectOption({ label: gmLabel });
+      await say(pls[0], "이건 둘만의 비밀");
+      await kpT.getByTestId("chat-list").locator('[data-kind="whisper"]').filter({ hasText: "이건 둘만의 비밀" }).waitFor();
+      await pls[0].getByTestId("chat-to").selectOption("");
+      await say(pls[0], "공개 마무리 말");
+      await pls[1].getByTestId("chat-list").getByText("공개 마무리 말").waitFor();
+      await pls[2].getByTestId("chat-list").getByText("공개 마무리 말").waitFor();
+      assert.equal(await pls[1].getByText("이건 둘만의 비밀").count(), 0);
+      assert.equal(await pls[2].getByText("이건 둘만의 비밀").count(), 0);
+      step("귓속말: GM에게만 보이고 다른 PL 화면에는 나타나지 않음");
+
+      // /w 로도 보내고, PL끼리 귓속말은 GM이 허용해야 하며 그 귓속말은 GM도 못 봄
+      await say(pls[0], `/w 도윤${run} 몰래`);
+      await pls[0].getByTestId("chat-error").waitFor();
+      await box.fill("");
+      await kpT.getByTestId("chat-plwhisper").click(); // 서버가 받아들인 뒤에 체크가 켜진다
+      await kpT.waitForFunction(() => document.querySelector('[data-testid="chat-plwhisper"]').checked);
+      await pls[0].getByTestId("chat-to").locator("option", { hasText: `도윤${run}` }).waitFor({ state: "attached" });
+      await say(pls[0], `/w 도윤${run} 둘이서만`);
+      await pls[1].getByTestId("chat-list").locator('[data-kind="whisper"]').filter({ hasText: "둘이서만" }).waitFor();
+      await say(pls[0], "그리고 다시 공개");
+      await kpT.getByTestId("chat-list").getByText("그리고 다시 공개").waitFor();
+      await pls[2].getByTestId("chat-list").getByText("그리고 다시 공개").waitFor();
+      assert.equal(await kpT.getByText("둘이서만").count(), 0, "PL끼리 귓속말을 GM이 보면 안 돼요");
+      assert.equal(await pls[2].getByText("둘이서만").count(), 0);
+      step("귓속말: /w로 보내고, PL끼리는 GM이 허용했을 때만 되며 GM과 제3자는 볼 수 없음");
+
+      // 다시 접속해도 받은 귓속말 기록은 받은 사람에게만 남음
+      await pls[2].reload();
+      await pls[2].getByTestId("connection").getByText("연결됨").waitFor();
+      await openChat(pls[2]);
+      await pls[2].getByTestId("chat-list").getByText("그리고 다시 공개").waitFor();
+      assert.equal(await pls[2].getByText("이건 둘만의 비밀").count(), 0);
+      assert.equal(await pls[2].getByText("둘이서만").count(), 0);
+      step("대화: 새로고침해도 지난 대화가 돌아오고 남의 귓속말은 나타나지 않음");
+
+      // 세션 기록: GM은 전체, PL은 공개된 것만. 마크다운으로 내려받아 내용을 확인
+      await kpT.getByTestId("chat-input").fill("/hr 1d100");
+      await kpT.getByTestId("chat-input").press("Enter");
+      await kpT.getByTestId("chat-list").locator('[data-kind="secret"]').waitFor();
+      await kpT.getByRole("tab", { name: "기록" }).click();
+      await kpT.getByTestId("log-list").getByTestId("log-item").first().waitFor();
+      const gmMd = await readDownload(kpT, "log-export-md");
+      assert.match(gmMd, /GM용 기록/);
+      assert.match(gmMd, /세션 \d+/);
+      assert.match(gmMd, /\*\*굴림\*\*/);
+      assert.match(gmMd, /1d100/);
+      assert.match(gmMd, /안녕하세요 GM님/);
+      assert.ok(!gmMd.includes("이건 둘만의 비밀"), "귓속말은 기록에 들어가면 안 돼요");
+      assert.ok(!gmMd.includes("둘이서만"));
+      await pls[1].getByRole("tab", { name: "기록" }).click();
+      await pls[1].getByTestId("log-list").getByTestId("log-item").first().waitFor();
+      const plMd = await readDownload(pls[1], "log-export-md");
+      assert.match(plMd, /참가자에게 보이는 내용만/);
+      assert.match(plMd, /안녕하세요 GM님/);
+      assert.match(plMd, /1d100/);
+      assert.ok(!plMd.includes("이건 둘만의 비밀") && !plMd.includes("둘이서만"));
+      assert.ok(!plMd.includes("GM 전용"));
+      const plJson = JSON.parse(await readDownload(pls[1], "log-export-json"));
+      assert.equal(plJson.audience, "public");
+      assert.ok(plJson.entries.every((x) => !x.scope), "PL 기록에 GM 전용 표시가 있으면 안 돼요");
+      // GM이 참가자용으로 바꿔 보면 GM 전용 항목이 사라짐
+      await kpT.getByTestId("log-as-public").check();
+      await kpT.getByTestId("log-audience").getByText(/참가자에게 보이는 기록만/).waitFor();
+      const asPlMd = await readDownload(kpT, "log-export-md");
+      assert.match(asPlMd, /참가자에게 보이는 내용만/);
+      // 종류 필터
+      await kpT.getByTestId("log-as-public").uncheck();
+      await kpT.getByTestId("log-kind-roll").click();
+      await kpT.getByTestId("log-list").locator('[data-kind="chat"]').first().waitFor({ state: "detached" });
+      assert.ok((await kpT.getByTestId("log-item").count()) > 0);
+      assert.equal(await kpT.getByTestId("log-item").evaluateAll((els) => els.some((e) => e.getAttribute("data-kind") !== "roll")), false);
+      await kpT.getByTestId("log-reset").click();
+      for (const p of [kpT, ...pls]) await p.getByRole("tab", { name: "굴림" }).click();
+      step("세션 기록: GM용·참가자용 마크다운/JSON 내보내기에 굴림·대화 발췌가 있고 귓속말·GM 전용은 참가자 버전에 없으며 종류 필터가 동작");
+    }
+
     const dragBy = async (page, name, dx, dy) => {
       const b = await page.getByTestId(`obj-${name}`).locator("circle").first().boundingBox();
       await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);

@@ -82,10 +82,9 @@ export function ChatPanel(p: ChatPanelProps) {
     if (stick.current) setNewBelow(0);
   };
 
-  const canWhisper = recipients.length > 0;
   const submit = () => {
     if (spectator && to) return;
-    const c = checkDraft(text, { targets, whisperTo: to, canRoll: p.rollWhy === null, rollWhy: p.rollWhy, canWhisper });
+    const c = checkDraft(text, { targets, whisperTo: to, canRoll: p.rollWhy === null, rollWhy: p.rollWhy, recipientIds: recipients.map((m) => m.userId) });
     if (c.kind === "help") {
       setHelp(true);
       setText("");
