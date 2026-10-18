@@ -62,6 +62,7 @@ export function useRoom({ roomId, user, name, token: initialToken, invite, refre
   lastSeq.current = state.lastSeq;
   const reqId = useRef(0);
   const wasDown = useRef(false);
+  const everOpened = useRef(false);
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
 
@@ -90,7 +91,8 @@ export function useRoom({ roomId, user, name, token: initialToken, invite, refre
         setConnection("open");
         setCloseCode(null);
         setAuthExpired(false);
-        if (wasDown.current) setReconnected((n) => n + 1);
+        if (wasDown.current && everOpened.current) setReconnected((n) => n + 1);
+        everOpened.current = true;
         wasDown.current = false;
         ws.send(JSON.stringify({ type: "join", data: lastSeq.current > 0 ? { lastSeq: lastSeq.current } : {} }));
       };
