@@ -4,3 +4,6 @@ dist
 *.log
 data/
 *.tsbuildinfo
+.env
+.env.*
+!.env.example

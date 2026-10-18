@@ -99,6 +99,14 @@ export class RoomHub {
 
   /** 지난 ping에 응답하지 않은 연결은 죽은 것으로 보고 끊는다. 나머지에는 새 ping을 보낸다. */
   private sweep() {
+    try {
+      this.sweepOnce();
+    } catch (e) {
+      log.error("하트비트 점검 중 오류", errFields(e));
+    }
+  }
+
+  private sweepOnce() {
     for (const [ws, ok] of this.alive) {
       if (!ok) {
         this.alive.delete(ws);

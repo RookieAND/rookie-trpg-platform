@@ -26,6 +26,26 @@ jobs:
       - run: pnpm arch
       - run: pnpm test
 
+  # 운영 빌드: API를 묶고 production 모드로 띄워 점검하고, 웹이 운영 빌드로 통과하는지 본다.
+  build:
+    name: 운영 빌드·스모크
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:api
+      - run: node scripts/smoke-prod.mjs
+      - run: pnpm build:web
+        env:
+          NEXT_PUBLIC_API_URL: https://api.example.com
+      - name: Docker 이미지 빌드
+        run: docker build -t coc-vtt-api .
+
   # 브라우저 e2e는 시간이 오래 걸려 손으로 돌린다(Actions 탭 → CI → Run workflow).
   e2e:
     name: 브라우저 e2e (수동)
