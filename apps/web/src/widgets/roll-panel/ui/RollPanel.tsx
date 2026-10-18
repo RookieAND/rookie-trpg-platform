@@ -1,9 +1,11 @@
 "use client";
 import { useState } from "react";
-import { describeOutcome, formatRollLog, luckNeeded, type Character, type RollLogEntry } from "@coc-vtt/shared";
+import { formatRollLog, luckBlockReason, luckNeeded, pushBlockReason, type Character, type RollLogEntry, type RollRuleInput } from "@coc-vtt/shared";
 import { MacroBar, useRollMacros } from "@/features/roll-macros";
 import type { Caller } from "@/shared/api";
 import { downloadText } from "@/shared/lib";
+import { Hint } from "@/shared/ui";
+import { RollResult } from "./RollResult";
 
 interface Props {
   me: Caller;
@@ -30,25 +32,48 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
     setExpr("");
   };
 
-  // 실패한 시트 판정에는 굴린 사람(또는 KP)이 푸시하거나 행운을 쓸 수 있다.
+  // 실패한 시트 판정에는 굴린 사람(또는 KP)이 푸시하거나 행운을 쓸 수 있다. 규칙상 안 되는 것은 이유를 보여 준다.
   const actions = (r: RollLogEntry) => {
     if (!r.check || r.secret || r.outcome.kind !== "cc" || r.outcome.success !== false) return null;
     if (r.userId !== userId && !isKp) return null;
-    const pushed = rolls.some((x) => x.pushOf === r.id);
-    const luckUsed = rolls.some((x) => x.luckOf === r.id);
-    if (luckUsed) return null;
+    const c = characters.find((x) => x.id === r.check?.characterId);
+    const input: RollRuleInput = {
+      name: r.check.name,
+      outcome: r.outcome,
+      isPush: Boolean(r.pushOf),
+      pushed: rolls.some((x) => x.pushOf === r.id),
+      luckUsed: rolls.some((x) => x.luckOf === r.id),
+      weaponSkills: (c?.weapons ?? []).map((w) => w.skill),
+    };
+    const pushWhy = pushBlockReason(input);
+    const luckWhy = luckBlockReason(input);
     const need = luckNeeded(r.outcome);
-    const luck = characters.find((c) => c.id === r.check?.characterId)?.luck ?? 0;
+    const luck = c?.luck ?? 0;
+    // 이미 푸시했거나 행운을 쓴 뒤에는 조용히 둔다. 그 밖의 금지 사유는 한 줄로 알린다.
+    const done = input.pushed || input.luckUsed || input.isPush;
+    const notes = done ? [] : [pushWhy, luckWhy].filter((w, i, a): w is string => Boolean(w) && a.indexOf(w) === i);
     return (
-      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-        {!r.pushOf && !pushed && (
-          <button className="btn" style={{ height: 26, padding: "0 10px" }} disabled={disabled} onClick={() => onPush(r.id)}>푸시</button>
-        )}
-        {need !== null && !pushed && (
-          <button className="btn" style={{ height: 26, padding: "0 10px" }} disabled={disabled || luck < need} title={luck < need ? `행운이 모자라요 (보유 ${luck})` : undefined} onClick={() => onLuck(r.id)}>
-            행운 {need} 쓰기
-          </button>
-        )}
+      <div style={{ display: "grid", gap: 4, marginTop: 4 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {!pushWhy && (
+            <>
+              <button className="btn" style={{ height: 26, padding: "0 10px" }} disabled={disabled} title="같은 조건으로 한 번 더 굴려요. 또 실패하면 더 나쁜 일이 생길 수 있어요." onClick={() => onPush(r.id)}>푸시</button>
+              <Hint term="push" />
+            </>
+          )}
+          {!luckWhy && need !== null && (
+            <>
+              <button className="btn" style={{ height: 26, padding: "0 10px" }} disabled={disabled || luck < need} title={luck < need ? `행운이 모자라요 (보유 ${luck})` : `행운 ${need}을 깎아 성공으로 바꿔요`} onClick={() => onLuck(r.id)}>
+                행운 {need} 쓰기
+              </button>
+              <Hint term="luck" />
+              {luck < need && <span className="res-sub">행운이 모자라요 (보유 {luck})</span>}
+            </>
+          )}
+        </div>
+        {notes.map((w) => (
+          <div key={w} className="res-sub" data-testid="rule-note">{w}</div>
+        ))}
       </div>
     );
   };
@@ -67,7 +92,7 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
               {r.luckOf && <span className="badge">행운</span>}
               <span className="mono" style={{ color: "var(--muted)", marginLeft: "auto" }}>{r.expr}</span>
             </div>
-            <div className="mono">{describeOutcome(r.outcome)}</div>
+            <RollResult outcome={r.outcome} />
             {actions(r)}
           </div>
         ))}
@@ -96,6 +121,12 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
             onKeyDown={(e) => e.key === "Enter" && submit()}
           />
           <button className="btn primary" onClick={submit} disabled={disabled || !expr.trim()}>굴리기</button>
+        </div>
+        <div className="res-sub" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <span>성공 단계<Hint term="level" /></span>
+          <span>보너스·페널티<Hint term="bonus" /></span>
+          <span>푸시<Hint term="push" /></span>
+          <span>행운<Hint term="luck" /></span>
         </div>
         {error && <div className="err" role="alert">{error}</div>}
         <button

@@ -1,6 +1,8 @@
 import { LEVEL_LABEL_KO, type RollOutcome } from "./dice";
 import { MADNESS_LABEL_KO } from "./sheet";
 
+const DIFFICULTY_KO = { regular: "보통", hard: "어려움", extreme: "극단적", critical: "대성공" } as const;
+
 /** 굴림 결과를 한국어 한 줄로. 화면과 디스코드 알림이 같은 문장을 쓴다. */
 export function describeOutcome(o: RollOutcome): string {
   switch (o.kind) {
@@ -12,7 +14,8 @@ export function describeOutcome(o: RollOutcome): string {
       const bonus = o.percent.bonus ? ` (${o.percent.bonus > 0 ? "보너스" : "페널티"} ${Math.abs(o.percent.bonus)})` : "";
       if (o.level === undefined) return `${o.percent.total}${bonus}`;
       const luck = o.luckSpent ? ` (행운 −${o.luckSpent})` : "";
-      const verdict = o.difficulty && o.success !== undefined ? (o.success ? " · 통과" : " · 미달") : "";
+      const need = o.difficulty ? DIFFICULTY_KO[o.difficulty] : "";
+      const verdict = o.difficulty && o.success !== undefined ? (o.success ? ` · ${need} 통과` : o.level === "failure" || o.level === "fumble" ? "" : ` · ${need}에 못 미침`) : "";
       return `${o.percent.total}${bonus}${luck} → ${LEVEL_LABEL_KO[o.level]}${verdict}`;
     }
     case "san": {

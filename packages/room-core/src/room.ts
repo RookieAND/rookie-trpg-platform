@@ -27,6 +27,9 @@ import {
   MAX_MADNESS_ENTRIES,
   applyLuck,
   luckNeeded,
+  luckBlockReason,
+  pushBlockReason,
+  type RollRuleInput,
   type EffectSettings,
   type EndSummary,
   type GameObject,
@@ -1393,17 +1396,29 @@ export class Room {
     if (!orig?.check) return fail("not_found", "푸시할 수 있는 굴림이 아니에요.");
     if (orig.userId !== who.userId && who.role !== "kp") return fail("forbidden", "자기 굴림만 푸시할 수 있어요.");
     if (orig.outcome.kind !== "cc" || orig.outcome.success !== false) return fail("bad_roll", "실패한 판정만 푸시할 수 있어요.");
-    if (orig.pushOf) return fail("bad_roll", "푸시한 굴림은 다시 푸시할 수 없어요.");
-    if (this.rolls.some((r) => r.pushOf === rollId)) return fail("bad_roll", "이미 푸시한 굴림이에요.");
-    if (this.tooMany(`roll:${who.userId}`, this.rollsPerSecond)) return fail("rate_limited", "너무 빨리 굴리고 있어요. 잠시 뒤에 다시 해 주세요.");
     const c = this.characters.get(orig.check.characterId);
     if (!c || !canSeeCharacter(c, who)) return fail("not_found", "캐릭터를 찾을 수 없어요.");
+    const blocked = pushBlockReason(this.ruleInput(orig, c));
+    if (blocked) return fail("bad_roll", blocked);
+    if (this.tooMany(`roll:${who.userId}`, this.rollsPerSecond)) return fail("rate_limited", "너무 빨리 굴리고 있어요. 잠시 뒤에 다시 해 주세요.");
     const value = targetValue(c, orig.check.name);
     if (value === null) return fail("bad_roll", `'${orig.check.name}' 기능이 시트에 없어요.`);
     const expr = skillExpr(value, orig.check.bonus, orig.check.difficulty);
     const rolled = rollExpression(expr, this.rng);
     if (!rolled.ok) return fail("bad_roll", rolled.error);
     return this.logRoll(who, expr, orig.label, rolled.outcome, false, { check: orig.check, pushOf: rollId });
+  }
+
+  /** 푸시·행운 규칙 검사에 넘길 입력. */
+  private ruleInput(orig: RollLogEntry, c: Character): RollRuleInput {
+    return {
+      name: orig.check?.name ?? "",
+      outcome: orig.outcome,
+      isPush: Boolean(orig.pushOf),
+      pushed: this.rolls.some((r) => r.pushOf === orig.id),
+      luckUsed: this.rolls.some((r) => r.luckOf === orig.id),
+      weaponSkills: (c.weapons ?? []).map((w) => w.skill),
+    };
   }
 
   /** 실패한 시트 판정을 성공으로 바꿀 만큼의 행운을 쓴다. 한 굴림당 한 번이다. */
@@ -1413,7 +1428,8 @@ export class Room {
     if (!orig?.check || orig.outcome.kind !== "cc") return fail("not_found", "행운을 쓸 수 있는 굴림이 아니에요.");
     const c = this.characters.get(orig.check.characterId);
     if (!c || !canSeeCharacter(c, who)) return fail("not_found", "캐릭터를 찾을 수 없어요.");
-    if (this.rolls.some((r) => r.luckOf === rollId)) return fail("bad_roll", "이미 행운을 쓴 굴림이에요.");
+    const blocked = luckBlockReason(this.ruleInput(orig, c));
+    if (blocked) return fail("bad_roll", blocked);
     const need = luckNeeded(orig.outcome);
     if (need === null) return fail("bad_roll", "행운으로 성공으로 바꿀 수 없는 굴림이에요.");
     if (c.luck < need) return fail("bad_roll", `행운이 모자라요. 필요 ${need}, 보유 ${c.luck}.`);
@@ -1692,9 +1708,30 @@ export class Room {
           break;
       }
     }
+    if (!d.ops.some((o) => o.path === "madness")) this.applyManualSanLoss(c, next);
     next.rev = c.rev + 1;
     this.characters.set(c.id, next);
     return ok(this.emit({ type: "character.updated", data: cloneCharacter(next) }, this.characterAudience(next)));
+  }
+
+  /**
+   * 시트에서 SAN을 직접 바꿔도 오늘 손실과 광기 판정에 반영한다(KP가 "SAN 2 잃어요"라고 말한 경우).
+   * 줄이면 오늘 손실이 늘고, 올리면 그만큼 줄어든다(잘못 누른 것을 바로잡는 경우). 0 아래로는 내려가지 않는다.
+   * 하루 손실이 하루 시작 SAN의 1/5 이상이면 장기 광기, SAN 0이면 영구 광기로 올린다. INT 판정이 필요한
+   * 일시적 광기는 굴림 없이 정할 수 없어서 자동으로 만들지 않는다.
+   */
+  private applyManualSanLoss(before: Character, next: Character): void {
+    const delta = before.san - next.san;
+    if (delta === 0) return;
+    const day = before.sanDay ?? { start: before.san, lost: 0 };
+    const lost = Math.max(0, day.lost + delta);
+    if (delta < 0 && !before.sanDay) return; // 하루 기록이 없을 때 올린 것은 기록할 손실이 없다
+    next.sanDay = { start: day.start, lost };
+    if (delta < 0) return;
+    const threshold = Math.floor(day.start / 5);
+    const kind = next.san === 0 ? "permanent" : threshold > 0 && lost >= threshold ? "indefinite" : null;
+    const rank = { none: 0, temporary: 1, indefinite: 2, permanent: 3 } as const;
+    if (kind && rank[kind] > rank[next.madness ?? "none"]) next.madness = kind;
   }
 
   // ── 내부 ───────────────────────────────────────────────

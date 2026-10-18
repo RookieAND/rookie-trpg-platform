@@ -6,6 +6,7 @@ import type { GameObject, Role } from "@coc-vtt/shared";
 import { useIdentity, type Identity } from "@/entities/user";
 import { ObjectToolbar } from "@/features/board-objects";
 import { FogToolbar } from "@/features/manage-fog";
+import { Hint } from "@/shared/ui";
 import { SceneBar } from "@/features/manage-scenes";
 import { StageCues } from "@/features/stage-cues";
 import { useEffectPreference } from "@/features/effect-preference";
@@ -147,6 +148,11 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
           )}
           <SceneTransition transition={state.transition} />
           {!isKp && state.scenes[state.activeSceneId] && <div className="scene-name" data-testid="scene-name">{state.scenes[state.activeSceneId]!.name}</div>}
+          {!isKp && fogView && (
+            <div style={{ position: "absolute", right: 12, bottom: 12, zIndex: 2, color: "var(--muted)", fontSize: 12.5 }} data-testid="fog-note">
+              <Hint term="fog" label="안개와 시야 설명">안개 켜짐</Hint> · 시야 밖은 어둡게 보여요
+            </div>
+          )}
           {isKp && shownScene && (
             <FogToolbar scene={shownScene} selected={selected} enabled={canEditBoard} picking={fogPicking} radius={fogRadius} onPicking={setFogPicking} onRadius={setFogRadius} send={send} />
           )}

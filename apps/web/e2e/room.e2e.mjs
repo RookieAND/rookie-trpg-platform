@@ -114,7 +114,7 @@ try {
   await lobby.getByLabel("기능 값 6").fill("60");
   await lobby.getByRole("button", { name: "+ 무기 추가" }).click();
   await lobby.getByLabel("무기 이름 1").fill("주먹");
-  await lobby.getByLabel("무기 기능 1").fill("도서관 이용");
+  await lobby.getByLabel("무기 기능 1").fill("맨손 격투");
   await lobby.getByLabel("무기 피해 1").fill("1d3+db");
   await lobby.getByLabel("소지품").fill("손전등");
   assert.match(await lobby.getByTestId("derived").innerText(), /HP 10 · MP 10 · SAN 50/);
@@ -225,7 +225,14 @@ try {
   await pl.getByRole("tab", { name: "시트" }).click();
   const sanBefore = Number((await pl.getByTestId("stat-san").innerText()).split("/")[0]);
   await pl.getByLabel("SAN 손실").fill("2/2");
-  await pl.getByRole("button", { name: "SAN 체크" }).click();
+  await pl.getByRole("button", { name: "SAN 체크", exact: true }).click();
+  // 실수로 눌러도 바로 굴러가지 않는다: 확인 단계에서 값을 보여 주고, 취소하면 SAN이 그대로다
+  await pl.getByTestId("san-confirm").getByText("되돌릴 수 없어요").waitFor();
+  await pl.getByRole("button", { name: "취소" }).click();
+  assert.equal(await pl.getByTestId("san-confirm").count(), 0);
+  assert.equal(await pl.getByTestId("roll-entry").filter({ hasText: "SAN 체크" }).count(), 0);
+  await pl.getByRole("button", { name: "SAN 체크", exact: true }).click();
+  await pl.getByRole("button", { name: "SAN 체크 굴리기" }).click();
   await kp.getByTestId("roll-entry").getByText(`${CHAR} · SAN 체크`).waitFor();
   await pl.getByRole("tab", { name: "시트" }).click();
   await pl.getByTestId("stat-san").getByText(new RegExp(`^${sanBefore - 2}/`)).waitFor();
@@ -252,6 +259,10 @@ try {
       await push.click();
       await pl.getByText("푸시", { exact: true }).first().waitFor();
       pushed = true;
+      // 푸시한 굴림(맨 위 항목)에는 행운도 푸시도 붙지 않는다
+      await pl.waitForTimeout(250);
+      const top = pl.getByTestId("roll-entry").first();
+      assert.equal(await top.getByRole("button", { name: /행운 \d+ 쓰기|^푸시$/ }).count(), 0);
     }
   }
   assert.ok(pushed, "40번 안에 실패가 나오지 않았어요");
@@ -269,6 +280,26 @@ try {
   }
   assert.ok(spent, "행운을 쓸 수 있는 실패가 나오지 않았어요");
   step("행운을 쓰면 실패가 성공으로 바뀐 결과가 로그에 남음");
+
+  // 전투(격투) 판정은 실패해도 푸시 버튼이 없고 이유가 한 줄로 나온다
+  let combatChecked = false;
+  for (let i = 0; i < 40 && !combatChecked; i++) {
+    const entries = pl.getByTestId("roll-entry");
+    const before = await entries.count();
+    await pl.getByRole("tab", { name: "시트" }).click();
+    await pl.getByRole("button", { name: "맨손 격투 굴리기" }).click();
+    await pl.getByRole("tab", { name: "굴림" }).click();
+    await pl.waitForFunction((n) => document.querySelectorAll('[data-testid="roll-entry"]').length > n, before);
+    await pl.waitForTimeout(250);
+    const top = entries.first();
+    if (await top.locator('[data-level="failure"]').count()) {
+      assert.equal(await top.getByRole("button", { name: "푸시", exact: true }).count(), 0);
+      await top.getByTestId("rule-note").getByText("전투").waitFor();
+      combatChecked = true;
+    }
+  }
+  assert.ok(combatChecked, "격투 실패가 나오지 않았어요");
+  step("전투 판정은 푸시 버튼이 없고 이유가 보임");
 
   // 광기: KP가 상태를 지정하면 PL 시트에 표시, 증상표에서 굴리면 주인과 KP만 본다
   await openSettings(kp);
