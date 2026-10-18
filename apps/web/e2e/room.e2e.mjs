@@ -244,6 +244,14 @@ try {
   await pl.getByRole("button", { name: "취소" }).click();
   assert.equal(await pl.getByTestId("san-confirm").count(), 0);
   assert.equal(await pl.getByTestId("roll-entry").filter({ hasText: "SAN 체크" }).count(), 0);
+  // 확인 창은 모달 대화상자: Esc로 닫히고 초점이 SAN 체크 버튼으로 돌아온다
+  await pl.getByRole("button", { name: "SAN 체크", exact: true }).click();
+  const sanDlg = pl.getByRole("dialog", { name: "SAN 체크 확인" });
+  await sanDlg.waitFor();
+  assert.equal(await sanDlg.getAttribute("aria-modal"), "true");
+  await pl.keyboard.press("Escape");
+  assert.equal(await pl.getByRole("dialog", { name: "SAN 체크 확인" }).count(), 0);
+  assert.equal(await pl.evaluate(() => document.activeElement?.textContent), "SAN 체크");
   await pl.getByRole("button", { name: "SAN 체크", exact: true }).click();
   await pl.getByRole("button", { name: "SAN 체크 굴리기" }).click();
   await kp.getByTestId("roll-entry").getByText(`${CHAR} · SAN 체크`).waitFor();
@@ -391,6 +399,12 @@ try {
 
   await kp.getByRole("button", { name: "펼쳐 보이기" }).click();
   await pl.getByRole("dialog", { name: "핸드아웃" }).getByText("자정에 서재로 와 주게.").waitFor();
+  // 대화상자: 초점이 안으로 들어오고, Tab을 계속 눌러도 밖으로 나가지 않는다
+  assert.equal(await pl.getByRole("dialog", { name: "핸드아웃" }).getAttribute("aria-modal"), "true");
+  for (let i = 0; i < 4; i++) {
+    await pl.keyboard.press("Tab");
+    assert.equal(await pl.evaluate(() => !!document.activeElement?.closest('[role="dialog"]')), true);
+  }
   await pl.getByRole("dialog").getByRole("button", { name: "닫기" }).click();
   assert.equal(await pl.getByRole("dialog").count(), 0);
   step("KP가 펼쳐 보이면 PL 화면 가운데에 핸드아웃이 뜨고 닫을 수 있음");
@@ -474,6 +488,20 @@ try {
     await kp.getByTestId("ping").waitFor({ state: "detached" });
   }
   step("PL이 Alt+클릭으로 가리키면 KP 화면에 이름표 달린 핑이 잠시 뜨고 사라짐");
+
+  // 키보드만으로: 건너뛰기 링크로 보드에 가고, 숨은 토큰 목록에서 토큰을 골라 방향키로 움직임
+  {
+    const x0 = Number(await kp.getByTestId("obj-서하").getAttribute("data-x"));
+    await pl.getByTestId("skip-to-board").focus();
+    await pl.keyboard.press("Enter");
+    assert.equal(await pl.evaluate(() => document.activeElement?.getAttribute("data-testid")), "board");
+    await pl.getByTestId("pick-서하").focus();
+    await pl.keyboard.press("Enter");
+    assert.equal(await pl.evaluate(() => document.activeElement?.getAttribute("data-testid")), "board");
+    await pl.keyboard.press("ArrowRight");
+    await kp.waitForFunction((x) => Number(document.querySelector('[data-testid="obj-서하"]')?.getAttribute("data-x")) > x, x0);
+  }
+  step("키보드만으로 보드로 건너뛰고, 토큰 목록에서 골라 방향키로 움직임");
 
   // GM 전용 오브젝트는 PL에게 안 보임
   await kp.getByRole("button", { name: "+ GM 전용" }).click();
@@ -863,6 +891,33 @@ try {
   await track.getByRole("button", { name: "재생", exact: true }).click();
   await track.getByTestId("audio-playing").waitFor();
   await kp2.getByTestId("audio-now-name").getByText("비 오는 밤 " + run).waitFor();
+  // 브라우저가 소리를 막으면(멈춘 오디오 컨텍스트) 헤더에 안내가 뜨고, 풀리면 사라진다
+  {
+    const muted = await (await ctx()).newPage();
+    await muted.addInitScript(() => {
+      class FakeCtx {
+        state = "suspended";
+        onstatechange = null;
+        resume() {
+          return new Promise((r) => {
+            window.__unlock = () => { this.state = "running"; this.onstatechange?.(); r(); };
+          });
+        }
+        decodeAudioData() { return Promise.reject(new Error("test")); }
+        close() {}
+      }
+      window.AudioContext = FakeCtx;
+    });
+    await login(muted, "서하");
+    await muted.goto(roomUrl);
+    await muted.getByTestId("sound-blocked-hint").waitFor();
+    await muted.getByTestId("board").click({ position: { x: 5, y: 5 } });
+    await muted.getByTestId("sound-blocked-hint").waitFor();
+    await muted.evaluate(() => window.__unlock());
+    await muted.getByTestId("sound-blocked-hint").waitFor({ state: "detached" });
+    await muted.context().close();
+  }
+  step("소리가 막히면 헤더에 안내가 뜨고, 풀리면 사라짐");
   await openSettings(pl);
   await pl.getByTestId("sound-toggle").click();
   await pl.getByLabel("전체 음소거").check();

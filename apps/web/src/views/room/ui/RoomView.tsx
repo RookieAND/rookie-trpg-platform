@@ -11,7 +11,7 @@ import { Hint, onTabListKeyDown } from "@/shared/ui";
 import { SceneBar } from "@/features/manage-scenes";
 import { StageCues } from "@/features/stage-cues";
 import { useEffectPreference } from "@/features/effect-preference";
-import { SoundControl, useAudioEngine, useAudioPreference } from "@/features/audio-playback";
+import { SoundBlockedHint, SoundControl, useAudioEngine, useAudioPreference } from "@/features/audio-playback";
 import { LoadCharacter } from "@/features/load-character";
 import { useRoom } from "@/features/room-realtime";
 import { UndoButton, useUndo } from "@/features/undo-last";
@@ -110,7 +110,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     }
     return shownScene?.fogAreas ? { areas: shownScene.fogAreas, preview: false, explored: shownScene.fogExplored } : undefined;
   }, [isKp, shownScene, objects]);
-  const audio = useAudioEngine({ bgm: state.bgm, stopFadeMs: state.stopFadeMs, lastSe: state.lastSe, clockOffset: state.clockOffset, lastRollId: state.rolls.at(-1)?.id ?? null, ready: state.ready, prefs: sound.prefs });
+  const audio = useAudioEngine({ bgm: state.bgm, stopFadeMs: state.stopFadeMs, lastSe: state.lastSe, clockOffset: state.clockOffset, lastRollId: state.rolls.at(-1)?.id ?? null, lastRollAt: state.rolls.at(-1)?.at ?? null, ready: state.ready, prefs: sound.prefs });
 
   const handoutIds = useMemo(() => handoutList.map((h) => h.id), [handoutList]);
   // 새로 받은 핸드아웃(PL만). 핸드아웃 탭을 보고 있으면 본 것으로 친다.
@@ -158,7 +158,18 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
 
   return (
     <div className="room">
-      <RoomHeader me={me} roomId={roomId} role={role} status={state.sessionStatus} kpAway={kpAway} sessionNumber={state.sessionNumber} connection={connection} members={state.members} effects={state.effects} madnessTable={state.madnessTable} endingDefaults={endingDefaults} effectsEnabled={fx.enabled} onToggleEffects={fx.toggle} soundControl={<SoundControl prefs={sound.prefs} onChange={sound.update} unlocked={audio.unlocked} onUnlock={audio.unlock} playing={audio.playing} />} send={send} />
+      <a
+        href="#game-board"
+        className="skip-link"
+        data-testid="skip-to-board"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById("game-board")?.focus();
+        }}
+      >
+        보드로 건너뛰기
+      </a>
+      <RoomHeader me={me} roomId={roomId} role={role} status={state.sessionStatus} kpAway={kpAway} sessionNumber={state.sessionNumber} connection={connection} members={state.members} effects={state.effects} madnessTable={state.madnessTable} endingDefaults={endingDefaults} effectsEnabled={fx.enabled} onToggleEffects={fx.toggle} soundControl={<SoundControl prefs={sound.prefs} onChange={sound.update} unlocked={audio.unlocked} onUnlock={audio.unlock} playing={audio.playing} />} soundHint={<SoundBlockedHint blocked={audio.blocked} onUnlock={audio.unlock} />} send={send} />
 
       <Toasts toasts={notices.toasts} onDismiss={notices.dismiss} />
       <EndSummaryCard summary={state.lastEnd} />

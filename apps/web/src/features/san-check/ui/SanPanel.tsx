@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { MADNESS_LABEL_KO, maxLoss, parseSanLoss, type Character, type Madness } from "@coc-vtt/shared";
-import { Hint } from "@/shared/ui";
+import { Dialog, Hint } from "@/shared/ui";
 
 interface Props {
   character: Character;
@@ -52,7 +52,7 @@ export function SanPanel({ character: c, canAct, isKp, onCheck, onSetMadness, on
         <button className="btn" disabled={!canAct || bad || confirming} onClick={ask}>SAN 체크</button>
       </div>
       {confirming && (
-        <div className="card" role="group" aria-label="SAN 체크 확인" data-testid="san-confirm" style={{ padding: 10, gap: 6 }}>
+        <Dialog label="SAN 체크 확인" onClose={() => setConfirming(false)} className="card" data-testid="san-confirm" style={{ padding: 10, gap: 6 }}>
           <span>
             SAN 체크 <b className="mono">{loss.trim()}</b> · 지금 SAN <b className="mono">{c.san}</b>
           </span>
@@ -63,7 +63,7 @@ export function SanPanel({ character: c, canAct, isKp, onCheck, onSetMadness, on
             <button className="btn primary" onClick={run}>SAN 체크 굴리기</button>
             <button className="btn" onClick={() => setConfirming(false)}>취소</button>
           </span>
-        </div>
+        </Dialog>
       )}
       <div className="row" style={{ color: "var(--muted)", fontSize: 12.5 }}>
         <span data-testid="san-day">오늘 손실 {day.lost}{threshold > 0 ? ` / ${threshold}` : ""}</span>

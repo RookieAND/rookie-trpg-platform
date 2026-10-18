@@ -56,6 +56,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .badge.kp { border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
 .badge.paused { border-color: color-mix(in srgb, var(--amber) 45%, transparent); background: transparent; color: var(--amber); }
 .badge.plain { background: none; padding: 0 2px; color: var(--muted); }
+.badge.sound-hint { cursor: pointer; font-family: inherit; }
 .badge.conn[data-state="open"]::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
 .badge.conn:not([data-state="open"])::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
 .badge.status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
@@ -452,3 +453,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   .dock-label { width: auto; }
 }
 .macro-bar .row > .btn.ghost:first-child, .ask > .disclose { margin-left: -6px; }
+[role="dialog"]:focus { outline: none; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; list-style: none; }
+.skip-link { position: absolute; left: 8px; top: -48px; z-index: 100; padding: 8px 12px; border-radius: 6px; background: var(--primary); color: #fff; text-decoration: none; font-size: 13px; }
+.skip-link:focus { top: 8px; }

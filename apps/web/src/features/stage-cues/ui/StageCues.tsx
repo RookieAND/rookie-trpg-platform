@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClientCommand } from "@coc-vtt/shared";
 import { buildCues, filterCues, type Cue, type CueSource } from "../model/cues";
 import { assignSlot, clearSlot, emptySlots, parseSlots, SLOT_COUNT, type Slots } from "../model/slots";
+import { Dialog } from "@/shared/ui";
 
 const isTyping = (el: Element | null) => el instanceof HTMLElement && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
 
@@ -110,7 +111,7 @@ function Palette({ cues, assigning, onClose, onPick }: { cues: Cue[]; assigning:
   const active = Math.min(index, Math.max(0, results.length - 1));
 
   return (
-    <div role="dialog" aria-label="명령어 검색" aria-modal="true" onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 25, background: "rgba(0,0,0,.45)", display: "flex", justifyContent: "center", paddingTop: "18vh" }}>
+    <Dialog label="명령어 검색" onClose={onClose} onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 25, background: "rgba(0,0,0,.45)", display: "flex", justifyContent: "center", paddingTop: "18vh" }}>
       <div className="card" onClick={(e) => e.stopPropagation()} style={{ width: "min(520px, 92vw)", alignSelf: "flex-start", gap: 8, padding: 12, boxShadow: "0 24px 64px rgba(0,0,0,.6)" }}>
         <input
           autoFocus
@@ -120,8 +121,7 @@ function Palette({ cues, assigning, onClose, onPick }: { cues: Cue[]; assigning:
           value={query}
           onChange={(e) => (setQuery(e.target.value), setIndex(0))}
           onKeyDown={(e) => {
-            if (e.key === "Escape") onClose();
-            else if (e.key === "ArrowDown") (e.preventDefault(), setIndex(Math.min(active + 1, results.length - 1)));
+            if (e.key === "ArrowDown") (e.preventDefault(), setIndex(Math.min(active + 1, results.length - 1)));
             else if (e.key === "ArrowUp") (e.preventDefault(), setIndex(Math.max(active - 1, 0)));
             else if (e.key === "Enter" && results[active]) onPick(results[active]);
           }}
@@ -135,6 +135,6 @@ function Palette({ cues, assigning, onClose, onPick }: { cues: Cue[]; assigning:
           ))}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }
