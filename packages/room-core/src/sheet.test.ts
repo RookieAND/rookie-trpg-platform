@@ -251,3 +251,22 @@ describe("저장과 snapshot", () => {
     expect(Room.fromData(old).snapshot(kp).characters).toEqual([]);
   });
 });
+
+describe("세션 전 시트 글 편집", () => {
+  it("PL은 세션 전에도 소지품·배경·메모를 고칠 수 있지만 수치는 못 바꾼다", () => {
+    const room = room0({}, false);
+    const { c } = add(room, seo);
+    const text = room.handle(seo, cmd("sheet.patch", { characterId: c.id, ops: [{ path: "possessions", value: "손전등" }, { path: "backstory", value: "기자" }, { path: "notes", value: "메모" }] }));
+    expect(text.ok).toBe(true);
+    const stat = room.handle(seo, cmd("sheet.patch", { characterId: c.id, ops: [{ path: "hp", delta: -1 }] }));
+    expect(stat.ok).toBe(false);
+    if (!stat.ok) expect(stat.code).toBe("idle");
+    const mixed = room.handle(seo, cmd("sheet.patch", { characterId: c.id, ops: [{ path: "notes", value: "x" }, { path: "san", delta: -1 }] }));
+    expect(mixed.ok).toBe(false);
+  });
+  it("남의 캐릭터 글은 세션 전에도 못 고친다", () => {
+    const room = room0({}, false);
+    const { c } = add(room, seo);
+    expect(room.handle(han, cmd("sheet.patch", { characterId: c.id, ops: [{ path: "notes", value: "x" }] })).ok).toBe(false);
+  });
+});

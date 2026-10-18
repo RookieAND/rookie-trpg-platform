@@ -244,6 +244,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                   onSelect={setSheetId}
                   canAct={active && role !== "spectator"}
                   canEdit={role !== "spectator" && (active || isKp)}
+                  canEditText={role !== "spectator" && (!paused || isKp)}
                   onPatch={(characterId, ops) => send({ type: "sheet.patch", data: { characterId, ops } })}
                   isKp={isKp}
                   onSanCheck={(characterId, loss) => {

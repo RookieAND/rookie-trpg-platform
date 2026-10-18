@@ -19,6 +19,8 @@ interface Props {
   canAct: boolean;
   /** 수치·상태·메모 편집. 판정(굴림·SAN 체크)은 canAct. KP는 세션 밖·일시정지 중에도 고칠 수 있다. 생략하면 canAct를 따른다. */
   canEdit?: boolean;
+  /** 소지품·인물 배경·메모. 세션 전에도 고칠 수 있어서 canEdit와 따로 둔다. 생략하면 canEdit를 따른다. */
+  canEditText?: boolean;
   onPatch: (characterId: string, ops: SheetOp[]) => void;
   onRoll: (characterId: string, name: string, opts: RollOptions) => void;
   isKp: boolean;
@@ -38,7 +40,7 @@ const BARS: Array<{ path: StatPath; label: string }> = [
 ];
 
 /** 캐릭터 시트: 상태 바(±), 특성치·기능 굴리기, 성장 표시, 메모. */
-export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit = canAct, onPatch, onRoll, isKp, onSanCheck, onNewDay, onMadnessRoll, onDamage, onRemove }: Props) {
+export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit = canAct, canEditText = canEdit, onPatch, onRoll, isKp, onSanCheck, onNewDay, onMadnessRoll, onDamage, onRemove }: Props) {
   const c = characters.find((x) => x.id === selectedId) ?? characters[0];
   const [bonus, setBonus] = useState(0);
   const [difficulty, setDifficulty] = useState<RollOptions["difficulty"]>(undefined);
@@ -192,7 +194,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
           className="input"
           style={{ height: 64, padding: 12 }}
           defaultValue={c.possessions ?? ""}
-          disabled={!canEdit}
+          disabled={!canEditText}
           onBlur={(e) => e.currentTarget.value !== (c.possessions ?? "") && onPatch(c.id, [{ path: "possessions", value: e.currentTarget.value }])}
         />
       </label>
@@ -204,7 +206,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
           className="input"
           style={{ height: 80, padding: 12 }}
           defaultValue={c.backstory ?? ""}
-          disabled={!canEdit}
+          disabled={!canEditText}
           onBlur={(e) => e.currentTarget.value !== (c.backstory ?? "") && onPatch(c.id, [{ path: "backstory", value: e.currentTarget.value }])}
         />
       </label>
@@ -216,7 +218,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
           className="input"
           style={{ height: 80, padding: 12 }}
           defaultValue={c.notes}
-          disabled={!canEdit}
+          disabled={!canEditText}
           onBlur={(e) => e.currentTarget.value !== c.notes && onPatch(c.id, [{ path: "notes", value: e.currentTarget.value }])}
         />
       </label>

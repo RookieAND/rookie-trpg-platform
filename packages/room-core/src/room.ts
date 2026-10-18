@@ -428,7 +428,9 @@ export class Room {
     }
     // 세션이 없을 때는 KP만 장면을 준비할 수 있다(준비 모드).
     // 캐릭터 등록은 세션 전에도 할 수 있다(미리 불러오기).
-    if (this.status === "IDLE" && who.role !== "kp" && command.type !== "character.add" && command.type !== "character.remove") return fail("idle", "아직 세션이 시작되지 않았어요.");
+    // 시트의 글(소지품·인물 배경·메모)은 세션 전에도 PL이 미리 채울 수 있다. 수치·판정은 세션이 열려야 한다.
+    const textOnlyPatch = command.type === "sheet.patch" && command.data.ops.every((o) => o.path === "notes" || o.path === "possessions" || o.path === "backstory");
+    if (this.status === "IDLE" && who.role !== "kp" && command.type !== "character.add" && command.type !== "character.remove" && !textOnlyPatch) return fail("idle", "아직 세션이 시작되지 않았어요.");
 
     switch (command.type) {
       case "settings.effects":
