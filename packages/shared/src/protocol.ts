@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseCommand, type Difficulty, type RollOutcome } from "./dice";
+import { MAX_SUM_EXPR_LENGTH, parseCommand, type Difficulty, type RollOutcome } from "./dice";
 import { CHARACTERISTIC_KEYS, CONDITIONS, MADNESS_KINDS, MAX_WEAPONS, STAT_PATHS, type Character } from "./sheet";
 
 export type Role = "kp" | "pl" | "spectator";
@@ -472,7 +472,7 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
       memo: z.string().max(1000).default(""),
       sceneId: id.optional(),
       handoutIds: z.array(id).max(MAX_BEAT_HANDOUTS).default([]),
-      sanReward: z.string().trim().max(20).optional(),
+      sanReward: z.string().trim().max(MAX_SUM_EXPR_LENGTH).optional(),
       bgmTrackId: id.optional(),
     }),
   }),
@@ -527,8 +527,8 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
       .object({
         /** 엔딩 이름. 비우면 기록하지 않는다. */
         ending: z.string().trim().max(40).optional(),
-        /** 참가자마다 한 번씩 굴려 SAN에 더하는 보상 식(예: 1d6). */
-        sanReward: z.string().trim().max(30).optional(),
+        /** 참가자마다 한 번씩 굴려 SAN에 더하는 보상 식(예: 1d6, 1d6+1d4). */
+        sanReward: z.string().trim().max(MAX_SUM_EXPR_LENGTH).optional(),
         /** 성장 표시가 된 기능마다 성장 굴림을 한다. */
         growth: z.boolean().optional(),
       })

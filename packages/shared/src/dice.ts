@@ -146,6 +146,45 @@ export function parseCommand(input: string): ParseResult {
   return { ok: false, error: "알 수 없는 굴림 식이에요. 예: 1d100, 2d6+3, CC<=60, CC(1)<=60h" };
 }
 
+// ── 합산 식(SAN 보상 등) ─────────────────────────────────
+
+/** 합산 식 길이 상한. 굴림 요청(roll.request)의 식 길이와 같다. */
+export const MAX_SUM_EXPR_LENGTH = 64;
+
+export type SumTerm = { sign: 1 | -1; dice: { count: number; sides: number } } | { sign: 1 | -1; constant: number };
+export type SumParseResult = { ok: true; terms: SumTerm[] } | { ok: false; error: string };
+
+/**
+ * 주사위 항과 상수를 +/-로 이은 합산 식(예: 1d6+1d4, 1d10+2, 2d6)을 해석한다.
+ * 항 하나하나는 parseCommand로 해석하므로 개수·면 수 상한이 같고, 주사위 총 개수도 MAX_DICE까지다.
+ * 주사위 항은 더하기만 허용한다(빼는 주사위는 보상 식으로 쓰지 않는다). CC·CBR 같은 판정은 거절한다.
+ */
+export function parseSumExpression(input: string): SumParseResult {
+  const text = input.trim().replace(/\s+/g, "").toLowerCase();
+  if (!text) return { ok: false, error: "굴림 식이 비어 있어요." };
+  if (input.trim().length > MAX_SUM_EXPR_LENGTH) return { ok: false, error: `식은 ${MAX_SUM_EXPR_LENGTH}자까지 적을 수 있어요.` };
+  const bad = { ok: false, error: "주사위 식으로 적어 주세요. 예: 1d6, 1d6+1d4, 1d10+2" } as const;
+  const terms: SumTerm[] = [];
+  let diceTotal = 0;
+  for (const piece of text.split(/(?=[+-])/)) {
+    const sign: 1 | -1 = piece.startsWith("-") ? -1 : 1;
+    const body = /^[+-]/.test(piece) ? piece.slice(1) : piece;
+    if (/^\d{1,5}$/.test(body)) {
+      terms.push({ sign, constant: Number(body) });
+      continue;
+    }
+    const parsed = parseCommand(body);
+    if (!parsed.ok) return parsed.error.startsWith("알 수 없는") || parsed.error.includes("비어") ? bad : parsed;
+    if (parsed.command.kind !== "dice") return bad;
+    if (sign < 0) return { ok: false, error: "빼는 주사위는 쓸 수 없어요. 상수만 뺄 수 있어요." };
+    diceTotal += parsed.command.count;
+    if (diceTotal > MAX_DICE) return { ok: false, error: `주사위는 모두 합쳐 ${MAX_DICE}개까지 굴릴 수 있어요.` };
+    terms.push({ sign, dice: { count: parsed.command.count, sides: parsed.command.sides } });
+  }
+  if (!terms.some((t) => "dice" in t)) return bad;
+  return { ok: true, terms };
+}
+
 // ── 실행 ─────────────────────────────────────────────
 
 export type RollOutcome =
@@ -279,4 +318,23 @@ export function deriveStats(c: Characteristics, age: number) {
     ((db = `${1 + extra}d6`), (build = 2 + extra));
   }
   return { hp, mp, san, mov, damageBonus: db, build };
+}
+
+/** 합산 식을 서버 주사위 엔진으로 굴린다. 결과는 단일 식과 같은 dice 형식이다(rolls는 모든 주사위, modifier는 상수 합). */
+export function rollSumExpression(
+  input: string,
+  rng: Rng = defaultRng,
+): { ok: true; outcome: Extract<RollOutcome, { kind: "dice" }> } | { ok: false; error: string } {
+  const parsed = parseSumExpression(input);
+  if (!parsed.ok) return parsed;
+  const rolls: number[] = [];
+  let modifier = 0;
+  for (const t of parsed.terms) {
+    if ("constant" in t) modifier += t.sign * t.constant;
+    else {
+      const o = runCommand({ kind: "dice", count: t.dice.count, sides: t.dice.sides, modifier: 0 }, input.trim(), rng);
+      if (o.kind === "dice") rolls.push(...o.rolls);
+    }
+  }
+  return { ok: true, outcome: { kind: "dice", expr: input.trim(), rolls, modifier, total: rolls.reduce((a, b) => a + b, 0) + modifier } };
 }
