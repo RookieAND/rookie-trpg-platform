@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   HttpCode,
+  HttpException,
   Inject,
   NotFoundException,
   Param,
@@ -19,8 +20,9 @@ import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 import { AuthService } from "../../../identity/application/auth.service";
 import { DiscordNotifier } from "../../application/discord-notifier";
-import { RoomRegistry } from "../../application/room-registry";
+import { RoomLimitError, RoomRegistry } from "../../application/room-registry";
 import { isValidWebhookUrl } from "../../domain/discord";
+import { APP_VERSION } from "../../../version";
 
 const createSchema = z.object({ name: z.string().trim().min(1).max(60) });
 const inviteSchema = z.object({
@@ -50,7 +52,8 @@ export class RoomsController {
 
   @Get("health")
   health() {
-    return { ok: true, rooms: this.registry.roomCount() };
+    // 비밀이나 설정은 싣지 않는다. 배포 확인용 최소 정보만.
+    return { ok: true, rooms: this.registry.roomCount(), version: APP_VERSION, uptimeSec: Math.floor(process.uptime()) };
   }
 
   /** 내 룸 목록(내가 만들었거나 참가한 룸) */
@@ -73,7 +76,13 @@ export class RoomsController {
     const me = this.who(req);
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException("룸 이름을 입력해 주세요.");
-    const entry = await this.registry.create(me.userId, parsed.data.name);
+    const entry = await this.registry.create(me.userId, parsed.data.name).catch((e) => {
+      if (e instanceof RoomLimitError) {
+        if (e.code === "too_many_rooms") throw new HttpException("만들 수 있는 룸 수를 넘었어요. 안 쓰는 룸을 지워 주세요.", 403);
+        throw new HttpException("룸을 너무 많이 만들었어요. 잠시 뒤에 다시 해 주세요.", 429);
+      }
+      throw e;
+    });
     // 만든 사람은 이름도 함께 기억해 목록에 보이게 한다(접속 때 멤버로 등록된다).
     return { id: entry.meta.id, name: entry.meta.name, invite: entry.meta.invite };
   }

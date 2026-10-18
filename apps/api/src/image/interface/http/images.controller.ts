@@ -1,13 +1,14 @@
 import { Controller, Get, HttpException, Inject, NotFoundException, Param, Post, Req, Res, UnauthorizedException } from "@nestjs/common";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { AuthService } from "../../../identity/application/auth.service";
+import { ClientIpResolver } from "../../../identity/application/client-ip";
 import { ImageService } from "../../application/image.service";
 import { IMAGE_ID, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES } from "../../domain/image-storage";
 
 const MESSAGE = {
   too_large: "파일이 너무 커요. 이미지는 3MB, 오디오는 10MB까지 올릴 수 있어요.",
   bad_type: "지원하지 않는 파일이에요. 이미지는 PNG, JPG, GIF, WEBP, 오디오는 MP3, OGG, WAV, M4A만 올릴 수 있어요.",
-  rate_limited: "이미지를 너무 많이 올렸어요. 잠시 뒤에 다시 해 주세요.",
+  rate_limited: "파일을 너무 많이 올렸어요. 잠시 뒤에 다시 해 주세요.",
   empty: "빈 파일이에요.",
 } as const;
 
@@ -31,6 +32,7 @@ export class ImagesController {
   constructor(
     @Inject(ImageService) private readonly images: ImageService,
     @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(ClientIpResolver) private readonly ips: ClientIpResolver,
   ) {}
 
   @Post()
@@ -38,7 +40,7 @@ export class ImagesController {
     const me = this.auth.fromRequest(req);
     if (!me) throw new UnauthorizedException("로그인이 필요해요.");
     const body = await readBody(req, MAX_IMAGE_BYTES);
-    const r = body === "too_large" ? ({ ok: false, code: "too_large" } as const) : await this.images.upload(me.userId, body);
+    const r = body === "too_large" ? ({ ok: false, code: "too_large" } as const) : await this.images.upload(me.userId, body, this.ips.of(req));
     if (!r.ok) throw new HttpException(MESSAGE[r.code], r.code === "too_large" ? 413 : r.code === "rate_limited" ? 429 : 400);
     return { id: r.id };
   }
@@ -68,6 +70,7 @@ export class AudioController {
   constructor(
     @Inject(ImageService) private readonly images: ImageService,
     @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(ClientIpResolver) private readonly ips: ClientIpResolver,
   ) {}
 
   @Post()
@@ -75,7 +78,7 @@ export class AudioController {
     const me = this.auth.fromRequest(req);
     if (!me) throw new UnauthorizedException("로그인이 필요해요.");
     const body = await readBody(req, MAX_AUDIO_BYTES);
-    const r = body === "too_large" ? ({ ok: false, code: "too_large" } as const) : await this.images.uploadAudio(me.userId, body);
+    const r = body === "too_large" ? ({ ok: false, code: "too_large" } as const) : await this.images.uploadAudio(me.userId, body, this.ips.of(req));
     if (!r.ok) throw new HttpException(MESSAGE[r.code], r.code === "too_large" ? 413 : r.code === "rate_limited" ? 429 : 400);
     return { id: r.id };
   }

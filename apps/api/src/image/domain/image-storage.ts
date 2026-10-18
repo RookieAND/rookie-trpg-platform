@@ -13,6 +13,8 @@ export interface StoredImage {
 export interface ImageStorage {
   put(id: string, image: StoredImage): Promise<void>;
   get(id: string): Promise<StoredImage | null>;
+  /** 파일을 지운다. 없는 id면 아무 일도 없다. */
+  remove(id: string): Promise<void>;
 }
 
 export const MAX_IMAGE_BYTES = 3 * 1024 * 1024;

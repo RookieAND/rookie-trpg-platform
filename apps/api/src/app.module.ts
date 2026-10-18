@@ -22,7 +22,9 @@ import type { RoomRepository } from "./room/domain/room.repository";
 import { MemoryRoomRepository } from "./room/infrastructure/memory-room.repository";
 import { RoomsController } from "./room/interface/http/rooms.controller";
 import { RoomGateway } from "./room/interface/ws/room.gateway";
-import { RoomHub } from "./room/interface/ws/room.hub";
+import { RoomHub, type HubOptions } from "./room/interface/ws/room.hub";
+import { ClientIpResolver } from "./identity/application/client-ip";
+import { collectMediaIds } from "./media-refs";
 
 export interface AppOptions {
   store?: RoomRepository;
@@ -35,6 +37,9 @@ export interface AppOptions {
   /** 테스트에서 디스코드 전송을 바꿔 끼운다. */
   discord?: { gateway?: DiscordGateway; notifier?: NotifierOptions };
   joinTimeoutMs?: number;
+  hub?: HubOptions;
+  /** 프록시 겹 수. 0이면 X-Forwarded-For를 믿지 않는다. */
+  trustProxyHops?: number;
 }
 
 /**
@@ -59,9 +64,17 @@ export class AppModule {
       controllers: [RoomsController, CharactersController, LibraryController, ImagesController, AudioController],
       providers: [
         { provide: AuthService, useFactory: () => new AuthService(options.authenticate ?? devAuthenticate) },
+        { provide: ClientIpResolver, useFactory: () => new ClientIpResolver(options.trustProxyHops ?? 0) },
         {
           provide: RoomRegistry,
-          useFactory: () => new RoomRegistry({ store: options.store ?? new MemoryRoomRepository(), ...options.registry }),
+          inject: [ImageService],
+          useFactory: (images: ImageService) =>
+            new RoomRegistry({
+              store: options.store ?? new MemoryRoomRepository(),
+              // 룸을 지우면 그 룸이 참조하던 이미지·오디오도 함께 지운다.
+              onRemoving: async (entry) => void (await images.removeMany(collectMediaIds(entry.room.toData()))),
+              ...options.registry,
+            }),
         },
         {
           provide: DiscordNotifier,
@@ -71,7 +84,7 @@ export class AppModule {
           provide: RoomHub,
           inject: [RoomRegistry, AuthService, DiscordNotifier],
           useFactory: (registry: RoomRegistry, auth: AuthService, notifier: DiscordNotifier) =>
-            new RoomHub(registry, auth, options.joinTimeoutMs, notifier),
+            new RoomHub(registry, auth, options.joinTimeoutMs, notifier, options.hub),
         },
         { provide: VaultService, useFactory: () => new VaultService(options.vault ?? new MemoryVaultRepository()) },
         { provide: LibraryService, useFactory: () => new LibraryService(options.library ?? new MemoryLibraryRepository()) },

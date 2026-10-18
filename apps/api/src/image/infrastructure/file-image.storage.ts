@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { IMAGE_ID, type ImageStorage, type MediaMime, type StoredImage } from "../domain/image-storage";
 
@@ -22,6 +22,17 @@ export class FileImageStorage implements ImageStorage {
     if (!IMAGE_ID.test(id)) throw new Error("bad image id");
     await mkdir(this.dir, { recursive: true });
     await writeFile(join(this.dir, `${id}.${EXT[image.mime]}`), image.bytes);
+  }
+
+  async remove(id: string) {
+    if (!IMAGE_ID.test(id)) return;
+    for (const ext of Object.keys(MIME_BY_EXT)) {
+      try {
+        await unlink(join(this.dir, `${id}.${ext}`));
+      } catch {
+        /* 그 확장자로는 없다 */
+      }
+    }
   }
 
   async get(id: string) {

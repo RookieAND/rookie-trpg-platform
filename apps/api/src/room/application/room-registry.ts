@@ -18,6 +18,21 @@ export interface RegistryOptions {
   now?: () => number;
   /** 변경 후 저장까지 기다리는 시간 */
   saveDebounceMs?: number;
+  maxRoomsPerUser?: number;
+  roomsCreatedPerHour?: number;
+  /** 룸을 저장소에서 지우기 직전에 부른다(룸이 쓰던 이미지·오디오 정리용). 실패해도 삭제는 계속된다. */
+  onRemoving?: (entry: LoadedRoom) => Promise<void> | void;
+}
+
+/** 계정 한 명이 가질 수 있는 룸 수 */
+export const MAX_ROOMS_PER_USER = 20;
+/** 계정 한 명이 한 시간에 만들 수 있는 룸 수 */
+export const ROOMS_CREATED_PER_HOUR = 10;
+
+export class RoomLimitError extends Error {
+  constructor(readonly code: "too_many_rooms" | "create_rate_limited") {
+    super(code);
+  }
 }
 
 const token = (bytes: number) => randomBytes(bytes).toString("base64url");
@@ -32,6 +47,7 @@ export class RoomRegistry {
   /** 지운 룸. 늦게 도착한 저장이 되살리지 못하게 막는다. */
   private removed = new Set<string>();
   private removeListeners: Array<(roomId: string) => void> = [];
+  private createdAt = new Map<string, number[]>();
 
   constructor(private readonly opts: RegistryOptions) {
     this.now = opts.now ?? Date.now;
@@ -58,12 +74,39 @@ export class RoomRegistry {
     this.timers.delete(id);
     await (this.saving.get(id) ?? Promise.resolve());
     await this.opts.store.remove(id);
+    // 룸이 확실히 지워진 뒤에 파일을 치운다(저장소 삭제가 실패하면 파일은 남겨 둔다).
+    try {
+      await this.opts.onRemoving?.(entry);
+    } catch (e) {
+      console.warn(`room ${id} 딸린 파일 정리 실패:`, e instanceof Error ? e.message : e);
+    }
     this.loaded.delete(id);
     for (const cb of this.removeListeners) cb(id);
     return { ok: true as const };
   }
 
+  /** 이 사용자가 만든 룸 수(저장된 것과 방금 만들어 아직 저장 전인 것 포함) */
+  private async countOwned(userId: string): Promise<number> {
+    const stored = await this.opts.store.listFor(userId);
+    const ids = new Set(stored.filter((s) => s.meta.ownerId === userId).map((s) => s.meta.id));
+    for (const p of this.loaded.values()) {
+      const live = await p;
+      if (live?.meta.ownerId === userId) ids.add(live.meta.id);
+    }
+    return ids.size;
+  }
+
   async create(ownerId: string, name: string): Promise<LoadedRoom> {
+    const t = this.now();
+    const recent = (this.createdAt.get(ownerId) ?? []).filter((x) => t - x < 3_600_000);
+    if (recent.length >= (this.opts.roomsCreatedPerHour ?? ROOMS_CREATED_PER_HOUR)) throw new RoomLimitError("create_rate_limited");
+    // 동시에 들어온 요청이 한도를 함께 넘기지 못하게 먼저 자리를 잡고, 개수 상한에 걸리면 되돌린다.
+    recent.push(t);
+    this.createdAt.set(ownerId, recent);
+    if ((await this.countOwned(ownerId)) >= (this.opts.maxRoomsPerUser ?? MAX_ROOMS_PER_USER)) {
+      recent.pop();
+      throw new RoomLimitError("too_many_rooms");
+    }
     const meta: RoomMeta = {
       id: token(8),
       name: name.trim().slice(0, 60),

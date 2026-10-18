@@ -1,5 +1,5 @@
 import type { Out } from "@coc-vtt/room-core";
-import { formatNotification, type DiscordGateway } from "../domain/discord";
+import { formatNotification, redactWebhooks, type DiscordGateway } from "../domain/discord";
 import type { RoomMeta } from "../domain/room.repository";
 
 export interface NotifierOptions {
@@ -31,7 +31,7 @@ export class DiscordNotifier {
   ) {
     this.minInterval = opts.minIntervalMs ?? 500;
     this.maxQueue = opts.maxQueue ?? 20;
-    this.onError = opts.onError ?? ((id, e) => console.warn(`디스코드 알림 실패 (room ${id}):`, e instanceof Error ? e.message : e));
+    this.onError = opts.onError ?? ((id, e) => console.warn(`디스코드 알림 실패 (room ${id}):`, redactWebhooks(e instanceof Error ? e.message : String(e))));
   }
 
   /** 룸이 만든 이벤트 중 보낼 것만 골라 대기열에 넣는다. */
