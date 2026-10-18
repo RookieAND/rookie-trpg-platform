@@ -215,6 +215,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                     setTab("roll");
                   }}
                   onMadnessRoll={(characterId, mode) => send({ type: "madness.roll", data: { characterId, mode } })}
+                  onRemove={isKp || (role === "pl" && state.sessionStatus === "IDLE" && state.sessionNumber === 0 && sheet?.ownerId === me.userId) ? (characterId) => send({ type: "character.remove", data: { id: characterId } }) : undefined}
                   onRoll={(characterId, name, o: RollOptions) => {
                     send({ type: "roll.request", data: { secret: false, skill: { characterId, name, bonus: o.bonus, ...(o.difficulty ? { difficulty: o.difficulty } : {}) } } });
                     setTab("roll");

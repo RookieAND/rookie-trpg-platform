@@ -21,6 +21,8 @@ interface Props {
   onNewDay: (characterId: string) => void;
   onMadnessRoll: (characterId: string, mode: "realtime" | "summary") => void;
   onDamage: (characterId: string, weaponIndex: number) => void;
+  /** 이 캐릭터를 룸에서 뺄 수 있을 때만 준다(KP는 늘, PL은 첫 세션 전) */
+  onRemove?: (characterId: string) => void;
 }
 
 const BARS: Array<{ path: StatPath; label: string }> = [
@@ -31,7 +33,7 @@ const BARS: Array<{ path: StatPath; label: string }> = [
 ];
 
 /** 캐릭터 시트: 상태 바(±), 특성치·기능 굴리기, 성장 표시, 메모. */
-export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, onRoll, isKp, onSanCheck, onNewDay, onMadnessRoll, onDamage }: Props) {
+export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, onRoll, isKp, onSanCheck, onNewDay, onMadnessRoll, onDamage, onRemove }: Props) {
   const c = characters.find((x) => x.id === selectedId) ?? characters[0];
   const [bonus, setBonus] = useState(0);
   const [difficulty, setDifficulty] = useState<RollOptions["difficulty"]>(undefined);
@@ -193,6 +195,15 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, 
           onBlur={(e) => e.currentTarget.value !== c.notes && onPatch(c.id, [{ path: "notes", value: e.currentTarget.value }])}
         />
       </label>
+      {onRemove && (
+        <button
+          className="btn danger"
+          style={{ justifySelf: "start" }}
+          onClick={() => window.confirm(`'${c.name}'을(를) 이 룸에서 뺄까요? 시트 내용이 사라져요.${isKp ? "" : " 보관함의 원본은 그대로예요."}`) && onRemove(c.id)}
+        >
+          이 캐릭터 빼기
+        </button>
+      )}
     </div>
   );
 }

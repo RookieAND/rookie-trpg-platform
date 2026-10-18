@@ -346,7 +346,7 @@ export class Room {
     if (this.status === "PAUSED") return fail("paused", "세션이 일시정지 중이에요. KP가 돌아오면 이어서 진행해요.");
     // 세션이 없을 때는 KP만 장면을 준비할 수 있다(준비 모드).
     // 캐릭터 등록은 세션 전에도 할 수 있다(미리 불러오기).
-    if (this.status === "IDLE" && who.role !== "kp" && command.type !== "character.add") return fail("idle", "아직 세션이 시작되지 않았어요.");
+    if (this.status === "IDLE" && who.role !== "kp" && command.type !== "character.add" && command.type !== "character.remove") return fail("idle", "아직 세션이 시작되지 않았어요.");
 
     switch (command.type) {
       case "settings.effects":
@@ -1503,7 +1503,7 @@ export class Room {
     if (who.role === "pl") {
       // PL은 한 명만 등록할 수 있다. 바꾸고 싶으면 KP에게 부탁해 지운다.
       if ([...this.characters.values()].some((c) => c.ownerId === ownerId)) {
-        return fail("bad_sheet", "이미 캐릭터를 등록했어요. 바꾸려면 KP에게 요청해 주세요.");
+        return fail("bad_sheet", "이미 캐릭터를 등록했어요. 세션 시작 전에는 시트 아래 ‘이 캐릭터 빼기’로 바꿀 수 있어요.");
       }
     }
     if (d.skills.length > MAX_SKILLS) return fail("bad_sheet", `기능은 ${MAX_SKILLS}개까지 둘 수 있어요.`);
@@ -1535,8 +1535,12 @@ export class Room {
   }
 
   private characterRemove(who: Actor, id: string): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 캐릭터를 지울 수 있어요.");
     const c = this.characters.get(id);
+    if (who.role !== "kp") {
+      // PL은 자기 캐릭터를 첫 세션이 시작되기 전까지만 뺄 수 있다(잘못 불러온 캐릭터를 바꾸기 위해).
+      if (!c || who.role !== "pl" || c.ownerId !== who.userId) return fail("forbidden", "KP만 다른 사람의 캐릭터를 지울 수 있어요.");
+      if (this.status !== "IDLE" || this.sessionNumber > 0) return fail("forbidden", "세션이 시작된 뒤에는 KP만 캐릭터를 지울 수 있어요.");
+    }
     if (!c) return fail("not_found", "캐릭터를 찾을 수 없어요.");
     this.characters.delete(id);
     return ok(this.emit({ type: "character.removed", data: { id } }, this.characterAudience(c)));

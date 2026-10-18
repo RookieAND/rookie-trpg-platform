@@ -11,7 +11,11 @@ export function LoadCharacter({ me, send, disabled }: { me: Identity; send: (c: 
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    listCharacters(me).then(setItems).catch(() => setFailed(true));
+    const reload = () => listCharacters(me).then((r) => (setItems(r), setFailed(false))).catch(() => setFailed(true));
+    void reload();
+    // 새 탭에서 캐릭터를 만들고 돌아오면 목록을 다시 불러온다.
+    window.addEventListener("focus", reload);
+    return () => window.removeEventListener("focus", reload);
   }, [me]);
 
   const load = (c: VaultCharacter) =>
@@ -42,7 +46,7 @@ export function LoadCharacter({ me, send, disabled }: { me: Identity; send: (c: 
       <strong>내 캐릭터 불러오기</strong>
       {items.length === 0 && (
         <div style={{ color: "var(--muted)" }}>
-          보관함이 비어 있어요. <Link href="/characters" style={{ color: "var(--accent)" }}>캐릭터 만들기</Link>
+          보관함이 비어 있어요. <Link href="/characters" target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>새 탭에서 캐릭터 만들기</Link>, 만든 뒤 이 화면으로 돌아와요
         </div>
       )}
       {items.map((c) => (

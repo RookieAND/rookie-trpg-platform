@@ -88,6 +88,24 @@ describe("캐릭터 등록", () => {
     expect(room.handle(seo, cmd("character.add", sheet({ ownerId: "pl2" })))).toMatchObject({ ok: false, code: "forbidden" });
   });
 
+  it("PL은 첫 세션을 시작하기 전에는 자기 캐릭터를 뺄 수 있다(남의 것은 못 뺀다)", () => {
+    const room = room0({}, false);
+    const { c } = add(room, seo);
+    expect(room.handle(han, cmd("character.remove", { id: c.id }))).toMatchObject({ ok: false, code: "forbidden" });
+    expect(room.handle(seo, cmd("character.remove", { id: c.id })).ok).toBe(true);
+    expect(room.snapshot(seo).characters).toEqual([]);
+    // 다시 고를 수 있다
+    expect(add(room, seo).c.ownerId).toBe(seo.userId);
+  });
+
+  it("세션이 한 번이라도 시작됐다면 PL은 못 뺀다", () => {
+    const room = room0({}, false);
+    const { c } = add(room, seo);
+    room.handle(kp, cmd("session.start", {}));
+    room.handle(kp, cmd("session.end", { growth: false }));
+    expect(room.handle(seo, cmd("character.remove", { id: c.id }))).toMatchObject({ ok: false, code: "forbidden" });
+  });
+
   it("지우기는 KP만 한다", () => {
     const room = room0();
     const { c } = add(room, seo);
