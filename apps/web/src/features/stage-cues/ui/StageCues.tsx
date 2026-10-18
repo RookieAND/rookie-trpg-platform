@@ -123,7 +123,11 @@ function Palette({ cues, assigning, onClose, onPick }: { cues: Cue[]; assigning:
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") (e.preventDefault(), setIndex(Math.min(active + 1, results.length - 1)));
             else if (e.key === "ArrowUp") (e.preventDefault(), setIndex(Math.max(active - 1, 0)));
-            else if (e.key === "Enter" && results[active]) onPick(results[active]);
+            else if (e.key === "Enter" && results[active]) {
+              // 창이 닫히며 초점이 슬롯 버튼으로 돌아가도, 이 Enter가 그 버튼을 또 누르지 않게 한다
+              e.preventDefault();
+              onPick(results[active]);
+            }
           }}
         />
         <div role="listbox" style={{ display: "grid", gap: 2, maxHeight: "40vh", overflow: "auto" }}>

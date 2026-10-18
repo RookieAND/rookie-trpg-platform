@@ -260,6 +260,15 @@ try {
   await pl.getByTestId("san-day").getByText("오늘 손실 2").waitFor();
   await pl.getByRole("tab", { name: "굴림" }).click();
   step("SAN 체크가 로그에 남고 SAN과 오늘 손실이 갱신됨");
+  // SAN 효과: 5 이상 잃으면 절제된 화면 효과가 나오고, 내가 효과를 끄면 나오지 않는다
+  await pl.getByRole("tab", { name: "시트" }).click();
+  await pl.getByLabel("SAN 손실").fill("6/6");
+  await pl.getByRole("button", { name: "SAN 체크", exact: true }).click();
+  await pl.getByRole("button", { name: "SAN 체크 굴리기" }).click();
+  await pl.getByTestId("san-effect").waitFor();
+  await pl.getByTestId("san-effect").waitFor({ state: "detached", timeout: 6000 });
+  await pl.getByRole("tab", { name: "굴림" }).click();
+  step("SAN 큰 손실에는 화면 가장자리가 어두워지는 효과가 나왔다 사라짐");
 
   // 푸시와 행운: 서버 주사위라 결과를 정할 수 없으니 실패가 나올 때까지 시트 판정을 굴린다
   const rollSkill = async () => {
@@ -683,6 +692,31 @@ try {
   await pl.getByTestId("obj-소품1").waitFor();
   assert.equal(await pl.getByTestId("obj-서하").count(), 0);
   step("페이드 전환하면 PL 화면이 새 장면으로 통째로 바뀜");
+
+  // 파티 토큰: 체크를 끄면 PL 토큰을 새 장면으로 가져가지 않고, 켜 두면(기본) 가져간다
+  const plObjs = pl.locator('[data-testid^="obj-"]');
+  await kp2.getByRole("tab", { name: "장면 1" }).click(); // 활성 장면에서는 체크가 안 보여 다른 장면 탭을 연다
+  assert.equal(await kp2.getByTestId("bring-party").isChecked(), true, "기본은 켜짐");
+  for (const [scene, bring] of [["복도", false], ["회랑", true]]) {
+    await kp2.getByLabel("새 장면 이름").fill(scene);
+    await kp2.getByRole("button", { name: "추가", exact: true }).click();
+    await kp2.getByRole("tab", { name: scene }).click();
+    if (!bring) await kp2.getByTestId("bring-party").uncheck();
+    await kp2.getByRole("button", { name: "바로 전환" }).click();
+    await pl.getByTestId("scene-name").getByText(scene).waitFor();
+    await pl.waitForTimeout(400);
+    if (bring) assert.ok((await plObjs.count()) >= 1, "켜 두면 PL 토큰이 따라옴");
+    else assert.equal(await plObjs.count(), 0, "끄면 PL 토큰이 따라오지 않음");
+    if (!bring) {
+      // 활성 장면에서는 체크가 안 보이므로, 다른 장면 탭에서 다시 켠다
+      await kp2.getByRole("tab", { name: "서재" }).click();
+      await kp2.getByTestId("bring-party").check();
+    }
+  }
+  await kp2.getByRole("tab", { name: "서재" }).click();
+  await kp2.getByRole("button", { name: "바로 전환" }).click();
+  await pl.getByTestId("scene-name").getByText("서재").waitFor();
+  step("PL 토큰도 가져가기: 끄면 새 장면이 비고, 켜면 PL 토큰이 따라옴");
 
   // 연출: Ctrl+K 명령어 검색으로 장면을 바꾸고, 슬롯에 등록한 동작을 숫자 키로 실행
   await kp2.keyboard.press("Control+k");

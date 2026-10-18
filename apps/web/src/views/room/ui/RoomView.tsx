@@ -27,7 +27,8 @@ import { InitiativePanel } from "@/widgets/initiative-panel";
 import { HandoutSpotlight } from "@/widgets/handout-spotlight";
 import { RollEffect } from "@/widgets/roll-effect";
 import { AskBanner, RollPanel } from "@/widgets/roll-panel";
-import { SceneTransition } from "@/widgets/scene-transition";
+import { SceneTransition, useSceneFade } from "@/widgets/scene-transition";
+import { SanEffect } from "@/widgets/san-effect";
 import { RoomHeader } from "@/widgets/room-header";
 import { StartGuide } from "./StartGuide";
 import { PlayerGuide } from "./PlayerGuide";
@@ -110,6 +111,9 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     }
     return shownScene?.fogAreas ? { areas: shownScene.fogAreas, preview: false, explored: shownScene.fogExplored } : undefined;
   }, [isKp, shownScene, objects]);
+  // 페이드 전환: 어두워지는 동안은 이전 장면의 보드를 붙잡고, 다 어두워지면 새 장면으로 바꾼다.
+  const liveBoard = useMemo(() => ({ sceneId: shownSceneId, objects, background: shownScene?.background, fog: fogView, name: state.scenes[state.activeSceneId]?.name }), [shownSceneId, objects, shownScene, fogView, state.scenes, state.activeSceneId]);
+  const { shown: board, fade } = useSceneFade(liveBoard, state.transition, reconnectedAt.current, fx.enabled);
   const audio = useAudioEngine({ bgm: state.bgm, stopFadeMs: state.stopFadeMs, lastSe: state.lastSe, clockOffset: state.clockOffset, lastRollId: state.rolls.at(-1)?.id ?? null, lastRollAt: state.rolls.at(-1)?.at ?? null, ready: state.ready, prefs: sound.prefs });
 
   const handoutIds = useMemo(() => handoutList.map((h) => h.id), [handoutList]);
@@ -175,6 +179,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
       <EndSummaryCard summary={state.lastEnd} />
       <MadnessResultCard last={state.lastMadness} />
 
+      <SanEffect rolls={state.rolls} ready={state.ready} enabled={fx.enabled} />
       <RollEffect rolls={state.rolls} ready={state.ready} effects={state.effects} enabled={fx.enabled} />
       {spot && <HandoutSpotlight handout={spot} onClose={() => setDismissedN(state.spotlight?.n ?? 0)} />}
 
@@ -204,15 +209,15 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
             />
           )}
           {isKp && <SceneBar me={me} scenes={scenes} tracks={state.audioLibrary} activeId={state.activeSceneId} viewId={shownSceneId} onView={setViewSceneId} enabled canActivate={!paused} send={send} />}
-          <Board objects={objects} background={state.scenes[shownSceneId]?.background} me={{ userId: me.userId, role }} canInteract={canEditBoard} onMove={move} selectedId={selectedId} onSelect={setSelectedId} fog={fogView} onPing={canPing ? ping : undefined} pings={state.pings} sceneId={shownSceneId} turnTokenIds={turnTokenIds} onDragStart={onDragStart} animate={fx.enabled} onPick={isKp && fogPicking ? (x, y) => send({ type: "fog.reveal", data: { sceneId: shownSceneId, x, y, r: fogRadius } }) : undefined} />
+          <Board objects={board.objects} background={board.background} me={{ userId: me.userId, role }} canInteract={canEditBoard} onMove={move} selectedId={selectedId} onSelect={setSelectedId} fog={board.fog} onPing={canPing ? ping : undefined} pings={state.pings} sceneId={board.sceneId} turnTokenIds={turnTokenIds} onDragStart={onDragStart} animate={fx.enabled} onPick={isKp && fogPicking ? (x, y) => send({ type: "fog.reveal", data: { sceneId: shownSceneId, x, y, r: fogRadius } }) : undefined} />
           {isKp && (
             <StageCues roomId={roomId} enabled={state.sessionStatus !== "PAUSED"} send={send} source={cueSource} />
           )}
           {role === "pl" && state.ready && !hasToken && state.sessionStatus !== "PAUSED" && (
             <div className="dock dock-hint" role="status" data-testid="no-token-hint">아직 내 토큰이 없어요. KP에게 요청하거나 기다려요</div>
           )}
-          <SceneTransition transition={state.transition} reconnectedAt={reconnectedAt.current} enabled={fx.enabled} />
-          {!isKp && state.scenes[state.activeSceneId] && <div className="scene-name" data-testid="scene-name">{state.scenes[state.activeSceneId]!.name}</div>}
+          <SceneTransition fade={fade} />
+          {!isKp && board.name && <div className="scene-name" data-testid="scene-name">{board.name}</div>}
           {!isKp && fogView && (
             <div style={{ position: "absolute", right: 12, bottom: 12, zIndex: 2, color: "var(--muted)", fontSize: 12.5 }} data-testid="fog-note">
               <Hint term="fog" label="안개와 시야 설명">안개 켜짐</Hint> · 시야 밖은 어둡게 보여요

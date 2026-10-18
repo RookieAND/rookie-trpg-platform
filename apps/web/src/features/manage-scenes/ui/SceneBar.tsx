@@ -7,8 +7,10 @@ import { ImageUploadButton, Menu, MenuLabel, onTabListKeyDown } from "@/shared/u
 /** KP의 장면 막대: 장면을 고르고, 만들고, 지금 장면으로 바꾼다(컷/페이드). 활성이 아닌 장면은 PL에게 보이지 않아 미리 꾸며 둘 수 있다. */
 export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled, canActivate = enabled, send }: { me: Caller; scenes: Scene[]; tracks: AudioTrack[]; activeId: string; viewId: string; onView: (id: string) => void; enabled: boolean; canActivate?: boolean; send: (c: ClientCommand) => unknown }) {
   const [name, setName] = useState("");
+  const [bringParty, setBringParty] = useState(true); // PL 토큰을 새 장면으로 같이 가져갈지
   const viewing = scenes.find((s) => s.id === viewId);
   const isActive = viewId === activeId;
+  const partyOpt = bringParty ? {} : { bringParty: false };
 
   const create = () => {
     if (!name.trim()) return;
@@ -34,9 +36,13 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
         <div className="scene-row tools">
           {!isActive && (
             <>
-              <button className="btn sm" disabled={!canActivate} onClick={() => send({ type: "scene.activate", data: { id: viewing.id, transition: "cut" } })}>바로 전환</button>
-              <button className="btn sm" disabled={!canActivate} onClick={() => send({ type: "scene.activate", data: { id: viewing.id, transition: "fade" } })}>페이드 전환</button>
-              </>
+              <button className="btn sm" disabled={!canActivate} onClick={() => send({ type: "scene.activate", data: { id: viewing.id, transition: "cut", ...partyOpt } })}>바로 전환</button>
+              <button className="btn sm" disabled={!canActivate} onClick={() => send({ type: "scene.activate", data: { id: viewing.id, transition: "fade", ...partyOpt } })}>페이드 전환</button>
+              <label className="scene-hint" style={{ display: "inline-flex", alignItems: "center", gap: 4 }} title="끄면 PL 토큰을 새 장면에 따로 만들어 주지 않아요">
+                <input type="checkbox" data-testid="bring-party" checked={bringParty} onChange={(e) => setBringParty(e.target.checked)} />
+                PL 토큰도 가져가기
+              </label>
+            </>
           )}
           {!isActive && <span className="scene-hint">준비 중 — PL에게 안 보여요</span>}
           <Menu label="장면 설정" title="이 장면의 시작 지정, 배경, 배경음, 이름, 삭제" align="right">
