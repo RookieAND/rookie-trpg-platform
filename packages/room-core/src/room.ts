@@ -8,6 +8,8 @@ import {
   resolveSanCheck,
   rollDie,
   rollExpression,
+  rollSumExpression,
+  parseSumExpression,
   targetValue,
   type Character,
   type SheetOp,
@@ -489,8 +491,8 @@ export class Room {
     if (this.status === "IDLE") return fail("bad_message", "진행 중인 세션이 없어요.");
     // 보상 식은 상태를 바꾸기 전에 확인한다. 틀린 식 때문에 세션이 반쯤 끝나면 안 된다.
     if (d.sanReward) {
-      const probe = rollExpression(d.sanReward, () => 0);
-      if (!probe.ok || probe.outcome.kind !== "dice") return fail("bad_message", "SAN 보상은 1d6처럼 주사위 식으로 적어 주세요.");
+      const probe = parseSumExpression(d.sanReward);
+      if (!probe.ok) return fail("bad_message", `SAN 보상은 1d6+1d4처럼 주사위 식으로 적어 주세요. ${probe.error}`);
     }
 
     // 엔딩 비트에서 끝내면 그 비트의 이름과 SAN 보상을 기본값으로 쓴다.
@@ -507,8 +509,8 @@ export class Room {
       let changed = false;
 
       if (d.sanReward) {
-        const rolled = rollExpression(d.sanReward, this.rng);
-        if (rolled.ok && rolled.outcome.kind === "dice") {
+        const rolled = rollSumExpression(d.sanReward, this.rng);
+        if (rolled.ok) {
           const before = next.san;
           next.san = clamp(before + rolled.outcome.total, 0, deriveCharacter(next).limits.san);
           summary.sanRewards?.push({ characterId: c.id, name: c.name, roll: rolled.outcome.total, before, after: next.san });
@@ -664,8 +666,8 @@ export class Room {
     if (denied) return denied;
     if (d.sceneId && !this.scenes.has(d.sceneId)) return fail("not_found", "장면을 찾을 수 없어요.");
     if (d.sanReward) {
-      const probe = rollExpression(d.sanReward, () => 0);
-      if (!probe.ok || probe.outcome.kind !== "dice") return fail("bad_message", "SAN 보상은 1d6처럼 주사위 식으로 적어 주세요.");
+      const probe = parseSumExpression(d.sanReward);
+      if (!probe.ok) return fail("bad_message", `SAN 보상은 1d6+1d4처럼 주사위 식으로 적어 주세요. ${probe.error}`);
     }
     if (d.bgmTrackId && this.audio.find((t) => t.id === d.bgmTrackId)?.kind !== "bgm") return fail("not_found", "배경음을 찾을 수 없어요.");
     if (d.handoutIds.some((hid) => this.handouts.get(hid)?.kpOnly)) return fail("bad_message", "KP 전용 노트는 비트에 붙일 수 없어요.");

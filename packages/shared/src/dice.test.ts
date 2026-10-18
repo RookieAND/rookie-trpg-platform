@@ -4,7 +4,9 @@ import {
   evaluateLevel,
   meetsDifficulty,
   parseCommand,
+  parseSumExpression,
   rollExpression,
+  rollSumExpression,
   rollPercent,
   type Rng,
 } from "./dice";
@@ -206,5 +208,33 @@ describe("deriveStats", () => {
     expect(deriveStats({ ...base, STR: 74, SIZ: 50 }, 20)).toMatchObject({ damageBonus: "0", build: 0 });
     expect(deriveStats({ ...base, STR: 90, SIZ: 70 }, 20)).toMatchObject({ damageBonus: "1d4", build: 1 });
     expect(deriveStats({ ...base, STR: 90, SIZ: 100 }, 20)).toMatchObject({ damageBonus: "1d6", build: 2 });
+  });
+});
+
+describe("합산 식(parseSumExpression, rollSumExpression)", () => {
+  it("항을 더해 굴리고 rolls·modifier를 나눠 돌려준다", () => {
+    const r = rollSumExpression("1d6+1d4+2", seq(0.5, 0.99));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.outcome).toMatchObject({ kind: "dice", rolls: [4, 4], modifier: 2, total: 10 });
+  });
+  it("2d6, 1d10+2, 단일 항(기존 데이터)도 그대로 된다", () => {
+    expect(rollSumExpression("2d6", seq(0, 0.99))).toMatchObject({ ok: true, outcome: { total: 7 } });
+    expect(rollSumExpression("1d10+2", seq(0.99))).toMatchObject({ ok: true, outcome: { total: 12 } });
+    expect(rollSumExpression("1d6", seq(0.5))).toMatchObject({ ok: true, outcome: { total: 4, rolls: [4], modifier: 0 } });
+    expect(rollSumExpression(" 1D6 + 1d4 ", seq(0, 0))).toMatchObject({ ok: true, outcome: { total: 2 } });
+  });
+  it("상수는 뺄 수 있다", () => {
+    expect(rollSumExpression("1d6+1d4-1", seq(0.99, 0.99))).toMatchObject({ ok: true, outcome: { total: 9 } });
+  });
+  it("잘못된 식은 거절한다", () => {
+    for (const bad of ["", "abc", "CC<=50", "CBR(50,50)", "5", "+2", "1d6+", "1d6++2", "1d6+abc", "1d0", "1d1", "1d6-1d4", "1d6+CC", "1d6,1d4", "101d6", "1d6+100d6", "1d1001", "1d6*2"]) {
+      expect(parseSumExpression(bad).ok, bad).toBe(false);
+    }
+  });
+  it("주사위 총 개수와 식 길이는 기존 굴림 상한을 따른다", () => {
+    expect(parseSumExpression("50d6+50d6").ok).toBe(true);
+    expect(parseSumExpression("50d6+51d6").ok).toBe(false);
+    expect(parseSumExpression(Array(40).fill("1d6").join("+")).ok).toBe(false); // 길이 64 초과
+    expect(parseSumExpression(Array(16).fill("1d6").join("+")).ok).toBe(true);
   });
 });

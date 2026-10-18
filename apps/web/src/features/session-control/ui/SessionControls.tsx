@@ -51,7 +51,7 @@ function EndDialog({ onClose, send, defaults }: { onClose: () => void; send: (c:
       </label>
       <label style={{ display: "grid", gap: 4 }}>
         SAN 보상 (선택)
-        <input className="input" value={san} maxLength={30} onChange={(e) => setSan(e.target.value)} placeholder="예: 1d6 (참가자마다 한 번씩 굴려요)" />
+        <input className="input" value={san} maxLength={64} onChange={(e) => setSan(e.target.value)} placeholder="예: 1d6+1d4 (참가자마다 한 번씩 굴려요)" />
       </label>
       <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <input type="checkbox" checked={growth} onChange={() => setGrowth(!growth)} style={{ accentColor: "#7c86f7" }} />

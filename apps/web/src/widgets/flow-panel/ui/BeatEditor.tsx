@@ -62,7 +62,7 @@ export function BeatEditor({ initial, scenes, handouts, tracks, onSave, onCancel
           ))}
         </fieldset>
       )}
-      {kind === "ending" && <input className="input mono" aria-label="엔딩 SAN 보상" placeholder="SAN 보상 (예: 1d6)" value={san} onChange={(e) => setSan(e.target.value)} />}
+      {kind === "ending" && <input className="input mono" aria-label="엔딩 SAN 보상" placeholder="SAN 보상 (예: 1d6+1d4)" maxLength={64} value={san} onChange={(e) => setSan(e.target.value)} />}
       <textarea className="input" style={{ height: 72, padding: 12 }} aria-label="KP 메모" placeholder="KP 메모 (참가자에게 안 보여요)" value={memo} onChange={(e) => setMemo(e.target.value)} />
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button className="btn" onClick={onCancel}>취소</button>

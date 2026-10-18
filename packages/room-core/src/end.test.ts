@@ -85,9 +85,16 @@ describe("세션 종료 정산", () => {
     expect(s2.sanRewards![0]).toMatchObject({ before: 97, after: 99 });
   });
 
+  it("합산 식 보상은 항마다 굴려 더한다", () => {
+    const { room, id } = started(fixed(0.5), [], {});
+    const s = ended(must(room.handle(kp, cmd("session.end", { sanReward: "1d6+1d4+2" }))));
+    // 0.5 -> d6=4, d4=3, 상수 2
+    expect(s.sanRewards).toEqual([{ characterId: id, name: "윤서하", roll: 9, before: 60, after: 69 }]);
+  });
+
   it("주사위 식이 아닌 보상은 거절하고 세션은 그대로 둔다", () => {
     const { room } = started(fixed(0.5));
-    for (const bad of ["abc", "CC<=50", "1d0"]) {
+    for (const bad of ["abc", "CC<=50", "1d0", "1d6+", "1d6-1d4", "101d6"]) {
       const r = room.handle(kp, cmd("session.end", { sanReward: bad }));
       expect(r.ok).toBe(false);
     }

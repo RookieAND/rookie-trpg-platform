@@ -81,6 +81,8 @@ describe("세션 흐름: 편집", () => {
     expect(f.beats.find((b) => b.id === a.id)!.kind).toBe("progress");
     expect(room.handle(kp, cmd("flow.beat.upsert", { name: "C", kind: "progress", memo: "", handoutIds: [], sceneId: "nope" })).ok).toBe(false);
     expect(room.handle(kp, cmd("flow.beat.upsert", { name: "D", kind: "ending", memo: "", handoutIds: [], sanReward: "많이" })).ok).toBe(false);
+    expect(room.handle(kp, cmd("flow.beat.upsert", { name: "D", kind: "ending", memo: "", handoutIds: [], sanReward: "1d6+" })).ok).toBe(false);
+    expect(room.handle(kp, cmd("flow.beat.upsert", { name: "D", kind: "ending", memo: "", handoutIds: [], sanReward: "1d6+1d4" })).ok).toBe(true);
   });
 
   it("비트를 고치면 같은 id로 바뀌고, 지우면 이어진 분기도 사라진다", () => {
