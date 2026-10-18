@@ -196,6 +196,21 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .dock-hint { bottom: 12px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
 .cuebar { align-items: center; }
 
+/* 데스크톱 KP: 안개·연출·놓기·선택 도구를 지도 위에 띄우지 않고 지도 아래 줄로 쌓아, 지도 아래쪽을 가리지 않게 한다. */
+@media (min-width: 769px) {
+  .board:has(> .dock:not(.dock-hint)) { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto auto auto; overflow: hidden; }
+  .board:has(> .dock:not(.dock-hint)) > svg { grid-row: 1; grid-column: 1; min-height: 0; height: 100%; width: 100%; }
+  .board:has(> .dock:not(.dock-hint)) > .dock:not(.dock-hint), .board:has(> .dock:not(.dock-hint)) > .cuebar {
+    position: static; transform: none; z-index: auto; grid-column: 1; max-width: none !important; border-radius: 0; border-width: 1px 0 0; box-shadow: none; backdrop-filter: none;
+    background: var(--panel); flex-wrap: wrap; justify-content: center; padding: 4px 8px; }
+  .board:has(> .dock:not(.dock-hint)) > .dock[data-testid="fog-toolbar"] { grid-row: 2; }
+  .board:has(> .dock:not(.dock-hint)) > .cuebar { grid-row: 3; }
+  .board:has(> .dock:not(.dock-hint)) > .dock:not([data-testid]) { grid-row: 4; }
+  .board:has(> .dock:not(.dock-hint)) > .dock[data-testid="selected-bar"] { grid-row: 5; flex-direction: row; align-items: center; width: auto; }
+  .dock[data-testid="selected-bar"] .dock-input { width: auto; max-width: 150px; }
+  .dock[data-testid="selected-bar"] .btn { width: auto; }
+}
+
 /* PL 시작 가이드: ‘KP가 세션을 시작하기를 기다리고 있어요’ 배너(top 108px) 아래에 놓는다 */
 .guide-pl { top: 150px; }
 
