@@ -1,12 +1,22 @@
 import { PINGS_PER_SECOND, pingRecipients } from "./ping";
 import {
   BGM_STOP,
+  CHARACTERISTIC_KEYS,
   MAX_SKILLS,
   SAN_CAP,
   SKILL_CAP,
   defaultRng,
+  applyDamage,
+  applyHealing,
+  applyManualHp,
   deriveCharacter,
+  evaluateLevel,
+  groupSummary,
   meetsDifficulty,
+  opposedSummary,
+  resolveOpposed,
+  rollPercent,
+  statusKeys,
   resolveSanCheck,
   rollDie,
   rollExpression,
@@ -14,6 +24,10 @@ import {
   parseSumExpression,
   targetValue,
   type Character,
+  type Condition,
+  type DamageApplied,
+  type GroupEntry,
+  type OpposedSideOutcome,
   type SheetOp,
   type ClientCommand,
   type ErrorCode,
@@ -156,6 +170,8 @@ export interface RoomData {
   /** 이전 버전에서 저장한 데이터에는 없을 수 있다. */
   characters?: Character[];
   handouts?: Handout[];
+  /** 이미 적용한 피해(굴림 id → 캐릭터 id들). 이전 버전에서 저장한 데이터에는 없을 수 있다. */
+  damageApplied?: Record<string, string[]>;
 }
 
 /**
@@ -171,6 +187,10 @@ export const KP_BLOCKED_WHILE_PAUSED: ReadonlySet<ClientCommand["type"]> = new S
   "san.check",
   "madness.roll",
   "damage.roll",
+  "damage.apply",
+  "hp.heal",
+  "roll.opposed",
+  "roll.group",
   "initiative.start",
   "initiative.add",
   "initiative.remove",
@@ -209,6 +229,8 @@ export class Room {
   private handouts = new Map<string, Handout>();
   private buffer: Out[] = [];
   private rollTimes = new Map<string, number[]>();
+  /** 굴림 id → 이미 피해를 적용한 캐릭터 id들(같은 피해를 두 번 적용하지 않게) */
+  private damageApplied = new Map<string, Set<string>>();
 
   private readonly rng: Rng;
   private readonly now: () => number;
@@ -246,6 +268,7 @@ export class Room {
       rolls: this.rolls.map((r) => ({ ...r })),
       characters: [...this.characters.values()].map(cloneCharacter),
       handouts: [...this.handouts.values()].map((h) => cloneHandout(h)),
+      damageApplied: Object.fromEntries([...this.damageApplied].map(([k, v]) => [k, [...v]])),
     };
   }
 
@@ -275,6 +298,7 @@ export class Room {
     room.rolls = data.rolls.map((r) => ({ ...r }));
     for (const c of data.characters ?? []) room.characters.set(c.id, cloneCharacter(c));
     for (const h of data.handouts ?? []) room.handouts.set(h.id, cloneHandout(h));
+    for (const [k, v] of Object.entries(data.damageApplied ?? {})) room.damageApplied.set(k, new Set(v));
     return room;
   }
 
@@ -371,6 +395,7 @@ export class Room {
       rolls: this.rolls.filter((r) => !r.secret || viewer.role === "kp").map((r) => ({ ...r })),
       characters: [...this.characters.values()].filter((c) => canSeeCharacter(c, viewer)).map(cloneCharacter),
       handouts: [...this.handouts.values()].filter((h) => canSeeHandout(h, viewer)).map((h) => cloneHandout(h)),
+      damageApplied: viewer.role === "kp" ? Object.fromEntries([...this.damageApplied].map(([k, v]) => [k, [...v]])) : {},
     };
   }
 
@@ -527,6 +552,14 @@ export class Room {
         return this.madnessRoll(who, command.data);
       case "damage.roll":
         return this.damageRoll(who, command.data);
+      case "damage.apply":
+        return this.damageApply(who, command.data);
+      case "hp.heal":
+        return this.hpHeal(who, command.data);
+      case "roll.opposed":
+        return this.rollOpposed(who, command.data);
+      case "roll.group":
+        return this.rollGroup(who, command.data);
       case "roll.push":
         return this.rollPush(who, command.data.rollId);
       case "luck.spend":
@@ -923,7 +956,7 @@ export class Room {
   // ── 전투 순서 ──────────────────────────────────────────
 
   private initiativeOut(): Result {
-    const full = cloneInitiative(this.initiative);
+    const full = this.initiativeFor({ role: "kp", userId: "" });
     const masked = this.initiativeFor({ role: "pl", userId: "" });
     // 가릴 칸이 없으면 모두에게 한 번만 보낸다.
     if (JSON.stringify(full) === JSON.stringify(masked)) return ok(this.emit({ type: "initiative.updated", data: { initiative: full } }, { roles: ALL_ROLES }));
@@ -939,12 +972,14 @@ export class Room {
    */
   private initiativeFor(viewer: Pick<Member, "userId" | "role">): Initiative | null {
     if (!this.initiative) return null;
-    if (viewer.role === "kp") return cloneInitiative(this.initiative);
     const copy = cloneInitiative(this.initiative)!;
+    // 시트가 있는 칸에는 부상 상태(부상·중상·기절·빈사·사망)를 붙인다. 저장하지 않고 보낼 때마다 시트에서 읽는다.
     copy.entries = copy.entries.map((e) => {
       const c = e.characterId ? this.characters.get(e.characterId) : undefined;
-      if (!c || !this.isNpcSheet(c)) return e;
-      return { id: e.id, name: "알 수 없는 상대", dex: 0, hidden: true };
+      if (!c) return e;
+      if (viewer.role !== "kp" && this.isNpcSheet(c)) return { id: e.id, name: "알 수 없는 상대", dex: 0, hidden: true };
+      const status = statusKeys(c);
+      return status.length ? { ...e, status } : e;
     });
     return copy;
   }
@@ -1016,11 +1051,29 @@ export class Room {
     const init = this.initiative;
     if (!init || init.entries.length === 0) return fail("bad_message", "넘길 차례가 없어요.");
     init.turn += 1;
+    let wrapped = false;
     if (init.turn >= init.entries.length) {
       init.turn = 0;
       init.round += 1;
+      wrapped = true;
     }
-    return this.initiativeOut();
+    const ticks = wrapped ? this.tickDying() : [];
+    const out = this.initiativeOut();
+    return out.ok ? ok(...ticks, ...out.out) : out;
+  }
+
+  /** 라운드가 오를 때 빈사인 캐릭터의 라운드 세기를 올린다. 매 라운드 CON 판정은 GM이 이 세기를 보고 요청한다. */
+  private tickDying(): Out[] {
+    const outs: Out[] = [];
+    for (const c of this.characters.values()) {
+      if (!c.conditions?.includes("dying")) continue;
+      const next = cloneCharacter(c);
+      next.dyingRounds = (c.dyingRounds ?? 0) + 1;
+      next.rev = c.rev + 1;
+      this.characters.set(c.id, next);
+      outs.push(this.emit({ type: "character.updated", data: cloneCharacter(next) }, this.characterAudience(next)));
+    }
+    return outs;
   }
 
   private initiativeEnd(who: Actor): Result {
@@ -1498,14 +1551,28 @@ export class Room {
       check = { characterId: c.id, name: d.skill.name, bonus: d.skill.bonus, ...(d.skill.difficulty ? { difficulty: d.skill.difficulty } : {}) };
     }
 
-    const rolled = rollExpression(expr, this.rng);
+    // 식에 db가 있으면 굴리는 캐릭터의 피해 보너스를 쓴다: 고른 캐릭터, 없으면 내 캐릭터가 하나일 때 그 캐릭터.
+    let damageBonus: string | undefined;
+    if (!d.skill && /db/i.test(expr)) {
+      let who_c: Character | undefined;
+      if (d.characterId) {
+        who_c = this.characters.get(d.characterId);
+        if (!who_c || !canSeeCharacter(who_c, who)) return fail("not_found", "캐릭터를 찾을 수 없어요.");
+      } else {
+        const mine = [...this.characters.values()].filter((c) => c.ownerId === who.userId);
+        if (mine.length === 1) who_c = mine[0];
+        else return fail("bad_roll", mine.length === 0 ? "db(피해 보너스)는 캐릭터 시트가 있어야 쓸 수 있어요. 캐릭터를 골라 주세요." : "db를 쓰려면 캐릭터를 골라 주세요.");
+      }
+      damageBonus = deriveCharacter(who_c as Character).damageBonus;
+    }
+    const rolled = rollExpression(expr, this.rng, damageBonus === undefined ? {} : { damageBonus });
     if (!rolled.ok) return fail("bad_roll", rolled.error);
 
     return this.logRoll(who, expr.trim(), label, rolled.outcome, d.secret, check ? { check } : {});
   }
 
   /** 굴림을 로그에 남기고 알린다. 비밀 굴림은 GM에게만 결과를 보낸다. */
-  private logRoll(who: Actor, expr: string, label: string | undefined, outcome: RollLogEntry["outcome"], secret: boolean, meta: Partial<Pick<RollLogEntry, "check" | "pushOf" | "luckOf">>, ...extra: Out[]): Result {
+  private logRoll(who: Actor, expr: string, label: string | undefined, outcome: RollLogEntry["outcome"], secret: boolean, meta: Partial<Pick<RollLogEntry, "check" | "pushOf" | "luckOf" | "damage">>, ...extra: Out[]): Result {
     const entry: RollLogEntry = {
       id: this.newId(),
       userId: who.userId,
@@ -1532,7 +1599,7 @@ export class Room {
     );
   }
 
-  /** 무기 피해를 굴린다. 식 끝에 +db를 쓰면 시트의 피해 보너스를 따로 굴려 더한다. */
+  /** 무기 피해를 굴린다. 식에 db가 있으면 시트의 피해 보너스를 굴려 넣는다(예: 1d6+db, 1d10+db/2). */
   private damageRoll(who: Actor, d: { characterId: string; weaponIndex: number }): Result {
     if (who.role === "spectator") return fail("forbidden", "관전자는 굴릴 수 없어요.");
     const c = this.characters.get(d.characterId);
@@ -1541,29 +1608,204 @@ export class Room {
     if (!weapon) return fail("not_found", "무기를 찾을 수 없어요.");
     if (this.tooMany(`roll:${who.userId}`, this.rollsPerSecond)) return fail("rate_limited", "너무 빨리 굴리고 있어요. 잠시 뒤에 다시 해 주세요.");
 
-    const text = weapon.damage.trim().toLowerCase();
-    const withDb = text.endsWith("+db");
-    const base = withDb ? text.slice(0, -3) : text;
-    const rolls: number[] = [];
-    let modifier = 0;
-    const add = (expr: string): boolean => {
-      if (/^[+-]?\d{1,3}$/.test(expr)) {
-        modifier += Number(expr);
-        return true;
-      }
-      const r = rollExpression(expr, this.rng);
-      if (!r.ok || r.outcome.kind !== "dice") return false;
-      rolls.push(...r.outcome.rolls);
-      modifier += r.outcome.modifier;
-      return true;
-    };
-    if (!add(base)) return fail("bad_roll", "무기의 피해 식이 올바르지 않아요.");
-    if (withDb) {
-      const db = deriveCharacter(c).damageBonus;
-      if (db !== "0" && !add(db)) return fail("bad_roll", "피해 보너스를 굴리지 못했어요.");
+    const text = weapon.damage.trim();
+    const damageBonus = deriveCharacter(c).damageBonus;
+    // 고정값(예: 5)은 주사위가 없는 식이라 엔진이 받지 않으므로 따로 센다.
+    if (/^\d{1,3}$/.test(text)) {
+      return this.logRoll(who, weapon.damage, `${c.name} · ${weapon.name} 피해`, { kind: "dice", expr: weapon.damage, rolls: [], modifier: Number(text), total: Number(text) }, false, { damage: true });
     }
-    const total = Math.max(0, rolls.reduce((a, b) => a + b, 0) + modifier);
-    return this.logRoll(who, weapon.damage, `${c.name} · ${weapon.name} 피해`, { kind: "dice", expr: weapon.damage, rolls, modifier, total }, false, {});
+    const rolled = rollExpression(text, this.rng, { damageBonus });
+    if (!rolled.ok || rolled.outcome.kind !== "dice") return fail("bad_roll", rolled.ok ? "무기의 피해 식이 올바르지 않아요." : rolled.error);
+    const o = rolled.outcome;
+    // 피해는 0 밑으로 내려가지 않는다(피해 보너스가 마이너스인 약한 무기).
+    const total = Math.max(0, o.total);
+    return this.logRoll(who, weapon.damage, `${c.name} · ${weapon.name} 피해`, { ...o, expr: weapon.damage, total, modifier: total - o.rolls.reduce((a, b) => a + b, 0) }, false, { damage: true });
+  }
+
+  // ── 대항 판정·그룹 판정 ──────────────────────────────────
+
+  /** 이름이 기능이 아니라 특성치·행운으로 굴리는 것인가(대항 판정이 비길 때 값 대신 다시 굴리는 기준) */
+  private isCharacteristicRoll(c: Character, name: string): boolean {
+    if (c.skills[name]) return false;
+    return (CHARACTERISTIC_KEYS as readonly string[]).includes(name.toUpperCase()) || name === "행운" || name.toUpperCase() === "LUCK";
+  }
+
+  private rollSide(c: Character, name: string): OpposedSideOutcome | { error: string } {
+    const target = targetValue(c, name);
+    if (target === null) return { error: `${c.name}의 '${name}' 기능이 시트에 없어요.` };
+    const percent = rollPercent(this.rng, 0);
+    return { characterId: c.id, character: c.name, name, target, percent, level: evaluateLevel(percent.total, target) };
+  }
+
+  /**
+   * 대항 판정: 두 시트가 각자 기능·특성치로 한 번씩 굴려 한 항목으로 남긴다. 규칙은 opposed.ts.
+   * 보너스·페널티, 푸시, 행운은 없다(시트 판정 조건을 기록에 남기지 않는다). GM은 아무 시트나 고르고,
+   * PL은 자기 시트와 다른 PL의 시트만 고른다(NPC 시트는 PL이 볼 수 없으니 GM이 시작한다).
+   */
+  private rollOpposed(who: Actor, d: Extract<ClientCommand, { type: "roll.opposed" }>["data"]): Result {
+    if (who.role === "spectator") return fail("forbidden", "관전자는 굴릴 수 없어요.");
+    if (d.secret && who.role !== "kp") return fail("forbidden", "비밀 굴림은 GM만 쓸 수 있어요.");
+    const a = this.characters.get(d.a.characterId);
+    let b: Character | undefined;
+    if (d.b.userId !== undefined) {
+      if (this.members.get(d.b.userId)?.role !== "pl") return fail("not_found", "그 참가자는 이 룸의 PL이 아니에요.");
+      b = [...this.characters.values()].find((c) => c.ownerId === d.b.userId);
+      if (!b) return fail("not_found", "그 PL은 아직 캐릭터가 없어요.");
+    } else b = this.characters.get(d.b.characterId as string);
+    if (!a || !b) return fail("not_found", "캐릭터를 찾을 수 없어요.");
+    if (a.id === b.id) return fail("bad_roll", "서로 다른 두 캐릭터를 골라 주세요.");
+    if (who.role === "pl") {
+      if (a.ownerId !== who.userId) return fail("forbidden", "내 캐릭터로만 대항 판정을 시작할 수 있어요.");
+      if (this.isNpcSheet(b)) return fail("forbidden", "상대가 GM의 캐릭터면 GM이 대항 판정을 시작해 주세요.");
+    }
+    if (this.tooMany(`roll:${who.userId}`, this.rollsPerSecond)) return fail("rate_limited", "너무 빨리 굴리고 있어요. 잠시 뒤에 다시 해 주세요.");
+    const sa = this.rollSide(a, d.a.name);
+    if ("error" in sa) return fail("bad_roll", sa.error);
+    const sb = this.rollSide(b, d.b.name);
+    if ("error" in sb) return fail("bad_roll", sb.error);
+    const res = resolveOpposed(
+      { level: sa.level, value: sa.target, characteristic: this.isCharacteristicRoll(a, d.a.name) },
+      { level: sb.level, value: sb.target, characteristic: this.isCharacteristicRoll(b, d.b.name) },
+    );
+    const outcome: RollLogEntry["outcome"] = {
+      kind: "opposed",
+      expr: "대항 판정",
+      a: sa,
+      b: sb,
+      winner: res.winner,
+      reason: res.reason,
+      statusQuo: res.winner === "none",
+      summary: opposedSummary(sa, sb, res.winner, res.reason),
+    };
+    return this.logRoll(who, "대항 판정", `${a.name} · ${d.a.name} 대 ${b.name} · ${d.b.name}`, outcome, d.secret, {});
+  }
+
+  /** 그룹 판정(GM 전용): 캐릭터가 있는 PL들이 같은 기능으로 한꺼번에 굴린다. 한 항목으로 남고 푸시·행운은 없다. */
+  private rollGroup(who: Actor, d: Extract<ClientCommand, { type: "roll.group" }>["data"]): Result {
+    if (who.role !== "kp") return fail("forbidden", "그룹 판정은 GM만 요청할 수 있어요.");
+    for (const uid of d.userIds ?? []) if (this.members.get(uid)?.role !== "pl") return fail("not_found", "그 참가자는 이 룸의 PL이 아니에요.");
+    if (this.tooMany(`roll:${who.userId}`, this.rollsPerSecond)) return fail("rate_limited", "너무 빨리 굴리고 있어요. 잠시 뒤에 다시 해 주세요.");
+    const entries: GroupEntry[] = [];
+    const skipped: string[] = [];
+    for (const c of this.characters.values()) {
+      if (this.members.get(c.ownerId)?.role !== "pl") continue;
+      if (d.userIds && !d.userIds.includes(c.ownerId)) continue;
+      const side = this.rollSide(c, d.name);
+      if ("error" in side) {
+        skipped.push(c.name);
+        continue;
+      }
+      entries.push({ characterId: c.id, character: c.name, target: side.target, percent: side.percent, level: side.level, success: meetsDifficulty(side.level, d.difficulty ?? "regular") });
+    }
+    if (entries.length === 0) return fail("not_found", skipped.length ? `${josa(d.name, "이/가")} 있는 PL 캐릭터가 없어요.` : "굴릴 PL 캐릭터가 없어요.");
+    const outcome: RollLogEntry["outcome"] = {
+      kind: "group",
+      expr: `그룹 판정 · ${d.name}`,
+      name: d.name,
+      ...(d.difficulty ? { difficulty: d.difficulty } : {}),
+      entries,
+      skipped,
+      successes: entries.filter((e) => e.success).length,
+      summary: groupSummary(d.name, entries, skipped),
+    };
+    return this.logRoll(who, outcome.expr, `${d.name} 그룹 판정`, outcome, d.secret, {});
+  }
+
+  // ── 피해 적용·회복 ──────────────────────────────────────
+
+  /** 시트에 상태(중상·기절·빈사·사망)를 넣는다. 빈사가 새로 시작되면 라운드를 0으로, 풀리면 지운다. */
+  private setConditions(next: Character, conds: readonly Condition[]): void {
+    const wasDying = next.conditions?.includes("dying") ?? false;
+    const set = new Set(conds);
+    if (set.has("dead")) {
+      set.clear();
+      set.add("dead");
+    }
+    if (set.has("dying")) set.delete("unconscious");
+    if (set.size) next.conditions = [...set];
+    else delete next.conditions;
+    if (set.has("dying")) {
+      if (!wasDying || next.dyingRounds === undefined) next.dyingRounds = 0;
+    } else delete next.dyingRounds;
+  }
+
+  /** 시트가 바뀐 캐릭터가 전투 순서에 있으면 상태 표시를 다시 보낸다. */
+  private initiativeRefresh(c: Character): Out[] {
+    if (!this.initiative?.entries.some((e) => e.characterId === c.id)) return [];
+    const r = this.initiativeOut();
+    return r.ok ? r.out : [];
+  }
+
+  /**
+   * GM이 피해를 캐릭터의 HP에 적용한다. 피해는 굴림 기록(rollId)의 합계나 직접 적은 값이고, 방어구를 먼저 뺀다.
+   * 중상·기절·빈사·사망은 서버가 정한다(wounds.ts). 같은 굴림을 같은 캐릭터에게 두 번 적용하지는 못한다.
+   */
+  private damageApply(who: Actor, d: Extract<ClientCommand, { type: "damage.apply" }>["data"]): Result {
+    if (who.role !== "kp") return fail("forbidden", "피해는 GM만 적용할 수 있어요.");
+    const c = this.characters.get(d.characterId);
+    if (!c) return fail("not_found", "캐릭터를 찾을 수 없어요.");
+    let amount = d.amount ?? 0;
+    if (d.rollId !== undefined) {
+      const roll = this.rolls.find((r) => r.id === d.rollId);
+      if (!roll || roll.outcome.kind !== "dice") return fail("not_found", "피해로 쓸 수 있는 굴림이 아니에요.");
+      if (this.damageApplied.get(roll.id)?.has(c.id)) return fail("bad_roll", `이 피해는 이미 ${c.name}에게 적용했어요.`);
+      amount = Math.max(0, roll.outcome.total);
+    }
+    if (c.conditions?.includes("dead")) return fail("bad_sheet", `${josa(c.name, "은/는")} 이미 사망했어요. 사망 표시를 풀면 다시 적용할 수 있어요.`);
+
+    const maxHp = deriveCharacter(c).limits.hp;
+    const r = applyDamage({ hp: c.hp, maxHp, conditions: c.conditions ?? [] }, amount, { armor: d.armor });
+    const next = cloneCharacter(c);
+    next.hp = r.hp;
+    this.setConditions(next, r.conditions);
+    if (r.hp !== c.hp || JSON.stringify(next.conditions) !== JSON.stringify(c.conditions)) next.rev = c.rev + 1;
+    this.characters.set(c.id, next);
+    if (d.rollId !== undefined) {
+      const set = this.damageApplied.get(d.rollId) ?? new Set<string>();
+      set.add(c.id);
+      this.damageApplied.set(d.rollId, set);
+      if (this.damageApplied.size > MAX_ROLL_LOG * 2) {
+        const live = new Set(this.rolls.map((x) => x.id));
+        for (const k of this.damageApplied.keys()) if (!live.has(k)) this.damageApplied.delete(k);
+      }
+    }
+    const result: DamageApplied = {
+      ...(d.rollId !== undefined ? { rollId: d.rollId } : {}),
+      characterId: c.id,
+      name: c.name,
+      amount,
+      armor: d.armor,
+      dealt: r.dealt,
+      hpBefore: r.hpBefore,
+      hp: r.hp,
+      kind: r.kind,
+      newMajor: r.newMajor,
+      massive: r.massive,
+      conRoll: r.conRoll,
+    };
+    const aud = this.characterAudience(next);
+    return ok(
+      ...(next.rev !== c.rev ? [this.emit({ type: "character.updated", data: cloneCharacter(next) }, aud)] : []),
+      this.emit({ type: "damage.applied", data: result }, aud),
+      ...this.initiativeRefresh(next),
+    );
+  }
+
+  /** GM이 HP를 회복한다: 응급처치(+1), 자연 회복, 직접 회복. 풀리는 상태는 wounds.ts의 기준을 따른다. */
+  private hpHeal(who: Actor, d: Extract<ClientCommand, { type: "hp.heal" }>["data"]): Result {
+    if (who.role !== "kp") return fail("forbidden", "회복은 GM만 적용할 수 있어요.");
+    const c = this.characters.get(d.characterId);
+    if (!c) return fail("not_found", "캐릭터를 찾을 수 없어요.");
+    if (c.conditions?.includes("dead")) return fail("bad_sheet", `${josa(c.name, "은/는")} 사망해서 회복할 수 없어요. 사망 표시를 먼저 풀어 주세요.`);
+    const maxHp = deriveCharacter(c).limits.hp;
+    const r = applyHealing({ hp: c.hp, maxHp, conditions: c.conditions ?? [] }, d.kind, d.amount ?? 1);
+    const next = cloneCharacter(c);
+    next.hp = r.hp;
+    this.setConditions(next, r.conditions);
+    if (r.hp === c.hp && JSON.stringify(next.conditions) === JSON.stringify(c.conditions)) return ok();
+    next.rev = c.rev + 1;
+    this.characters.set(c.id, next);
+    return ok(this.emit({ type: "character.updated", data: cloneCharacter(next) }, this.characterAudience(next)), ...this.initiativeRefresh(next));
   }
 
   /** 실패한 시트 판정을 같은 조건으로 한 번 더 굴린다. 한 굴림당 한 번이고, 푸시한 굴림은 다시 푸시할 수 없다. */
@@ -1849,7 +2091,15 @@ export class Room {
     const limits = deriveCharacter(next).limits;
     for (const op of d.ops) {
       switch (op.path) {
-        case "hp":
+        case "hp": {
+          // HP를 직접 고쳐도 상태(중상·기절·빈사)는 서버가 HP 변화에서 정한다. 줄이면 피해, 늘리면 회복으로 본다(방어구·즉사 제외).
+          if (next.conditions?.includes("dead")) return fail("bad_sheet", "사망한 캐릭터의 HP는 바꿀 수 없어요. GM이 사망 표시를 풀면 고칠 수 있어요.");
+          const target = clamp(op.value !== undefined ? op.value : next.hp + (op.delta ?? 0), 0, limits.hp);
+          const r = applyManualHp({ hp: next.hp, maxHp: limits.hp, conditions: next.conditions ?? [] }, target);
+          next.hp = r.hp;
+          this.setConditions(next, r.conditions);
+          break;
+        }
         case "mp":
         case "san":
         case "luck": {
@@ -1859,6 +2109,8 @@ export class Room {
           break;
         }
         case "skill": {
+          // 기능 값(처음 값·증감)은 GM만 고친다. PL은 자기 기능의 성장 표시만 바꾼다.
+          if (who.role !== "kp" && (op.value !== undefined || op.delta !== undefined)) return fail("forbidden", "기능 값은 GM만 바꿀 수 있어요. 성장 표시만 직접 바꿀 수 있어요.");
           const cur = next.skills[op.name];
           if (!cur && op.value === undefined && op.delta === undefined) return fail("bad_sheet", `'${op.name}' 기능이 시트에 없어요.`);
           if (!cur && Object.keys(next.skills).length >= MAX_SKILLS) return fail("bad_sheet", `기능은 ${MAX_SKILLS}개까지 둘 수 있어요.`);
@@ -1877,14 +2129,15 @@ export class Room {
           next[op.path] = op.value;
           break;
         case "weapons":
+          if (who.role !== "kp") return fail("forbidden", "무기 목록은 GM만 바꿀 수 있어요.");
           next.weapons = op.value.map((w) => ({ ...w }));
           break;
         case "condition": {
+          if (who.role !== "kp") return fail("forbidden", "중상·기절·빈사·사망 표시는 GM만 바꿀 수 있어요. HP가 바뀌면 서버가 알아서 표시해요.");
           const set = new Set(next.conditions ?? []);
           if (op.on) set.add(op.name);
           else set.delete(op.name);
-          if (set.size) next.conditions = [...set];
-          else delete next.conditions;
+          this.setConditions(next, [...set]);
           break;
         }
         case "madness":
@@ -1897,7 +2150,7 @@ export class Room {
     if (!d.ops.some((o) => o.path === "madness")) this.applyManualSanLoss(c, next);
     next.rev = c.rev + 1;
     this.characters.set(c.id, next);
-    return ok(this.emit({ type: "character.updated", data: cloneCharacter(next) }, this.characterAudience(next)));
+    return ok(this.emit({ type: "character.updated", data: cloneCharacter(next) }, this.characterAudience(next)), ...this.initiativeRefresh(next));
   }
 
   /**

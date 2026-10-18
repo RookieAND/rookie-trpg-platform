@@ -9,6 +9,7 @@ import type {
   MadnessResult,
   GameObject,
   BoardPing,
+  DamageApplied,
   Scene,
   Transition,
   Handout,
@@ -64,6 +65,10 @@ export interface RoomState {
   spotlight: { id: string; n: number } | null;
   /** 펼쳐 보인 횟수. 핸드아웃이 사라지거나 다시 접속해도 줄지 않아서, 화면이 닫은 번호(n)와 새 펼치기를 헷갈리지 않는다. */
   spotlightSeq: number;
+  /** 이미 적용한 피해: 굴림 id → 적용한 캐릭터 id들(GM 화면의 "적용됨" 표시) */
+  damageApplied: Record<string, string[]>;
+  /** 가장 최근 피해 적용 결과(시트 주인과 GM). n이 바뀌면 새 결과다. */
+  lastDamage: { n: number; result: DamageApplied } | null;
   /** 다른 사람의 비밀 굴림 알림("GM이 비밀 굴림을 했어요") */
   /** 마지막 세션 종료 정산. 다음 세션이 시작되면 지운다. */
   lastEnd: EndSummary | null;
@@ -105,6 +110,8 @@ export const initialRoomState = (roomId = ""): RoomState => ({
   spotlight: null,
   spotlightSeq: 0,
   hiddenRolls: [],
+  damageApplied: {},
+  lastDamage: null,
   pings: [],
   lastEnd: null,
   lastError: null,
@@ -150,6 +157,8 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       spotlight: null,
       spotlightSeq: state.spotlightSeq,
       hiddenRolls: [],
+      damageApplied: d.damageApplied ?? {},
+      lastDamage: null,
       pings: [],
       lastEnd: null,
       lastError: null,
@@ -236,6 +245,12 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
     case "roll.result": {
       if (state.rolls.some((r) => r.id === ev.data.id)) return next;
       return { ...next, rolls: [...state.rolls, ev.data].slice(-MAX_ROLLS) };
+    }
+    case "damage.applied": {
+      const r = ev.data;
+      const prev = r.rollId ? (state.damageApplied[r.rollId] ?? []) : [];
+      const applied = r.rollId && !prev.includes(r.characterId) ? { ...state.damageApplied, [r.rollId]: [...prev, r.characterId] } : state.damageApplied;
+      return { ...next, damageApplied: applied, lastDamage: { n: msg.seq, result: r } };
     }
     case "roll.asked": {
       if (state.rollAsks.some((a) => a.id === ev.data.id)) return next;

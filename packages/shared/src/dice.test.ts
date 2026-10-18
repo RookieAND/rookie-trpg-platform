@@ -116,7 +116,7 @@ describe("parseCommand", () => {
     if (r.ok) expect(r.command).toEqual(expected);
   });
 
-  it.each(["", "ccb<=60", "hello", "0d6", "1d1", "101d6", "CCh", "CC<=", "2d6*3"])(
+  it.each(["", "ccb<=60", "hello", "0d6", "1d1", "1001d6", "1d10001", "CCh", "CC<=", "2d6*", "(2d6", "2d6)", "1d6/0"])(
     "잘못된 식 %j",
     (input) => {
       expect(parseCommand(input).ok).toBe(false);

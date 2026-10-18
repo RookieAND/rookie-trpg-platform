@@ -88,7 +88,7 @@ describe("무기 피해 굴림", () => {
 describe("시트 확장 op", () => {
   it("상태 토글, 소지품, 배경, 무기 교체가 반영된다", () => {
     const { room, id } = setup(seq(0.5));
-    must(room.handle(seo, cmd("sheet.patch", { characterId: id, ops: [{ path: "condition", name: "majorWound", on: true }] })));
+    must(room.handle(kp, cmd("sheet.patch", { characterId: id, ops: [{ path: "condition", name: "majorWound", on: true }] })));
     must(room.handle(seo, cmd("sheet.patch", { characterId: id, ops: [{ path: "possessions", value: "권총" }, { path: "backstory", value: "새 배경" }] })));
     must(room.handle(kp, cmd("sheet.patch", { characterId: id, ops: [{ path: "weapons", value: [{ name: "총", skill: "사격(권총)", damage: "1d10" }] }] })));
     const snap = room.snapshot(kp);
@@ -97,8 +97,18 @@ describe("시트 확장 op", () => {
     expect(c.possessions).toBe("권총");
     expect(c.backstory).toBe("새 배경");
     expect(c.weapons).toEqual([{ name: "총", skill: "사격(권총)", damage: "1d10" }]);
-    must(room.handle(seo, cmd("sheet.patch", { characterId: id, ops: [{ path: "condition", name: "majorWound", on: false }] })));
+    must(room.handle(kp, cmd("sheet.patch", { characterId: id, ops: [{ path: "condition", name: "majorWound", on: false }] })));
     expect(room.snapshot(kp).characters.find((x) => x.id === id)!.conditions ?? []).toEqual([]);
+  });
+
+  it("PL은 중상·기절·빈사·사망 표시를 직접 켜거나 끌 수 없다", () => {
+    const { room, id } = setup(seq(0.5));
+    for (const name of ["majorWound", "unconscious", "dying", "dead"] as const) {
+      expect(room.handle(seo, cmd("sheet.patch", { characterId: id, ops: [{ path: "condition", name, on: true }] })), name).toMatchObject({ ok: false, code: "forbidden" });
+    }
+    must(room.handle(kp, cmd("sheet.patch", { characterId: id, ops: [{ path: "condition", name: "dying", on: true }] })));
+    expect(room.handle(seo, cmd("sheet.patch", { characterId: id, ops: [{ path: "condition", name: "dying", on: false }] }))).toMatchObject({ ok: false, code: "forbidden" });
+    expect(room.snapshot(kp).characters.find((x) => x.id === id)!.conditions).toEqual(["dying"]);
   });
 
   it("다른 PL은 시트를 고칠 수 없다", () => {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { checkOccupation, OCCUPATION_POINT_FORMULAS, type Occupation, type OccupationFormulaId } from "./creation";
-import { rollExpression } from "./dice";
+import { parseCommand } from "./dice";
+import { MAX_EXPR_LENGTH } from "./expr";
 
 /** 사용자 한 명의 개인 서재: 굴림 매크로와 직업 정의. 서버에 저장해 기기를 옮겨도 따라온다. */
 
@@ -19,7 +20,7 @@ export interface Macro {
 /** 굴림 식이 서버가 받아 줄 모양인지 본다. */
 export const isValidRollExpr = (expr: string): boolean => {
   const e = expr.trim();
-  return e.length > 0 && e.length <= 80 && rollExpression(e, () => 0).ok;
+  return e.length > 0 && e.length <= MAX_EXPR_LENGTH && parseCommand(e).ok;
 };
 
 const macroSchema = z.object({

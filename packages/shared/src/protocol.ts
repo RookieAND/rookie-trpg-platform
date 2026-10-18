@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { MAX_SUM_EXPR_LENGTH, parseCommand, type Difficulty, type RollOutcome } from "./dice";
+import { MAX_SUM_EXPR_LENGTH, type Difficulty, type RollOutcome } from "./dice";
+import { MAX_EXPR_LENGTH, parseDiceExpression } from "./expr";
+import type { DamageKind, StatusKey } from "./wounds";
 import { CHARACTERISTIC_KEYS, CONDITIONS, MADNESS_KINDS, MAX_WEAPONS, STAT_PATHS, type Character } from "./sheet";
 
 export type Role = "kp" | "pl" | "spectator";
@@ -105,6 +107,8 @@ export interface RollLogEntry {
   label?: string;
   /** 시트로 굴린 판정의 조건. 푸시 굴림에 그대로 쓴다. */
   check?: { characterId: string; name: string; bonus: number; difficulty?: "regular" | "hard" | "extreme" };
+  /** 무기 피해 굴림이다. GM이 이 결과를 캐릭터 HP에 적용할 수 있다(damage.apply). */
+  damage?: boolean;
   /** 이 굴림은 해당 굴림의 푸시다 */
   pushOf?: string;
   /** 이 굴림은 해당 굴림에 행운을 쓴 결과다 */
@@ -146,6 +150,8 @@ export interface InitiativeEntry {
   ownerId?: string;
   /** PL에게 보내는 가려진 칸: GM만 쓰는 시트(NPC)의 이름·DEX는 지우고 자리만 알려 준다. GM 화면에는 붙지 않는다. */
   hidden?: boolean;
+  /** 시트가 있는 칸의 부상 상태(부상·중상·기절·빈사·사망). 서버가 보낼 때마다 시트에서 채운다. */
+  status?: StatusKey[];
 }
 
 /** 전투 순서(DEX 높은 순). turn은 지금 차례인 칸의 위치, round는 몇 라운드째인지. */
@@ -262,6 +268,8 @@ export interface Snapshot {
   audioLibrary: AudioTrack[];
   /** 지금 흐르는 배경음. 없으면 null. */
   bgm: BgmState | null;
+  /** 이미 적용한 피해: 굴림 id → 적용한 캐릭터 id들. GM에게만 담아 보낸다(다른 사람은 비어 있다). */
+  damageApplied?: Record<string, string[]>;
   /** 서버의 현재 시각(ms). 클라이언트가 시계 차이를 맞추는 데 쓴다. */
   now: number;
 }
@@ -281,18 +289,17 @@ export const imageId = z.string().regex(/^[a-f0-9]{32}$/);
 
 const visibility = z.union([z.literal("all"), z.literal("gm"), z.array(id).max(32)]);
 
-/** 피해 식: 1d6, 1d8+2, 1d6+db(피해 보너스 더하기), 고정값(5)을 받는다. */
+/** 피해 식: 1d6, 1d8+2, 1d6+db(피해 보너스), 2d6+db/2 같은 주사위 식, 고정값(5)을 받는다. */
 export const isDamageExpr = (text: string) => {
-  const t = text.trim().toLowerCase().replace(/\+db$/, "");
+  const t = text.trim();
   if (/^\d{1,3}$/.test(t)) return true;
-  const p = parseCommand(t);
-  return p.ok && p.command.kind === "dice";
+  return parseDiceExpression(t).ok;
 };
 
 export const weaponSchema = z.object({
   name: z.string().trim().min(1).max(30),
   skill: z.string().trim().min(1).max(30),
-  damage: z.string().trim().min(1).max(20).refine(isDamageExpr, { message: "피해는 1d6+db처럼 주사위 식으로 적어 주세요." }),
+  damage: z.string().trim().min(1).max(40).refine(isDamageExpr, { message: "피해는 1d6+db처럼 주사위 식으로 적어 주세요." }),
 });
 
 /** 캐릭터를 만들 때 받는 값. 보관함과 룸 등록이 같은 규격을 쓴다. */
@@ -402,7 +409,9 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
     type: z.literal("roll.request"),
     data: z
       .object({
-        expr: z.string().min(1).max(64).optional(),
+        expr: z.string().min(1).max(MAX_EXPR_LENGTH).optional(),
+        /** 식에 db가 있을 때 피해 보너스를 가져올 캐릭터. 없으면 내 캐릭터(PL) 또는 GM이 고른 캐릭터를 쓴다. */
+        characterId: id.optional(),
         secret: z.boolean().default(false),
         /** 시트의 기능·특성치로 굴린다. 목표값은 서버가 시트에서 읽는다. */
         skill: z
@@ -495,6 +504,50 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
   }),
   /** 무기의 피해를 굴린다(피해 보너스 포함). */
   z.object({ type: z.literal("damage.roll"), data: z.object({ characterId: id, weaponIndex: z.number().int().min(0).max(MAX_WEAPONS - 1) }) }),
+  /**
+   * 피해를 캐릭터 HP에 적용한다(GM 전용). rollId로 피해 굴림의 결과를 쓰거나 amount로 직접 적는다(둘 중 하나).
+   * armor는 피해에서 빼는 방어구 값이다. 중상·기절·빈사·사망은 서버가 정한다.
+   */
+  z.object({
+    type: z.literal("damage.apply"),
+    data: z
+      .object({
+        characterId: id,
+        rollId: id.optional(),
+        amount: z.number().int().min(0).max(999).optional(),
+        armor: z.number().int().min(0).max(99).default(0),
+      })
+      .refine((d) => (d.rollId === undefined) !== (d.amount === undefined), { message: "rollId와 amount 중 하나만 써 주세요." }),
+  }),
+  /** 응급처치(HP +1), 자연 회복, 직접 회복(GM 전용). 중상·빈사·기절이 풀리는 기준은 wounds.ts. */
+  z.object({
+    type: z.literal("hp.heal"),
+    data: z
+      .object({ characterId: id, kind: z.enum(["firstAid", "natural", "manual"]), amount: z.number().int().min(1).max(99).optional() })
+      .refine((d) => d.kind === "firstAid" || d.amount !== undefined, { message: "회복량이 필요해요." }),
+  }),
+  /** 대항 판정: 두 시트가 각자 기능·특성치로 굴려 성공 단계를 비교한다. GM은 아무 시트나, PL은 자기 시트와 다른 PL의 시트만 고른다. */
+  z.object({
+    type: z.literal("roll.opposed"),
+    data: z.object({
+      a: z.object({ characterId: id, name: z.string().min(1).max(30) }),
+      /** 상대. 캐릭터 id를 알면 characterId, 모르면(PL은 남의 시트를 못 본다) PL의 userId로 그 사람의 캐릭터를 가리킨다. */
+      b: z
+        .object({ characterId: id.optional(), userId: id.optional(), name: z.string().min(1).max(30) })
+        .refine((b) => (b.characterId === undefined) !== (b.userId === undefined), { message: "characterId와 userId 중 하나만 써 주세요." }),
+      secret: z.boolean().default(false),
+    }),
+  }),
+  /** 그룹 판정(GM 전용): PL의 캐릭터가 같은 기능으로 한꺼번에 굴린다. userIds를 생략하면 캐릭터가 있는 PL 전원. */
+  z.object({
+    type: z.literal("roll.group"),
+    data: z.object({
+      name: z.string().trim().min(1).max(30),
+      difficulty: z.enum(["regular", "hard", "extreme"]).optional(),
+      userIds: z.array(id).max(32).optional(),
+      secret: z.boolean().default(false),
+    }),
+  }),
   /** 실패한 시트 판정을 한 번 더 굴린다(푸시). 굴린 사람이나 GM이 할 수 있다. */
   z.object({ type: z.literal("roll.push"), data: z.object({ rollId: id }) }),
   /** 실패한 시트 판정을 성공으로 바꿀 만큼 행운을 쓴다. */
@@ -630,6 +683,25 @@ export interface RollAsk {
   at: number;
 }
 
+/** GM이 피해를 적용한 결과. 시트 주인과 GM만 받는다. */
+export interface DamageApplied {
+  rollId?: string;
+  characterId: string;
+  name: string;
+  /** 적용 전 피해(방어구 전) */
+  amount: number;
+  armor: number;
+  /** 방어구를 뺀 피해 */
+  dealt: number;
+  hpBefore: number;
+  hp: number;
+  kind: DamageKind;
+  newMajor: boolean;
+  massive: boolean;
+  /** 건강 판정(CON)을 해야 한다 */
+  conRoll: boolean;
+}
+
 export interface BoardPing {
   id: string;
   userId: string;
@@ -671,6 +743,8 @@ export type ServerEvent =
   | { type: "character.updated"; data: Character }
   | { type: "character.removed"; data: { id: string } }
   | { type: "roll.result"; data: RollLogEntry }
+  /** GM이 피해를 적용했다. 시트 주인과 GM에게만 간다. */
+  | { type: "damage.applied"; data: DamageApplied }
   /** GM의 판정 요청. 화면은 targetUserId가 내가 아니면 무시한다. */
   | { type: "roll.asked"; data: RollAsk }
   /** 다른 사람의 비밀 굴림. 결과는 담지 않는다. */

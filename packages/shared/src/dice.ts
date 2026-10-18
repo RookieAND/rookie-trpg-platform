@@ -3,6 +3,9 @@
  * 규칙은 공식(수식)만 구현하고 룰북 문장은 담지 않는다.
  */
 
+import type { GroupEntry, OpposedReason, OpposedSideOutcome, OpposedWinner } from "./opposed";
+import { MAX_EXPR_LENGTH, evaluateDiceExpression, parseDiceExpression, simplifyDice, type ExprTerm, type ParsedExpr } from "./expr";
+
 export type Rng = () => number; // [0, 1)
 
 export const defaultRng: Rng = () => {
@@ -89,6 +92,8 @@ export function rollPercent(rng: Rng, bonus = 0): PercentRoll {
 
 export type ParsedCommand =
   | { kind: "dice"; count: number; sides: number; modifier: number }
+  /** 괄호·곱셈·여러 주사위 항·db가 있는 식. 읽은 결과(ast)를 들고 있다가 굴릴 때 계산한다. */
+  | { kind: "expr"; source: string; parsed: ParsedExpr }
   | { kind: "cc"; bonus: number; target?: number; difficulty?: Difficulty }
   | { kind: "cbr"; x: number; y: number };
 
@@ -101,18 +106,20 @@ const DIFFICULTY_BY_SUFFIX: Record<string, Difficulty> = {
   c: "critical",
 };
 
-const MAX_DICE = 100;
-const MAX_SIDES = 1000;
+/** 합산 식(SAN 보상 등)의 주사위 총 개수 상한 */
+const MAX_SUM_DICE = 100;
+const MAX_SUM_SIDES = 1000;
 
 /**
- * 지원 표기(BCDice 7판 호환):
- *  - NdM, NdM+K, NdM-K
+ * 지원 표기(BCDice 7판 호환 + 식):
+ *  - NdM, NdM+K, NdM-K, 그리고 `(2d6+6)*5`, `1d6+1d4`, `1d10+db` 같은 식(expr.ts)
  *  - CC, CC<=N, CC(x)<=N, CC(+2), CC-1, CC1<=60h 등
  *  - CBR(x,y)
  */
 export function parseCommand(input: string): ParseResult {
   const text = input.trim().replace(/\s+/g, "").toLowerCase();
   if (!text) return { ok: false, error: "굴림 식이 비어 있어요." };
+  if (input.trim().length > MAX_EXPR_LENGTH) return { ok: false, error: `식은 ${MAX_EXPR_LENGTH}자까지 적을 수 있어요.` };
 
   const cbr = /^cbr\((\d{1,3}),(\d{1,3})\)$/.exec(text);
   if (cbr) {
@@ -133,18 +140,13 @@ export function parseCommand(input: string): ParseResult {
     return { ok: true, command };
   }
 
-  const dice = /^(\d{1,3})d(\d{1,4})(?:([+-])(\d{1,5}))?$/.exec(text);
-  if (dice) {
-    const count = Number(dice[1]);
-    const sides = Number(dice[2]);
-    if (count < 1 || count > MAX_DICE) return { ok: false, error: `주사위는 1~${MAX_DICE}개까지 굴릴 수 있어요.` };
-    if (sides < 2 || sides > MAX_SIDES) return { ok: false, error: `면 수는 2~${MAX_SIDES} 사이여야 해요.` };
-    const modifier = dice[3] ? (dice[3] === "-" ? -1 : 1) * Number(dice[4]) : 0;
-    return { ok: true, command: { kind: "dice", count, sides, modifier } };
-  }
-
-  return { ok: false, error: "알 수 없는 굴림 식이에요. 예: 1d100, 2d6+3, CC<=60, CC(1)<=60h" };
+  const expr = parseDiceExpression(text);
+  if (!expr.ok) return { ok: false, error: expr.error };
+  const flat = simplifyDice(expr.ast);
+  if (flat && !expr.usesDb) return { ok: true, command: { kind: "dice", count: flat.count, sides: flat.sides, modifier: flat.modifier } };
+  return { ok: true, command: { kind: "expr", source: text, parsed: expr } };
 }
+
 
 // ── 합산 식(SAN 보상 등) ─────────────────────────────────
 
@@ -174,11 +176,12 @@ export function parseSumExpression(input: string): SumParseResult {
       continue;
     }
     const parsed = parseCommand(body);
-    if (!parsed.ok) return parsed.error.startsWith("알 수 없는") || parsed.error.includes("비어") ? bad : parsed;
+    if (!parsed.ok) return parsed.error.startsWith("식을 읽지") || parsed.error.includes("비어") || parsed.error.includes("주사위가 하나") ? bad : parsed;
     if (parsed.command.kind !== "dice") return bad;
+    if (parsed.command.sides > MAX_SUM_SIDES) return { ok: false, error: `면 수는 2~${MAX_SUM_SIDES} 사이여야 해요.` };
     if (sign < 0) return { ok: false, error: "빼는 주사위는 쓸 수 없어요. 상수만 뺄 수 있어요." };
     diceTotal += parsed.command.count;
-    if (diceTotal > MAX_DICE) return { ok: false, error: `주사위는 모두 합쳐 ${MAX_DICE}개까지 굴릴 수 있어요.` };
+    if (diceTotal > MAX_SUM_DICE) return { ok: false, error: `주사위는 모두 합쳐 ${MAX_SUM_DICE}개까지 굴릴 수 있어요.` };
     terms.push({ sign, dice: { count: parsed.command.count, sides: parsed.command.sides } });
   }
   if (!terms.some((t) => "dice" in t)) return bad;
@@ -188,7 +191,19 @@ export function parseSumExpression(input: string): SumParseResult {
 // ── 실행 ─────────────────────────────────────────────
 
 export type RollOutcome =
-  | { kind: "dice"; expr: string; rolls: number[]; modifier: number; total: number }
+  | {
+      kind: "dice";
+      expr: string;
+      /** 굴린 모든 주사위 눈 */
+      rolls: number[];
+      /** total에서 주사위 눈의 합을 뺀 값. 곱셈·나눗셈이 있는 식에서는 계산 결과와의 차이다. */
+      modifier: number;
+      total: number;
+      /** 식에 여러 항·괄호·곱셈·db가 있을 때만 채운다: 항별 결과 */
+      terms?: ExprTerm[];
+      /** 같은 경우의 눈을 풀어 쓴 계산식. 예: (2d6[3,4]+6)*5 */
+      breakdown?: string;
+    }
   | {
       kind: "cc";
       expr: string;
@@ -210,7 +225,35 @@ export type RollOutcome =
       /** 둘 다 성공(2), 하나만 성공(1), 둘 다 실패(0) */
       successes: 0 | 1 | 2;
     }
+  | OpposedOutcome
+  | GroupOutcome
   | SanOutcome;
+
+/** 대항 판정 결과. 두 굴림이 한 항목이다(opposed.ts). */
+export interface OpposedOutcome {
+  kind: "opposed";
+  expr: string;
+  a: OpposedSideOutcome;
+  b: OpposedSideOutcome;
+  winner: OpposedWinner;
+  reason: OpposedReason;
+  /** 둘 다 실패해 현재 상태가 이어진다(방어하는 쪽 b가 유리) */
+  statusQuo: boolean;
+  summary: string;
+}
+
+/** 그룹 판정 결과. 여러 PL이 같은 기능으로 굴린 것을 한 항목으로 묶는다. */
+export interface GroupOutcome {
+  kind: "group";
+  expr: string;
+  name: string;
+  difficulty?: "regular" | "hard" | "extreme";
+  entries: GroupEntry[];
+  /** 그 기능이 시트에 없어서 빠진 캐릭터 이름 */
+  skipped: string[];
+  successes: number;
+  summary: string;
+}
 
 /** SAN 체크 결과. 굴림 로그에 그대로 남는다. */
 export interface SanOutcome {
@@ -233,8 +276,19 @@ export interface SanOutcome {
   dailyLoss: number;
 }
 
-export function runCommand(command: ParsedCommand, expr: string, rng: Rng): RollOutcome {
+/** 굴림 식이 기댈 수 있는 바깥 값. `db`는 굴리는 캐릭터의 피해 보너스 문자열이다. */
+export interface RollContext {
+  damageBonus?: string;
+}
+
+export function runCommand(command: ParsedCommand, expr: string, rng: Rng, ctx: RollContext = {}): RollOutcome {
   switch (command.kind) {
+    case "expr": {
+      const r = evaluateDiceExpression(command.parsed, rng, ctx.damageBonus);
+      if (!r.ok) throw new Error(r.error); // rollExpression이 먼저 걸러서 알려 준다
+      const sum = r.rolls.reduce((a, b) => a + b, 0);
+      return { kind: "dice", expr, rolls: r.rolls, modifier: r.total - sum, total: r.total, terms: r.terms, breakdown: r.breakdown };
+    }
     case "dice": {
       const rolls = Array.from({ length: command.count }, () => rollDie(rng, command.sides));
       const total = rolls.reduce((a, b) => a + b, 0) + command.modifier;
@@ -274,10 +328,16 @@ export function runCommand(command: ParsedCommand, expr: string, rng: Rng): Roll
 }
 
 /** 한 번에 해석하고 굴린다. 서버에서만 호출한다. */
-export function rollExpression(input: string, rng: Rng = defaultRng): { ok: true; outcome: RollOutcome } | { ok: false; error: string } {
+export function rollExpression(input: string, rng: Rng = defaultRng, ctx: RollContext = {}): { ok: true; outcome: RollOutcome } | { ok: false; error: string } {
   const parsed = parseCommand(input);
   if (!parsed.ok) return parsed;
-  return { ok: true, outcome: runCommand(parsed.command, input.trim(), rng) };
+  if (parsed.command.kind === "expr") {
+    const r = evaluateDiceExpression(parsed.command.parsed, rng, ctx.damageBonus);
+    if (!r.ok) return r;
+    const sum = r.rolls.reduce((a, b) => a + b, 0);
+    return { ok: true, outcome: { kind: "dice", expr: input.trim(), rolls: r.rolls, modifier: r.total - sum, total: r.total, terms: r.terms, breakdown: r.breakdown } };
+  }
+  return { ok: true, outcome: runCommand(parsed.command, input.trim(), rng, ctx) };
 }
 
 // ── 파생 능력치 공식 ─────────────────────────────────────

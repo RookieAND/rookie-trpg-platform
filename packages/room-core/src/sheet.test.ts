@@ -137,11 +137,11 @@ describe("sheet.patch", () => {
     expect(out[0]!.event).toMatchObject({ data: { san: 99, luck: 99 } });
   });
 
-  it("기능 값 변경, 새 기능 추가, 성장 표시", () => {
+  it("GM은 기능 값 변경·새 기능 추가·성장 표시를 할 수 있다", () => {
     const room = room0();
     const { c } = add(room, seo);
     const out = must(
-      patch(room, seo, c.id, [
+      patch(room, kp, c.id, [
         { path: "skill", name: "심리학", delta: 5, grown: true },
         { path: "skill", name: "크툴루 신화", value: 5 },
       ]),
@@ -149,6 +149,29 @@ describe("sheet.patch", () => {
     const data = (out[0]!.event as { data: { skills: Record<string, { value: number; grown: boolean }> } }).data;
     expect(data.skills["심리학"]).toEqual({ value: 45, grown: true });
     expect(data.skills["크툴루 신화"]).toEqual({ value: 5, grown: false });
+  });
+
+  it("PL은 자기 기능의 성장 표시만 바꿀 수 있고, 값(지정·증감)이나 새 기능은 거절된다", () => {
+    const room = room0();
+    const { c } = add(room, seo);
+    must(patch(room, seo, c.id, [{ path: "skill", name: "심리학", grown: true }]));
+    expect(room.snapshot(seo).characters[0]!.skills["심리학"]).toEqual({ value: 40, grown: true });
+    for (const op of [
+      { path: "skill", name: "심리학", value: 90 },
+      { path: "skill", name: "심리학", delta: 5 },
+      { path: "skill", name: "심리학", delta: 5, grown: false },
+      { path: "skill", name: "크툴루 신화", value: 90 },
+    ] as const) {
+      expect(patch(room, seo, c.id, [op]), JSON.stringify(op)).toMatchObject({ ok: false, code: "forbidden" });
+    }
+    expect(room.snapshot(seo).characters[0]!.skills["심리학"]).toEqual({ value: 40, grown: true });
+    expect(room.snapshot(seo).characters[0]!.skills["크툴루 신화"]).toBeUndefined();
+  });
+
+  it("PL이 무기 목록을 직접 바꾸려 하면 거절된다", () => {
+    const room = room0();
+    const { c } = add(room, seo);
+    expect(patch(room, seo, c.id, [{ path: "weapons", value: [{ name: "대포", skill: "사격(권총)", damage: "9d99" }] }])).toMatchObject({ ok: false, code: "forbidden" });
   });
 
   it("없는 기능의 성장 표시만 바꾸려 하면 거절하고 아무것도 바꾸지 않는다", () => {

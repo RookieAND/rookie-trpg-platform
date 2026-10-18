@@ -7,6 +7,7 @@ const DIFFICULTY_KO = { regular: "보통", hard: "어려움", extreme: "극단�
 export function describeOutcome(o: RollOutcome): string {
   switch (o.kind) {
     case "dice": {
+      if (o.breakdown) return `${o.breakdown} = ${o.total}`;
       const mod = o.modifier ? (o.modifier > 0 ? `+${o.modifier}` : `${o.modifier}`) : "";
       return `[${o.rolls.join(", ")}]${mod} = ${o.total}`;
     }
@@ -23,6 +24,10 @@ export function describeOutcome(o: RollOutcome): string {
       const madness = o.madness ? ` · ${MADNESS_LABEL_KO[o.madness]}` : "";
       return `${o.percent.total} → ${LEVEL_LABEL_KO[o.level]} · SAN ${o.before} → ${o.after} (−${o.loss})${int}${madness}`;
     }
+    case "opposed":
+      return `${o.a.character} ${o.a.name} ${o.a.percent.total}(${LEVEL_LABEL_KO[o.a.level]}) 대 ${o.b.character} ${o.b.name} ${o.b.percent.total}(${LEVEL_LABEL_KO[o.b.level]}) → ${o.summary}`;
+    case "group":
+      return `${o.name} 그룹 판정 · ${o.entries.map((e) => `${e.character} ${e.percent.total}(${LEVEL_LABEL_KO[e.level]})`).join(", ")} → ${o.summary}`;
     case "cbr":
       return `${o.roll} → ${o.x.target}: ${LEVEL_LABEL_KO[o.x.level]} / ${o.y.target}: ${LEVEL_LABEL_KO[o.y.level]}`;
   }

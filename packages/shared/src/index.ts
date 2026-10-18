@@ -1,4 +1,7 @@
 export * from "./dice";
+export * from "./expr";
+export * from "./wounds";
+export * from "./opposed";
 export * from "./protocol";
 export * from "./client-state";
 export * from "./sheet";

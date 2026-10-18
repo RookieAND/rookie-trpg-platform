@@ -20,12 +20,13 @@ export interface Weapon {
   damage: string;
 }
 
-export const CONDITIONS = ["majorWound", "unconscious", "dying"] as const;
+export const CONDITIONS = ["majorWound", "unconscious", "dying", "dead"] as const;
 export type Condition = (typeof CONDITIONS)[number];
 export const CONDITION_LABEL_KO: Record<Condition, string> = {
   majorWound: "중상",
   unconscious: "기절",
-  dying: "죽어감",
+  dying: "빈사",
+  dead: "사망",
 };
 
 export const MADNESS_KINDS = ["none", "temporary", "indefinite", "permanent"] as const;
@@ -62,8 +63,10 @@ export interface Character {
   backstory?: string;
   possessions?: string;
   weapons?: Weapon[];
-  /** 중상·기절·죽어감 표시. 룸 안에서만 쓰고 보관함에는 저장하지 않는다. */
+  /** 중상·기절·빈사·사망 표시. 룸 안에서만 쓰고 보관함에는 저장하지 않는다. 서버가 HP 변화로 정하고, 직접 바꾸는 것은 GM뿐이다(wounds.ts). */
   conditions?: Condition[];
+  /** 빈사 상태로 넘긴 라운드 수. 전투 라운드가 오를 때 서버가 올리고, 빈사가 풀리면 지운다. */
+  dyingRounds?: number;
   /** 광기 상태. GM이 해제한다. 없으면 정상. */
   madness?: Madness;
   sanDay?: SanDay;
