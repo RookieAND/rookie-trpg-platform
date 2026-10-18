@@ -44,18 +44,26 @@ export interface HubOptions {
   /** 이 간격으로 ping을 보내고, 직전 ping에 응답이 없던 연결은 끊는다. 0이면 끈다. */
   heartbeatMs?: number;
   now?: () => number;
+  /** KP의 마지막 연결이 닫힌 뒤 정지하기까지의 유예(ms). 기본 30초 */
+  kpAwayGraceMs?: number;
 }
 
 export const HEARTBEAT_MS = 30_000;
 
+/** KP의 마지막 연결이 닫힌 뒤 정지하기까지 기다리는 시간. 새로고침·잠깐의 끊김을 넘기기 위한 유예다. */
+export const KP_AWAY_GRACE_MS = 30_000;
+
 export class RoomHub {
   private conns = new Map<string, Set<Conn>>();
+  /** 룸마다 KP 유예 타이머. 시계는 룸 엔진이 아니라 여기서 쥔다. */
+  private graceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private closing = false;
   /** 하트비트 대상. 룸에 붙기 전 연결도 포함한다. */
   private alive = new Map<WebSocket, boolean>();
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private readonly rate: RateLimitOptions;
   private readonly now: () => number;
+  private readonly kpAwayGraceMs: number;
 
   constructor(
     private readonly registry: RoomRegistry,
@@ -66,6 +74,7 @@ export class RoomHub {
   ) {
     this.rate = { ...DEFAULT_RATE_LIMIT, ...opts.rate };
     this.now = opts.now ?? Date.now;
+    this.kpAwayGraceMs = opts.kpAwayGraceMs ?? KP_AWAY_GRACE_MS;
     const hb = opts.heartbeatMs ?? HEARTBEAT_MS;
     if (hb > 0) {
       this.heartbeat = setInterval(() => this.sweep(), hb);
@@ -75,6 +84,7 @@ export class RoomHub {
     registry.onRemoved((roomId) => {
       for (const c of this.conns.get(roomId) ?? []) c.ws.close(CLOSE.notFound, "room_removed");
       this.conns.delete(roomId);
+      this.clearGrace(roomId);
     });
   }
 
@@ -93,6 +103,29 @@ export class RoomHub {
         ws.terminate();
       }
     }
+  }
+
+  private clearGrace(roomId: string) {
+    const t = this.graceTimers.get(roomId);
+    if (t) clearTimeout(t);
+    this.graceTimers.delete(roomId);
+  }
+
+  /** KP 유예를 시작한다. 시간이 다 될 때까지 KP가 안 돌아오면 룸이 자동 정지한다. */
+  private startGrace(entry: LoadedRoom) {
+    const roomId = entry.meta.id;
+    this.clearGrace(roomId);
+    const timer = setTimeout(() => {
+      this.graceTimers.delete(roomId);
+      if (this.closing) return;
+      const outs = entry.room.expireKpAway();
+      if (outs.length === 0) return;
+      this.deliver(roomId, outs);
+      this.notifier?.publish(entry.meta, outs);
+      this.registry.markChanged(entry, true);
+    }, this.kpAwayGraceMs);
+    timer.unref?.();
+    this.graceTimers.set(roomId, timer);
   }
 
   private send(ws: WebSocket, msg: ServerMessage) {
@@ -186,6 +219,7 @@ export class RoomHub {
         this.deliver(roomId, outs);
         this.notifier?.publish(entry.meta, outs);
         this.registry.markChanged(entry, true);
+        if (entry.room.kpAway !== null) this.startGrace(entry);
       }
       if (set.size === 0) this.conns.delete(roomId);
     };
@@ -219,8 +253,12 @@ export class RoomHub {
         for (const m of missed) this.send(ws, { seq: m.seq, event: m.event } as ServerMessage);
       }
       const seen = new Set(missed?.map((m) => m.seq));
-      this.deliver(roomId, presence.filter((p) => !seen.has(p.seq)));
-      this.registry.markChanged(entry);
+      const fresh = presence.filter((p) => !seen.has(p.seq));
+      this.deliver(roomId, fresh);
+      // KP가 유예 안에 돌아왔으면 타이머를 끄고, 자동 정지였다면 재개됐다는 알림도 보낸다.
+      if (entry.room.kpAway === null) this.clearGrace(roomId);
+      this.notifier?.publish(entry.meta, fresh);
+      this.registry.markChanged(entry, fresh.some((p) => p.event.type === "session.resumed"));
       return;
     }
 
@@ -243,6 +281,7 @@ export class RoomHub {
   async shutdown() {
     this.closing = true;
     if (this.heartbeat) clearInterval(this.heartbeat);
+    for (const id of [...this.graceTimers.keys()]) this.clearGrace(id);
     for (const set of this.conns.values()) for (const c of set) c.ws.terminate();
     await this.registry.flushAll();
   }

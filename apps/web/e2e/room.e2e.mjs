@@ -4,6 +4,8 @@ import { chromium } from "playwright-core";
 import assert from "node:assert/strict";
 
 const WEB = process.env.WEB_URL ?? "http://localhost:3000";
+// API 주소. 다른 포트로 띄운 서버에 돌릴 때 API_URL로 알려 준다.
+const API = process.env.API_URL ?? "http://localhost:8787";
 const exe = process.env.CHROMIUM_PATH ?? "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
 const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
 const ctx = () => browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -444,20 +446,52 @@ try {
   assert.ok((await kp.getByTestId("roll-entry").count()) >= 4);
   step("KP 비밀 굴림: PL은 '했다'는 사실만 봄");
 
-  // KP 접속 끊김 → 일시정지 → 이어하기
+  // KP 접속 끊김 → 유예(배너, 입력은 계속 열림) → 유예 뒤 자동 정지 → KP가 돌아오면 자동 재개
+  // (API는 KP_AWAY_GRACE_MS로 유예를 줄여 띄운다. 기본은 30초.)
   await kp.context().close();
+  await pl.getByTestId("kp-away-banner").getByText("KP 연결이 끊겼어요. 잠시 기다려요.").waitFor();
+  assert.equal(await pl.getByLabel("굴림 식").isDisabled(), false);
+  assert.equal(await pl.getByTestId("session-status").getByText("진행 중").count(), 1);
+  step("KP 연결이 끊기면 PL 화면에 '잠시 기다려요' 배너가 뜨고 아직 정지는 아님");
   await pl.getByText("세션이 일시정지 중이에요").first().waitFor();
-  await pl.getByLabel("굴림 식").isDisabled();
   assert.equal(await pl.getByLabel("굴림 식").isDisabled(), true);
-  step("KP가 나가면 PL 화면이 일시정지로 바뀌고 입력이 막힘");
+  assert.equal(await pl.getByTestId("kp-away-banner").count(), 0);
+  step("유예가 지나도 KP가 안 오면 PL 화면이 일시정지로 바뀌고 입력이 막힘");
 
   const kp2 = await (await ctx()).newPage();
   await login(kp2, "하늘");
   await kp2.goto(roomUrl);
-  await kp2.getByRole("button", { name: "이어하기" }).click();
   await pl.getByTestId("session-status").getByText("진행 중").waitFor();
   assert.equal(await pl.getByLabel("굴림 식").isDisabled(), false);
-  step("KP가 돌아와 이어하기 하면 PL 입력이 다시 열림");
+  assert.equal(await kp2.getByRole("button", { name: "이어하기" }).count(), 0);
+  step("KP가 돌아오면 이어하기 없이 자동 재개되어 PL 입력이 다시 열림");
+
+  // KP가 직접 누른 일시정지: 정지 중에도 KP는 토큰을 놓을 수 있고(굴림은 막힘), 새로고침해도 자동 재개되지 않음
+  await kp2.getByTestId("connection").getByText("연결됨").waitFor();
+  await kp2.getByRole("button", { name: "일시정지", exact: true }).click();
+  await pl.getByText("세션이 일시정지 중이에요").first().waitFor();
+  assert.equal(await kp2.getByRole("button", { name: "+ 토큰" }).isDisabled(), false);
+  assert.equal(await kp2.getByLabel("굴림 식").isDisabled(), true);
+  const tokensBefore = await kp2.locator('[data-testid^="obj-"]').count();
+  await kp2.getByRole("button", { name: "+ 토큰" }).click();
+  await kp2.waitForFunction((n) => document.querySelectorAll('[data-testid^="obj-"]').length > n, tokensBefore);
+  await kp2.getByTestId("session-status").getByText("일시정지").waitFor();
+  await kp2.reload();
+  await kp2.getByTestId("connection").getByText("연결됨").waitFor();
+  await kp2.getByRole("button", { name: "이어하기" }).waitFor();
+  await kp2.waitForTimeout(800);
+  assert.equal(await pl.getByTestId("session-status").getByText("일시정지").count(), 1);
+  await kp2.getByRole("button", { name: "이어하기" }).click();
+  await pl.getByTestId("session-status").getByText("진행 중").waitFor();
+  step("KP가 직접 멈추면 정지 중에도 토큰 편집은 되고 굴림은 막히며, 새로고침해도 자동 재개되지 않고 이어하기로 풀림");
+
+  // 새로고침(유예 안의 재접속): PL은 정지를 보지 않는다
+  await kp2.reload();
+  await kp2.getByTestId("connection").getByText("연결됨").waitFor();
+  await kp2.waitForTimeout(500);
+  assert.equal(await pl.getByText("세션이 일시정지 중이에요").count(), 0);
+  assert.equal(await pl.getByTestId("session-status").getByText("진행 중").count(), 1);
+  step("KP가 새로고침해도 유예 안에 돌아오면 PL 화면은 정지되지 않음");
 
   // 판정 효과: KP가 "어려운 성공"까지 켜면 PL 화면에 효과가 재생되고, PL이 개인 설정으로 끌 수 있음
   await openSettings(kp2);
@@ -585,7 +619,7 @@ try {
   await pl.getByRole("button", { name: "보관함에 반영" }).click();
   await pl.getByText("보관함에 반영했어요").waitFor();
   const vault = await (
-    await fetch("http://localhost:8787/characters", { headers: { "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") } })
+    await fetch(`${API}/characters`, { headers: { "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") } })
   ).json();
   assert.equal(vault.find((c) => c.name === CHAR).hp, 9);
   step("세션 종료 뒤 변경된 HP가 보관함 원본에 반영됨");
@@ -606,8 +640,8 @@ try {
   // 이전 실행이 남긴 서재를 비워 개수 한도에 걸리지 않게 한다
   {
     const h = { "content-type": "application/json", "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") };
-    const cur = await (await fetch("http://localhost:8787/library", { headers: h })).json();
-    await fetch("http://localhost:8787/library", { method: "PUT", headers: h, body: JSON.stringify({ macros: [], occupations: cur.occupations, baseRevision: cur.revision }) });
+    const cur = await (await fetch(`${API}/library`, { headers: h })).json();
+    await fetch(`${API}/library`, { method: "PUT", headers: h, body: JSON.stringify({ macros: [], occupations: cur.occupations, baseRevision: cur.revision }) });
   }
 
   // 매크로: 이름 붙여 저장한 식을 한 번에 굴리고, 잘못된 식은 거절하며, 다시 열어도 남아 있다
@@ -625,13 +659,13 @@ try {
   await pl.waitForFunction((n) => [...document.querySelectorAll('[data-testid="roll-entry"]')].filter((e) => e.textContent.includes("3d6")).length > n, before);
   await pl.reload();
   await pl.getByTestId("macro").filter({ hasText: "한 방 " + run }).waitFor();
-  const serverLib = await (await fetch("http://localhost:8787/library", { headers: { "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") } })).json();
+  const serverLib = await (await fetch(`${API}/library`, { headers: { "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") } })).json();
   assert.ok(serverLib.macros.some((m) => m.name === "한 방 " + run && m.expr === "3d6"));
   step("매크로: 저장한 식을 한 번에 굴리고, 잘못된 식은 거절하며, 새로고침해도 남고 서버 서재에 저장됨");
 
   // 서재 충돌: 다른 기기가 먼저 저장해도 내 변경과 항목 단위로 합쳐지고 어느 쪽도 사라지지 않는다
   const dev = { "content-type": "application/json", "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") };
-  const otherPut = await fetch("http://localhost:8787/library", {
+  const otherPut = await fetch(`${API}/library`, {
     method: "PUT",
     headers: dev,
     body: JSON.stringify({ macros: [...serverLib.macros, { id: "other" + run, name: "다른 기기 " + run, expr: "1d4", secret: false }], occupations: serverLib.occupations, baseRevision: serverLib.revision }),
@@ -644,7 +678,7 @@ try {
   await pl.getByRole("button", { name: "닫기", exact: true }).click();
   await pl.getByTestId("macro").filter({ hasText: "다른 기기 " + run }).waitFor();
   await pl.getByTestId("macro").filter({ hasText: "이쪽 " + run }).waitFor();
-  const merged = await (await fetch("http://localhost:8787/library", { headers: dev })).json();
+  const merged = await (await fetch(`${API}/library`, { headers: dev })).json();
   assert.ok(merged.macros.some((m) => m.name === "다른 기기 " + run) && merged.macros.some((m) => m.name === "이쪽 " + run));
   step("서재 충돌: 다른 기기가 먼저 저장해도 항목 단위로 합쳐져 둘 다 남음");
 

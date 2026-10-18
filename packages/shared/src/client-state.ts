@@ -15,6 +15,7 @@ import type {
   RollLogEntry,
   ServerMessage,
   SessionStatus,
+  PauseReason,
 } from "./protocol";
 
 /** 클라이언트가 들고 있는 룸 상태. 서버 이벤트를 순서대로 적용해 만든다. */
@@ -24,6 +25,9 @@ export interface RoomState {
   /** 지금까지 받은 가장 큰 seq. 재접속 때 서버에 알려 준다. */
   lastSeq: number;
   sessionStatus: SessionStatus;
+  pauseReason: PauseReason | null;
+  /** KP 연결이 끊겨 유예 중인 동안의 끊긴 시각. 아니면 null */
+  kpAwaySince: number | null;
   sessionNumber: number;
   objects: Record<string, GameObject>;
   /** KP는 모든 장면, 나머지는 활성 장면만 안다. */
@@ -64,6 +68,8 @@ export const initialRoomState = (roomId = ""): RoomState => ({
   roomId,
   lastSeq: 0,
   sessionStatus: "IDLE",
+  pauseReason: null,
+  kpAwaySince: null,
   sessionNumber: 0,
   objects: {},
   scenes: {},
@@ -101,6 +107,8 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       roomId: d.roomId,
       lastSeq: d.seq,
       sessionStatus: d.sessionStatus,
+      pauseReason: d.pauseReason ?? null,
+      kpAwaySince: d.kpAwaySince ?? null,
       sessionNumber: d.sessionNumber,
       objects: Object.fromEntries(d.objects.map((o) => [o.id, o])),
       scenes: Object.fromEntries(d.scenes.map((sc) => [sc.id, sc])),
@@ -212,12 +220,16 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
     case "presence":
       return { ...next, members: ev.data.members };
     case "session.started":
-      return { ...next, sessionStatus: "ACTIVE", sessionNumber: ev.data.number, lastEnd: null };
+      return { ...next, sessionStatus: "ACTIVE", pauseReason: null, kpAwaySince: null, sessionNumber: ev.data.number, lastEnd: null };
     case "session.paused":
-      return { ...next, sessionStatus: "PAUSED" };
+      return { ...next, sessionStatus: "PAUSED", pauseReason: ev.data.reason, kpAwaySince: null };
     case "session.resumed":
-      return { ...next, sessionStatus: "ACTIVE" };
+      return { ...next, sessionStatus: "ACTIVE", pauseReason: null, kpAwaySince: null };
+    case "kp.away":
+      return { ...next, kpAwaySince: ev.data.since };
+    case "kp.back":
+      return { ...next, kpAwaySince: null };
     case "session.ended":
-      return { ...next, sessionStatus: "IDLE", lastEnd: ev.data };
+      return { ...next, sessionStatus: "IDLE", pauseReason: null, kpAwaySince: null, lastEnd: ev.data };
   }
 }

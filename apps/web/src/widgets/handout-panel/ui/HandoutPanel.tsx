@@ -10,7 +10,7 @@ const scope = (h: Handout, players: Member[]) =>
   h.kpOnly ? "KP 노트" : h.visibleTo === "gm" ? "초안" : h.visibleTo === "all" ? "전원" : h.visibleTo.map((id) => players.find((p) => p.userId === id)?.name ?? "?").join(", ");
 
 /** 핸드아웃 목록. KP는 만들고 고치고 공개 범위를 정하고, 나머지는 받은 것만 읽는다. */
-export function HandoutPanel({ me, handouts, isKp, canEdit, players, send }: { me: Caller; handouts: Handout[]; isKp: boolean; canEdit: boolean; players: Member[]; send: (c: ClientCommand) => unknown }) {
+export function HandoutPanel({ me, handouts, isKp, canEdit, canShow = canEdit, players, send }: { me: Caller; handouts: Handout[]; isKp: boolean; canEdit: boolean; canShow?: boolean; players: Member[]; send: (c: ClientCommand) => unknown }) {
   const [editing, setEditing] = useState<Editing>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -51,7 +51,7 @@ export function HandoutPanel({ me, handouts, isKp, canEdit, players, send }: { m
             )}
             {isKp && (
               <div className="btn-row">
-                {!h.kpOnly && <button className="btn" disabled={!canEdit || h.visibleTo === "gm"} title={h.kpOnly ? "KP 전용 노트는 펼쳐 보일 수 없어요" : undefined} onClick={() => send({ type: "handout.show", data: { id: h.id } })}>펼쳐 보이기</button>}
+                {!h.kpOnly && <button className="btn" disabled={!canShow || h.visibleTo === "gm"} title={h.kpOnly ? "KP 전용 노트는 펼쳐 보일 수 없어요" : undefined} onClick={() => send({ type: "handout.show", data: { id: h.id } })}>펼쳐 보이기</button>}
                 <button className="btn" disabled={!canEdit} onClick={() => setEditing({ mode: "edit", handout: h })}>편집</button>
                 <button className="btn danger" disabled={!canEdit} onClick={() => window.confirm(`'${h.title}'을(를) 지울까요?`) && send({ type: "handout.remove", data: { id: h.id } })}>삭제</button>
               </div>

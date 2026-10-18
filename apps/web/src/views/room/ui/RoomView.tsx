@@ -68,7 +68,11 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   const isKp = role === "kp";
   const active = state.sessionStatus === "ACTIVE";
   // 세션 전(준비 모드)에는 KP도 보드를 만질 수 있다.
-  const canEditBoard = active || (isKp && state.sessionStatus === "IDLE");
+  // 일시정지 중에도 KP는 준비성 편집(토큰·소품·안개·장면·시트·핸드아웃·흐름·음향)을 할 수 있다.
+  // 판정·전투·장면 전환처럼 이야기를 앞으로 미는 것만 이어하기 뒤에 한다(서버가 같은 규칙으로 막는다).
+  const paused = state.sessionStatus === "PAUSED";
+  const canEditBoard = active || isKp;
+  const kpAway = active && !isKp && state.kpAwaySince !== null;
   const scenes = useMemo(() => Object.values(state.scenes), [state.scenes]);
   // KP는 활성이 아닌 장면도 골라 꾸밀 수 있고, 장면이 사라지면 활성 장면으로 돌아온다.
   const shownSceneId = isKp && viewSceneId && state.scenes[viewSceneId] ? viewSceneId : state.activeSceneId;
@@ -107,7 +111,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
 
   return (
     <div className="room">
-      <RoomHeader me={me} roomId={roomId} role={role} status={state.sessionStatus} sessionNumber={state.sessionNumber} connection={connection} members={state.members} effects={state.effects} madnessTable={state.madnessTable} endingDefaults={endingDefaults} effectsEnabled={fx.enabled} onToggleEffects={fx.toggle} soundControl={<SoundControl prefs={sound.prefs} onChange={sound.update} unlocked={audio.unlocked} onUnlock={audio.unlock} playing={audio.playing} />} send={send} />
+      <RoomHeader me={me} roomId={roomId} role={role} status={state.sessionStatus} kpAway={kpAway} sessionNumber={state.sessionNumber} connection={connection} members={state.members} effects={state.effects} madnessTable={state.madnessTable} endingDefaults={endingDefaults} effectsEnabled={fx.enabled} onToggleEffects={fx.toggle} soundControl={<SoundControl prefs={sound.prefs} onChange={sound.update} unlocked={audio.unlocked} onUnlock={audio.unlock} playing={audio.playing} />} send={send} />
 
       <EndSummaryCard summary={state.lastEnd} />
       <MadnessResultCard last={state.lastMadness} />
@@ -117,7 +121,8 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
 
       <div className="body">
         <main className="board">
-          {state.sessionStatus === "PAUSED" && <div className="banner" role="status">세션이 일시정지 중이에요. KP가 돌아오면 이어서 진행해요.</div>}
+          {kpAway && <div className="banner" role="status" data-testid="kp-away-banner">KP 연결이 끊겼어요. 잠시 기다려요.</div>}
+          {paused && <div className="banner" role="status">세션이 일시정지 중이에요. KP가 돌아오면 이어서 진행해요.</div>}
           {state.sessionStatus === "IDLE" && !isKp && (
             <div className="banner" role="status">KP가 세션을 시작하기를 기다리고 있어요.</div>
           )}
@@ -135,7 +140,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               onClose={() => setGuideClosed(true)}
             />
           )}
-          {isKp && <SceneBar me={me} scenes={scenes} tracks={state.audioLibrary} activeId={state.activeSceneId} viewId={shownSceneId} onView={setViewSceneId} enabled={state.sessionStatus !== "PAUSED"} send={send} />}
+          {isKp && <SceneBar me={me} scenes={scenes} tracks={state.audioLibrary} activeId={state.activeSceneId} viewId={shownSceneId} onView={setViewSceneId} enabled canActivate={!paused} send={send} />}
           <Board objects={objects} background={state.scenes[shownSceneId]?.background} me={{ userId: me.userId, role }} canInteract={canEditBoard} onMove={move} selectedId={selectedId} onSelect={setSelectedId} fog={fogView} onPick={isKp && fogPicking ? (x, y) => send({ type: "fog.reveal", data: { sceneId: shownSceneId, x, y, r: fogRadius } }) : undefined} />
           {isKp && (
             <StageCues roomId={roomId} enabled={state.sessionStatus !== "PAUSED"} send={send} source={cueSource} />
@@ -188,13 +193,13 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               onLuck={(rollId) => send({ type: "luck.spend", data: { rollId } })}
             />
           ) : tab === "flow" && isKp && state.flow ? (
-            <FlowPanel flow={state.flow} scenes={scenes} handouts={handoutList} tracks={state.audioLibrary} status={state.sessionStatus} enabled={state.sessionStatus !== "PAUSED"} send={send} />
+            <FlowPanel flow={state.flow} scenes={scenes} handouts={handoutList} tracks={state.audioLibrary} status={state.sessionStatus} enabled send={send} />
           ) : tab === "sound" && isKp ? (
-            <AudioPanel me={me} library={state.audioLibrary} bgm={state.bgm} enabled={state.sessionStatus !== "PAUSED"} send={send} />
+            <AudioPanel me={me} library={state.audioLibrary} bgm={state.bgm} enabled send={send} />
           ) : tab === "combat" ? (
             <InitiativePanel initiative={state.initiative} isKp={isKp} enabled={state.sessionStatus !== "PAUSED"} send={send} />
           ) : tab === "handout" ? (
-            <HandoutPanel me={me} handouts={handoutList} isKp={isKp} canEdit={state.sessionStatus !== "PAUSED"} players={state.members} send={send} />
+            <HandoutPanel me={me} handouts={handoutList} isKp={isKp} canEdit={isKp || !paused} canShow={!paused} players={state.members} send={send} />
           ) : (
             <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
               {characters.length > 0 && (
@@ -203,6 +208,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                   selectedId={sheet?.id ?? null}
                   onSelect={setSheetId}
                   canAct={active && role !== "spectator"}
+                  canEdit={role !== "spectator" && (active || isKp)}
                   onPatch={(characterId, ops) => send({ type: "sheet.patch", data: { characterId, ops } })}
                   isKp={isKp}
                   onSanCheck={(characterId, loss) => {
@@ -223,7 +229,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                 />
               )}
               <div style={{ padding: 16, display: "grid", gap: 12, marginTop: characters.length > 0 ? "auto" : 0 }}>
-                {role !== "spectator" && (isKp || !hasOwn) && <LoadCharacter me={me} send={send} disabled={state.sessionStatus === "PAUSED"} />}
+                {role !== "spectator" && (isKp || !hasOwn) && <LoadCharacter me={me} send={send} disabled={paused && !isKp} />}
                 {characters.length === 0 && <SheetEmpty role={role} canLoad={!hasOwn} />}
                 {state.sessionStatus === "IDLE" && state.sessionNumber > 0 && sheet && sheet.ownerId === me.userId && <SaveToVaultButton key={`${sheet.id}-${sheet.rev}`} me={me} character={sheet} />}
                 {state.lastError && <div className="err" role="alert">{state.lastError.message}</div>}

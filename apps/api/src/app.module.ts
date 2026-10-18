@@ -40,6 +40,8 @@ export interface AppOptions {
   hub?: HubOptions;
   /** 프록시 겹 수. 0이면 X-Forwarded-For를 믿지 않는다. */
   trustProxyHops?: number;
+  /** KP 연결이 끊긴 뒤 자동 정지까지의 유예(ms). 기본 30초 */
+  kpAwayGraceMs?: number;
 }
 
 /**
@@ -84,7 +86,10 @@ export class AppModule {
           provide: RoomHub,
           inject: [RoomRegistry, AuthService, DiscordNotifier],
           useFactory: (registry: RoomRegistry, auth: AuthService, notifier: DiscordNotifier) =>
-            new RoomHub(registry, auth, options.joinTimeoutMs, notifier, options.hub),
+            new RoomHub(registry, auth, options.joinTimeoutMs, notifier, {
+              ...options.hub,
+              ...(options.kpAwayGraceMs !== undefined ? { kpAwayGraceMs: options.kpAwayGraceMs } : {}),
+            }),
         },
         { provide: VaultService, useFactory: () => new VaultService(options.vault ?? new MemoryVaultRepository()) },
         { provide: LibraryService, useFactory: () => new LibraryService(options.library ?? new MemoryLibraryRepository()) },

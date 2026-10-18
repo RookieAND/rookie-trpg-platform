@@ -14,6 +14,8 @@ interface Props {
   onSelect: (id: string) => void;
   /** 세션이 진행 중이고 관전자가 아닐 때만 true */
   canAct: boolean;
+  /** 수치·상태·메모 편집. 판정(굴림·SAN 체크)은 canAct. KP는 세션 밖·일시정지 중에도 고칠 수 있다. 생략하면 canAct를 따른다. */
+  canEdit?: boolean;
   onPatch: (characterId: string, ops: SheetOp[]) => void;
   onRoll: (characterId: string, name: string, opts: RollOptions) => void;
   isKp: boolean;
@@ -33,7 +35,7 @@ const BARS: Array<{ path: StatPath; label: string }> = [
 ];
 
 /** 캐릭터 시트: 상태 바(±), 특성치·기능 굴리기, 성장 표시, 메모. */
-export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, onRoll, isKp, onSanCheck, onNewDay, onMadnessRoll, onDamage, onRemove }: Props) {
+export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit = canAct, onPatch, onRoll, isKp, onSanCheck, onNewDay, onMadnessRoll, onDamage, onRemove }: Props) {
   const c = characters.find((x) => x.id === selectedId) ?? characters[0];
   const [bonus, setBonus] = useState(0);
   const [difficulty, setDifficulty] = useState<RollOptions["difficulty"]>(undefined);
@@ -70,9 +72,9 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, 
                 <div style={{ width: `${Math.min(100, (cur / max) * 100)}%`, height: "100%", background: path === "hp" ? "var(--danger)" : "var(--accent)" }} />
               </div>
               <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                <button className="btn" style={{ height: 28, padding: "0 10px" }} aria-label={`${label} 감소`} disabled={!canAct} onClick={() => onPatch(c.id, [{ path, delta: -1 }])}>−</button>
+                <button className="btn" style={{ height: 28, padding: "0 10px" }} aria-label={`${label} 감소`} disabled={!canEdit} onClick={() => onPatch(c.id, [{ path, delta: -1 }])}>−</button>
                 <span className="mono" style={{ minWidth: 56, textAlign: "center" }} data-testid={`stat-${path}`}>{cur}/{max}</span>
-                <button className="btn" style={{ height: 28, padding: "0 10px" }} aria-label={`${label} 증가`} disabled={!canAct} onClick={() => onPatch(c.id, [{ path, delta: 1 }])}>+</button>
+                <button className="btn" style={{ height: 28, padding: "0 10px" }} aria-label={`${label} 증가`} disabled={!canEdit} onClick={() => onPatch(c.id, [{ path, delta: 1 }])}>+</button>
               </span>
             </div>
           );
@@ -88,7 +90,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, 
               className="btn"
               style={{ height: 28, padding: "0 10px", ...(on ? { borderColor: "var(--danger)", color: "var(--danger)" } : {}) }}
               aria-pressed={on}
-              disabled={!canAct}
+              disabled={!canEdit}
               onClick={() => onPatch(c.id, [{ path: "condition", name: k, on: !on }])}
             >
               {CONDITION_LABEL_KO[k]}
@@ -151,7 +153,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, 
         <input className="input" aria-label="기능 찾기" placeholder="기능 찾기" value={filter} onChange={(e) => setFilter(e.target.value)} />
         {skills.map(([name, s]) => (
           <div key={name} data-testid={`skill-${name}`} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 8, alignItems: "center" }}>
-            <input type="checkbox" aria-label={`${name} 성장 표시`} checked={s.grown} disabled={!canAct} onChange={(e) => onPatch(c.id, [{ path: "skill", name, grown: e.target.checked }])} style={{ accentColor: "#7c86f7" }} />
+            <input type="checkbox" aria-label={`${name} 성장 표시`} checked={s.grown} disabled={!canEdit} onChange={(e) => onPatch(c.id, [{ path: "skill", name, grown: e.target.checked }])} style={{ accentColor: "#7c86f7" }} />
             <span>{name}</span>
             <span className="mono" style={{ color: "var(--muted)" }}>{s.value} <span style={{ fontSize: 11 }}>({half(s.value)}/{fifth(s.value)})</span></span>
             <button className="btn" style={{ height: 28, padding: "0 10px" }} disabled={!canAct} onClick={() => onRoll(c.id, name, opts)} aria-label={`${name} 굴리기`}>굴리기</button>
@@ -167,7 +169,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, 
           className="input"
           style={{ height: 64, padding: 12 }}
           defaultValue={c.possessions ?? ""}
-          disabled={!canAct}
+          disabled={!canEdit}
           onBlur={(e) => e.currentTarget.value !== (c.possessions ?? "") && onPatch(c.id, [{ path: "possessions", value: e.currentTarget.value }])}
         />
       </label>
@@ -179,7 +181,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, 
           className="input"
           style={{ height: 80, padding: 12 }}
           defaultValue={c.backstory ?? ""}
-          disabled={!canAct}
+          disabled={!canEdit}
           onBlur={(e) => e.currentTarget.value !== (c.backstory ?? "") && onPatch(c.id, [{ path: "backstory", value: e.currentTarget.value }])}
         />
       </label>
@@ -191,7 +193,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, onPatch, 
           className="input"
           style={{ height: 80, padding: 12 }}
           defaultValue={c.notes}
-          disabled={!canAct}
+          disabled={!canEdit}
           onBlur={(e) => e.currentTarget.value !== c.notes && onPatch(c.id, [{ path: "notes", value: e.currentTarget.value }])}
         />
       </label>
