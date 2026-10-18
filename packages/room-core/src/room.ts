@@ -161,6 +161,7 @@ export interface RoomData {
  */
 export const KP_BLOCKED_WHILE_PAUSED: ReadonlySet<ClientCommand["type"]> = new Set<ClientCommand["type"]>([
   "roll.request",
+  "roll.ask",
   "roll.push",
   "luck.spend",
   "san.check",
@@ -466,6 +467,8 @@ export class Room {
         return this.objectRemove(who, command.data.id);
       case "roll.request":
         return this.rollRequest(who, command.data);
+      case "roll.ask":
+        return this.rollAsk(who, command.data);
       case "audio.track.add":
         return this.audioTrackAdd(who, command.data);
       case "audio.track.remove":
@@ -1330,6 +1333,16 @@ export class Room {
   }
 
   // ── 굴림 ───────────────────────────────────────────────
+
+  /** KP가 판정을 요청한다. 상태는 만들지 않고 알리기만 한다. 굴림은 PL이 roll.request로 직접 한다. */
+  private rollAsk(who: Actor, d: Extract<ClientCommand, { type: "roll.ask" }>["data"]): Result {
+    if (who.role !== "kp") return fail("forbidden", "KP만 판정을 요청할 수 있어요.");
+    if (d.targetUserId !== undefined && this.members.get(d.targetUserId)?.role !== "pl") {
+      return fail("not_found", "그 참가자는 이 룸의 PL이 아니에요.");
+    }
+    const ask = { id: this.newId(), name: d.name.trim(), ...(d.difficulty ? { difficulty: d.difficulty } : {}), ...(d.targetUserId ? { targetUserId: d.targetUserId } : {}), at: this.now() };
+    return ok(this.emit({ type: "roll.asked", data: ask }, { roles: ALL_ROLES }));
+  }
 
   private rollRequest(who: Actor, d: Extract<ClientCommand, { type: "roll.request" }>["data"]): Result {
     if (who.role === "spectator") return fail("forbidden", "관전자는 굴릴 수 없어요.");

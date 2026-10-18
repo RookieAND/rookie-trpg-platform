@@ -405,6 +405,15 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
       })
       .refine((d) => d.expr !== undefined || d.skill !== undefined, { message: "expr 또는 skill이 필요해요." }),
   }),
+  /** KP가 PL에게 판정을 요청한다. 굴림은 PL이 직접 한다. targetUserId가 없으면 PL 전원에게 간다. */
+  z.object({
+    type: z.literal("roll.ask"),
+    data: z.object({
+      name: z.string().min(1).max(30),
+      difficulty: z.enum(["regular", "hard", "extreme"]).optional(),
+      targetUserId: id.optional(),
+    }),
+  }),
   z.object({
     type: z.literal("character.add"),
     data: characterInputSchema.extend({
@@ -592,6 +601,15 @@ export type ErrorCode =
   | "bad_sheet"
   | "rate_limited";
 
+/** KP가 PL에게 요청한 판정. */
+export interface RollAsk {
+  id: string;
+  name: string;
+  difficulty?: "regular" | "hard" | "extreme";
+  targetUserId?: string;
+  at: number;
+}
+
 export type ServerEvent =
   | { type: "snapshot"; data: Snapshot }
   | { type: "object.added"; data: GameObject }
@@ -619,6 +637,8 @@ export type ServerEvent =
   | { type: "character.updated"; data: Character }
   | { type: "character.removed"; data: { id: string } }
   | { type: "roll.result"; data: RollLogEntry }
+  /** KP의 판정 요청. 화면은 targetUserId가 내가 아니면 무시한다. */
+  | { type: "roll.asked"; data: RollAsk }
   /** 다른 사람의 비밀 굴림. 결과는 담지 않는다. */
   | { type: "roll.hidden"; data: { id: string; userId: string; userName: string; at: number } }
   | { type: "presence"; data: { members: Member[] } }

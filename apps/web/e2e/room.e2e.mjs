@@ -332,6 +332,16 @@ try {
   await kp.getByRole("tab", { name: "굴림" }).click();
   step("광기 상태 표시, 증상 굴림은 주인과 KP에게만, 해제하면 사라짐");
 
+  // 판정 요청: KP가 요청하면 PL 화면에 배너가 뜨고, 누르면 내 캐릭터로 굴려짐
+  await kp.getByLabel("요청할 기능").fill("도서관 이용");
+  await kp.getByRole("button", { name: "요청 보내기" }).click();
+  const askBanner = pl.getByTestId("roll-ask-banner");
+  await askBanner.getByText("도서관 이용").waitFor();
+  await askBanner.getByRole("button", { name: "굴리기" }).click();
+  await askBanner.waitFor({ state: "detached" });
+  await pl.getByTestId("roll-entry").getByText(`${CHAR} · 도서관 이용`).first().waitFor();
+  step("KP가 판정을 요청하면 PL에게 배너가 뜨고, 굴리기를 누르면 내 캐릭터로 굴림");
+
   // 무기·상태·소지품
   await pl.getByRole("tab", { name: "시트" }).click();
   await pl.getByTestId("weapons").getByText("주먹").waitFor();

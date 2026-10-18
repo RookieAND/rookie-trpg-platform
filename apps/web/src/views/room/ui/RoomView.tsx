@@ -25,7 +25,7 @@ import { FlowPanel } from "@/widgets/flow-panel";
 import { InitiativePanel } from "@/widgets/initiative-panel";
 import { HandoutSpotlight } from "@/widgets/handout-spotlight";
 import { RollEffect } from "@/widgets/roll-effect";
-import { RollPanel } from "@/widgets/roll-panel";
+import { AskBanner, RollPanel } from "@/widgets/roll-panel";
 import { SceneTransition } from "@/widgets/scene-transition";
 import { RoomHeader } from "@/widgets/room-header";
 import { StartGuide } from "./StartGuide";
@@ -146,6 +146,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
         <main className="board">
           {kpAway && <div className="banner" role="status" data-testid="kp-away-banner">KP 연결이 끊겼어요. 잠시 기다려요.</div>}
           {paused && <div className="banner" role="status">세션이 일시정지 중이에요. KP가 돌아오면 이어서 진행해요.</div>}
+          {role === "pl" && <AskBanner asks={state.rollAsks} userId={me.userId} canRoll={active} hasCharacter={characters.some((c) => c.ownerId === me.userId)} onRoll={(name, difficulty) => { const mine = characters.find((c) => c.ownerId === me.userId); if (!mine) return; send({ type: "roll.request", data: { secret: false, skill: { characterId: mine.id, name, bonus: 0, ...(difficulty ? { difficulty } : {}) } } }); setTab("roll"); }} />}
           {myTurn && state.initiative && <MyTurnBadge round={state.initiative.round} lowered={isKp} onOpen={() => setTab("combat")} />}
           {state.sessionStatus === "IDLE" && !isKp && (
             <div className="banner" role="status">KP가 세션을 시작하기를 기다리고 있어요.</div>
@@ -223,6 +224,8 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               onRoll={(expr, secret) => send({ type: "roll.request", data: { expr, secret } })}
               onPush={(rollId) => send({ type: "roll.push", data: { rollId } })}
               onLuck={(rollId) => send({ type: "luck.spend", data: { rollId } })}
+              players={state.members.filter((m) => m.role === "pl").map((m) => ({ userId: m.userId, name: m.name }))}
+              onAsk={(name, difficulty, targetUserId) => send({ type: "roll.ask", data: { name, ...(difficulty ? { difficulty } : {}), ...(targetUserId ? { targetUserId } : {}) } })}
             />
           ) : tab === "flow" && isKp && state.flow ? (
             <FlowPanel flow={state.flow} scenes={scenes} handouts={handoutList} tracks={state.audioLibrary} status={state.sessionStatus} enabled send={send} />

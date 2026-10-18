@@ -6,6 +6,7 @@ import type { Caller } from "@/shared/api";
 import { downloadText } from "@/shared/lib";
 import { Hint } from "@/shared/ui";
 import { RollResult } from "./RollResult";
+import { AskForm } from "./RollAsk";
 
 interface Props {
   me: Caller;
@@ -20,9 +21,12 @@ interface Props {
   onRoll: (expr: string, secret: boolean) => unknown;
   onPush: (rollId: string) => void;
   onLuck: (rollId: string) => void;
+  /** KP 전용. 판정 요청 */
+  players?: Array<{ userId: string; name: string }>;
+  onAsk?: (name: string, difficulty: "regular" | "hard" | "extreme" | undefined, targetUserId?: string) => unknown;
 }
 
-export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disabled, error, onRoll, onPush, onLuck }: Props) {
+export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disabled, error, onRoll, onPush, onLuck, players, onAsk }: Props) {
   const [expr, setExpr] = useState("");
   const [secret, setSecret] = useState(false);
   const macro = useRollMacros(me);
@@ -107,6 +111,7 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
       </div>
       <MacroBar error={macro.error} macros={macro.macros} isKp={isKp} disabled={disabled} onRoll={(m) => onRoll(m.expr, isKp && m.secret)} onAdd={macro.add} onRemove={macro.remove} />
       <div className="compose">
+        {isKp && onAsk && <AskForm players={players ?? []} disabled={disabled} onAsk={onAsk} />}
         {isKp && (
           <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input type="checkbox" checked={secret} onChange={(e) => setSecret(e.target.checked)} style={{ accentColor: "#7c86f7" }} />

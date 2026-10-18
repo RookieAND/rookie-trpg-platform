@@ -13,6 +13,7 @@ import type {
   Handout,
   Member,
   RollLogEntry,
+  RollAsk,
   ServerMessage,
   SessionStatus,
   PauseReason,
@@ -52,6 +53,8 @@ export interface RoomState {
   transition: { kind: Transition; n: number } | null;
   members: Member[];
   rolls: RollLogEntry[];
+  /** KP가 요청한 판정(최근 것부터 5개). 화면에서 내게 온 것만 골라 쓴다. */
+  rollAsks: RollAsk[];
   characters: Record<string, Character>;
   handouts: Record<string, Handout>;
   /** KP가 "바로 펼치기"를 눌렀을 때 화면에 띄울 핸드아웃. n이 바뀌면 같은 핸드아웃도 다시 띄운다. */
@@ -86,6 +89,7 @@ export const initialRoomState = (roomId = ""): RoomState => ({
   transition: null,
   members: [],
   rolls: [],
+  rollAsks: [],
   characters: {},
   handouts: {},
   spotlight: null,
@@ -125,6 +129,7 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       transition: null,
       members: d.members,
       rolls: d.rolls,
+      rollAsks: [],
       characters: Object.fromEntries(d.characters.map((c) => [c.id, c])),
       handouts: Object.fromEntries(d.handouts.map((h) => [h.id, h])),
       spotlight: null,
@@ -209,6 +214,10 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
     case "roll.result": {
       if (state.rolls.some((r) => r.id === ev.data.id)) return next;
       return { ...next, rolls: [...state.rolls, ev.data].slice(-MAX_ROLLS) };
+    }
+    case "roll.asked": {
+      if (state.rollAsks.some((a) => a.id === ev.data.id)) return next;
+      return { ...next, rollAsks: [...state.rollAsks, ev.data].slice(-5) };
     }
     case "roll.hidden": {
       if (state.hiddenRolls.some((r) => r.id === ev.data.id)) return next;
