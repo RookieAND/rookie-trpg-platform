@@ -5,6 +5,7 @@ import { inAudience, type Actor, type Out } from "@coc-vtt/room-core";
 import type { AuthService } from "../../../identity/application/auth.service";
 import type { DiscordNotifier } from "../../application/discord-notifier";
 import type { LoadedRoom, RoomRegistry } from "../../application/room-registry";
+import { DEFAULT_RATE_LIMIT, MessageRateLimiter, type RateLimitOptions } from "./rate-limit";
 
 /**
  * 연결 허브. ws 연결 하나하나를 룸에 붙이고, 룸이 만든 이벤트를 받을 사람에게 전달한다.
@@ -34,23 +35,64 @@ export const CLOSE = {
   notFound: 4404,
   joinTimeout: 4408,
   full: 4409,
+  /** 속도 제한을 계속 넘겨 끊긴 경우. 1008(정책 위반)을 쓰므로 클라이언트가 천천히 다시 붙을 수 있다. */
+  rateLimited: 1008,
 } as const;
+
+export interface HubOptions {
+  rate?: Partial<RateLimitOptions>;
+  /** 이 간격으로 ping을 보내고, 직전 ping에 응답이 없던 연결은 끊는다. 0이면 끈다. */
+  heartbeatMs?: number;
+  now?: () => number;
+}
+
+export const HEARTBEAT_MS = 30_000;
 
 export class RoomHub {
   private conns = new Map<string, Set<Conn>>();
   private closing = false;
+  /** 하트비트 대상. 룸에 붙기 전 연결도 포함한다. */
+  private alive = new Map<WebSocket, boolean>();
+  private heartbeat: ReturnType<typeof setInterval> | null = null;
+  private readonly rate: RateLimitOptions;
+  private readonly now: () => number;
 
   constructor(
     private readonly registry: RoomRegistry,
     private readonly auth: AuthService,
     private readonly joinTimeoutMs = 5000,
     private readonly notifier?: DiscordNotifier,
+    opts: HubOptions = {},
   ) {
+    this.rate = { ...DEFAULT_RATE_LIMIT, ...opts.rate };
+    this.now = opts.now ?? Date.now;
+    const hb = opts.heartbeatMs ?? HEARTBEAT_MS;
+    if (hb > 0) {
+      this.heartbeat = setInterval(() => this.sweep(), hb);
+      this.heartbeat.unref();
+    }
     // 룸이 지워지면 붙어 있던 연결을 모두 끊는다. 4404라 다시 붙으려 하지 않는다.
     registry.onRemoved((roomId) => {
       for (const c of this.conns.get(roomId) ?? []) c.ws.close(CLOSE.notFound, "room_removed");
       this.conns.delete(roomId);
     });
+  }
+
+  /** 지난 ping에 응답하지 않은 연결은 죽은 것으로 보고 끊는다. 나머지에는 새 ping을 보낸다. */
+  private sweep() {
+    for (const [ws, ok] of this.alive) {
+      if (!ok) {
+        this.alive.delete(ws);
+        ws.terminate();
+        continue;
+      }
+      this.alive.set(ws, false);
+      try {
+        ws.ping();
+      } catch {
+        ws.terminate();
+      }
+    }
   }
 
   private send(ws: WebSocket, msg: ServerMessage) {
@@ -81,11 +123,22 @@ export class RoomHub {
 
     const queue: RawData[] = [];
     let handler: ((raw: RawData) => void) | null = null;
-    ws.on("message", (raw) => (handler ? handler(raw) : queue.push(raw)));
+    const limiter = new MessageRateLimiter(this.rate, this.now);
+    this.alive.set(ws, true);
+    ws.on("pong", () => this.alive.has(ws) && this.alive.set(ws, true));
+    ws.on("message", (raw) => {
+      // 무엇이든 받았으면 살아 있는 연결이다.
+      if (this.alive.has(ws)) this.alive.set(ws, true);
+      const verdict = limiter.take();
+      if (verdict === "ok") return handler ? handler(raw) : queue.push(raw);
+      this.send(ws, errorMsg("rate_limited", "메시지를 너무 빨리 보내고 있어요. 잠시 천천히 해 주세요."));
+      if (verdict === "close") ws.close(CLOSE.rateLimited, "rate_limited");
+    });
     let closed = false;
     let cleanup: () => void = () => {};
     ws.on("close", () => {
       closed = true;
+      this.alive.delete(ws);
       cleanup();
     });
     ws.on("error", () => ws.close());
@@ -189,6 +242,7 @@ export class RoomHub {
   /** 서버를 내리기 전에 모든 연결을 닫고 저장한다. */
   async shutdown() {
     this.closing = true;
+    if (this.heartbeat) clearInterval(this.heartbeat);
     for (const set of this.conns.values()) for (const c of set) c.ws.terminate();
     await this.registry.flushAll();
   }

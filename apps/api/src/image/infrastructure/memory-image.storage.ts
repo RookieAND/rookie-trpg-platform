@@ -5,6 +5,9 @@ export class MemoryImageStorage implements ImageStorage {
   async put(id: string, image: StoredImage) {
     this.files.set(id, image);
   }
+  async remove(id: string) {
+    this.files.delete(id);
+  }
   async get(id: string) {
     return this.files.get(id) ?? null;
   }

@@ -17,6 +17,10 @@ export interface DiscordConfig {
 const WEBHOOK = /^https:\/\/(?:(?:canary|ptb)\.)?(?:discord|discordapp)\.com\/api\/webhooks\/\d{5,25}\/[\w-]{20,200}$/;
 export const isValidWebhookUrl = (url: string) => WEBHOOK.test(url);
 
+/** 로그나 오류 문구에 웹훅 주소(토큰 포함)가 섞여 나가지 않게 가린다. */
+export const redactWebhooks = (text: string) =>
+  text.replace(/https?:\/\/(?:[\w-]+\.)?discord(?:app)?\.com\/api\/webhooks\/[^\s"'<>)]*/gi, "[웹훅 주소]");
+
 /** 알림을 실제로 보내는 쪽(포트). 구현은 infrastructure에 둔다. */
 export interface DiscordGateway {
   send(webhookUrl: string, content: string): Promise<void>;
