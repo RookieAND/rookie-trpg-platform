@@ -1112,6 +1112,73 @@ try {
   assert.equal(await kp2.getByRole("button", { name: "이어하기" }).count(), 0);
   step("GM이 돌아오면 이어하기 없이 자동 재개되어 PL 입력이 다시 열림");
 
+  // 상태 표식: 오른쪽 클릭 메뉴로 켜면 PL 화면에도 보이고, "GM만 보임" 표식은 PL 화면에 없다
+  {
+    const tok = kp2.getByTestId("obj-서하");
+    await tok.waitFor();
+    await tok.click({ button: "right" });
+    await kp2.getByTestId("menu-markers").click();
+    await kp2.getByTestId("marker-toggle-stun").click();
+    await pl.getByTestId("marker-서하-stun").waitFor();
+    assert.match(await pl.getByTestId("marker-서하-stun").getAttribute("aria-label"), /기절/);
+    // 비밀 표식: GM 화면에는 보이고 PL 화면에는 없다
+    await kp2.getByTestId("marker-secret-switch").check();
+    await kp2.getByTestId("marker-toggle-poison").click();
+    await kp2.getByTestId("marker-서하-poison").waitFor();
+    await kp2.getByTestId("marker-secret-switch").uncheck();
+    await kp2.getByTestId("marker-toggle-bleed").click();
+    await pl.getByTestId("marker-서하-bleed").waitFor();
+    assert.equal(await pl.getByTestId("marker-서하-poison").count(), 0, "GM만 보이는 표식이 PL 화면에 있으면 안 돼요");
+    assert.ok(!(await pl.content()).includes("marker-서하-poison"));
+    await kp2.keyboard.press("Escape");
+    await kp2.getByTestId("object-menu").waitFor({ state: "detached" });
+    step("GM이 오른쪽 클릭 메뉴로 상태 표식을 켜면 PL 화면에 보이고, 'GM만 보임' 표식은 PL 화면에 없음");
+  }
+
+  // 관전: 관전 링크로 들어와 보기만 하고, 주인이 내보내면 끊긴다
+  {
+    await kp2.getByRole("button", { name: "초대", exact: true }).click();
+    await kp2.getByTestId("invite-spectator-make").click();
+    const specLink = await kp2.getByTestId("invite-spectator-link").inputValue();
+    assert.match(specLink, /\/join\/.+\?invite=/);
+    assert.notEqual(specLink, inviteLink);
+    await kp2.keyboard.press("Escape");
+    await kp2.getByRole("dialog").waitFor({ state: "detached" });
+
+    const spec = await (await ctx()).newPage();
+    await spec.goto(specLink);
+    await spec.getByLabel("이름").fill("구경꾼");
+    await spec.getByRole("button", { name: "계속하기" }).click();
+    await spec.getByTestId("join-spectator-note").waitFor();
+    await spec.getByTestId("join-enter").click();
+    await spec.getByTestId("connection").getByText("연결됨").waitFor();
+    await spec.getByTestId("spectator-badge").waitFor();
+    await spec.getByTestId("obj-서하").waitFor();
+    await spec.getByTestId("marker-서하-stun").waitFor();
+    assert.equal(await spec.getByTestId("marker-서하-poison").count(), 0, "관전자에게도 GM만 보이는 표식은 없어요");
+    assert.equal(await spec.getByRole("button", { name: "+ 토큰" }).count(), 0, "관전자에게 편집 도구가 보이면 안 돼요");
+    assert.equal(await spec.getByTestId("spectator-count").count(), 0, "관전자 수는 GM에게만 보여요");
+    assert.equal(await pl.getByTestId("spectator-count").count(), 0);
+    assert.equal(await pl.getByTestId("spectator-badge").count(), 0);
+    // 오른쪽 클릭 메뉴가 있어도 표식을 바꿀 수 없다
+    await spec.getByTestId("obj-서하").click({ button: "right" });
+    assert.equal(await spec.getByTestId("menu-markers").count(), 0);
+    await spec.keyboard.press("Escape");
+    await kp2.getByTestId("spectator-count").waitFor();
+    step("관전 링크로 들어온 사람은 '관전 중'으로 보기만 하고(편집 도구 없음, 비밀 표식 없음) 관전자 수는 GM에게만 보임");
+
+    // 주인이 내보낸다
+    await kp2.getByRole("button", { name: "초대", exact: true }).click();
+    await kp2.getByTestId("spectator-구경꾼").waitFor();
+    await kp2.getByTestId("spectator-remove-구경꾼").click();
+    if (await kp2.getByTestId("ask-dialog").count()) await confirmAsk(kp2);
+    await kp2.getByTestId("spectator-empty").waitFor();
+    await spec.getByText(/내보냈|내보내/).first().waitFor();
+    await kp2.keyboard.press("Escape");
+    await spec.close();
+    step("룸 주인이 관전자를 내보내면 목록에서 사라지고 관전자 화면이 끊김");
+  }
+
   // GM이 직접 누른 일시정지: 정지 중에도 GM은 토큰을 놓을 수 있고(굴림은 막힘), 새로고침해도 자동 재개되지 않음
   await kp2.getByTestId("connection").getByText("연결됨").waitFor();
   await kp2.getByRole("button", { name: "일시정지", exact: true }).click();
