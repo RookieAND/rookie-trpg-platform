@@ -15,7 +15,7 @@ describe("nextAfterClose", () => {
     expect(nextAfterClose({ ...base, code: 4401, canRefresh: false })).toBe("stop");
   });
   it("접근 거절·없는 룸·정원 초과는 멈추고, 일시적 끊김은 다시 붙는다", () => {
-    for (const code of [4403, 4404, 4409]) expect(nextAfterClose({ ...base, code })).toBe("stop");
+    for (const code of [4403, 4404, 4409, 4410]) expect(nextAfterClose({ ...base, code })).toBe("stop");
     for (const code of [1006, 1001, 4408]) expect(nextAfterClose({ ...base, code })).toBe("retry");
   });
   it("우리가 닫은 연결은 다시 붙지 않는다", () => {

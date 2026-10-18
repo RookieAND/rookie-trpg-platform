@@ -62,6 +62,7 @@ export class UndoLog {
       case "object.add":
         return { command };
       case "object.move":
+      case "object.marker":
       case "object.update": {
         const o = maps.objects.get(command.data.id);
         return o ? { command, obj: { ...o } } : null;
@@ -97,6 +98,12 @@ export class UndoLog {
       case "object.update": {
         const now = maps.objects.get(c.data.id);
         if (now && p.obj) this.push({ kind: "update", before: p.obj, rev: now.rev, prevRev: p.obj.rev, label: `${kindKo(now)} '${p.obj.name}' 수정` });
+        return;
+      }
+      case "object.marker": {
+        const now = maps.objects.get(c.data.id);
+        // 표식이 바뀌지 않았으면 기록하지 않는다(비밀 표식만 바뀐 경우는 rev가 그대로라 표식으로 비교한다).
+        if (now && p.obj && JSON.stringify(now.markers ?? null) !== JSON.stringify(p.obj.markers ?? null)) this.push({ kind: "update", before: p.obj, rev: now.rev, prevRev: p.obj.rev, label: `${kindKo(now)} '${p.obj.name}' 표식 바꾸기` });
         return;
       }
       case "object.remove":

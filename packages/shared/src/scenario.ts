@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MAX_SUM_EXPR_LENGTH } from "./dice";
 import { isDamageExpr, AUDIO_KINDS, BEAT_KINDS, BGM_STOP, EFFECT_LEVELS, FOG_MAX_RADIUS, MAX_AUDIO_TRACKS, MAX_BEATS, MAX_BEAT_HANDOUTS, MAX_BRANCHES, MAX_CHARACTERS, MAX_FOG_ZONES, MAX_HANDOUTS, MAX_MADNESS_ENTRIES, MAX_OBJECTS, MAX_SCENES } from "./protocol";
+import { MARKER_TEXT_MAX, MAX_MARKERS } from "./markers";
 import { CHARACTERISTIC_KEYS, MAX_SKILLS, MAX_WEAPONS } from "./sheet";
 
 /**
@@ -8,15 +9,15 @@ import { CHARACTERISTIC_KEYS, MAX_SKILLS, MAX_WEAPONS } from "./sheet";
  * 로비의 "백업에서 새 룸 만들기"가 모두 이 파서를 쓴다. 형식 설명은 docs/scenario-format.md.
  *
  * 두 가지 파일이 같은 모양을 쓴다.
- *  - 시나리오(roll-and-call-scenario, 버전 1·2): 사람이 쓰는 파일. 버전 2는 1에 선택 필드만 더했다.
- *  - 백업(roll-and-call-backup, 버전 1): 룸에서 내보낸 파일. 시나리오에 설정·이미지(media)가 더해진다.
+ *  - 시나리오(roll-and-call-scenario, 버전 1~3): 사람이 쓰는 파일. 버전 2·3은 앞 버전에 선택 필드만 더했다(3: 토큰 표식).
+ *  - 백업(roll-and-call-backup, 버전 1·2; 2는 토큰 표식을 담는다): 룸에서 내보낸 파일. 시나리오에 설정·이미지(media)가 더해진다.
  * 파일 안의 id는 룸에 저장되지 않는 이름표(key)이고, 가져올 때 서버가 모두 새 id로 바꾼다.
  */
 
 export const SCENARIO_FORMAT = "roll-and-call-scenario";
 export const BACKUP_FORMAT = "roll-and-call-backup";
-export const SCENARIO_VERSION = 2;
-export const BACKUP_VERSION = 1;
+export const SCENARIO_VERSION = 3;
+export const BACKUP_VERSION = 2;
 
 export const MADNESS_ENTRY_MAX_LENGTH = 120;
 export const AUDIO_LABEL_MAX_LENGTH = 40;
@@ -97,6 +98,11 @@ const tokenSchema = z.object({
   /** PL에게도 HP 막대를 보여 줄지 */
   hpPublic: z.boolean().optional(),
   locked: z.boolean().optional(),
+  /** 상태 표식(기절·중독 등). key는 모르는 값이어도 모양만 맞으면 읽는다(새 버전의 파일). 토큰에만 쓴다. */
+  markers: z
+    .array(z.object({ key: z.string().regex(/^[a-z][a-z0-9_]{0,19}$/), secret: z.boolean().optional(), text: z.string().trim().max(MARKER_TEXT_MAX).optional() }))
+    .max(MAX_MARKERS)
+    .optional(),
 });
 
 const characterSchema = z.object({

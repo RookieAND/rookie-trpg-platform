@@ -36,8 +36,9 @@ describe("GM 연결 유예", () => {
   it("GM이 나가면 끊긴 시각을 알리고 정지하지 않는다", () => {
     const room = started({ now: () => 777 });
     const outs = room.leave("kp1");
-    expect(types(outs)).toEqual(["presence", "kp.away"]);
-    expect(outs[1]!.event).toEqual({ type: "kp.away", data: { since: 777 } });
+    // 관전자가 있으면 참가자 목록 알림이 받는 사람별로 나뉜다(GM·PL·관전자).
+    expect(types(outs).filter((t) => t !== "presence")).toEqual(["kp.away"]);
+    expect(outs.at(-1)!.event).toEqual({ type: "kp.away", data: { since: 777 } });
     expect(room.sessionStatus).toBe("ACTIVE");
     expect(room.kpAway).toBe(777);
     expect(room.snapshot(seo).kpAwaySince).toBe(777);
@@ -49,7 +50,7 @@ describe("GM 연결 유예", () => {
     const room = started();
     room.leave("kp1");
     const back = room.join(kp);
-    expect(types(back)).toEqual(["presence", "kp.back"]);
+    expect(types(back).filter((t) => t !== "presence")).toEqual(["kp.back"]);
     expect(room.kpAway).toBeNull();
     expect(room.sessionStatus).toBe("ACTIVE");
     // 늦게 온 타이머는 아무 일도 하지 않는다
@@ -77,7 +78,7 @@ describe("GM 연결 유예", () => {
     expect(paused[0]!.event).toEqual({ type: "session.paused", data: { reason: "kp_disconnected" } });
     expect(room.snapshot(seo)).toMatchObject({ sessionStatus: "PAUSED", pauseReason: "kp_disconnected", kpAwaySince: null });
     const back = room.join(kp);
-    expect(types(back)).toEqual(["presence", "session.resumed"]);
+    expect(types(back).filter((t) => t !== "presence")).toEqual(["session.resumed"]);
     expect(room.sessionStatus).toBe("ACTIVE");
     expect(room.snapshot(seo).pauseReason).toBeNull();
   });

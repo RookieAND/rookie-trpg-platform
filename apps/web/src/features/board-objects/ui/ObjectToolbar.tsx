@@ -4,6 +4,7 @@ import type { Character, ClientCommand, GameObject, Member } from "@coc-vtt/shar
 import type { Caller } from "@/shared/api";
 import { ImageUploadButton } from "@/shared/ui";
 import { newTokenName, uniqueName } from "../model/names";
+import { MarkerButton } from "./MarkerButton";
 
 interface PlacementInput {
   /** 오브젝트를 놓을 장면(GM이 보고 있는 장면) */
@@ -142,6 +143,7 @@ export function SelectedControls({ me, enabled, players, selected, characters = 
             </button>
           </>
         )}
+        {selected.kind === "token" && <MarkerButton obj={selected} canSecret enabled={enabled} send={send} />}
         {selected.kind === "token" && (
           <button className="btn" aria-pressed={Boolean(selected.locked)} disabled={!enabled} title="잠그면 소유자도 이 토큰을 움직일 수 없어요"
             onClick={() => send({ type: "object.update", data: { id: selected.id, locked: !selected.locked } })}>

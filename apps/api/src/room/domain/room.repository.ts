@@ -5,8 +5,15 @@ export interface InviteConfig {
   code: string;
   /** 만료 시각(ms). null이면 만료 없음. */
   expiresAt: number | null;
+  /** PL 초대: 룸 전체(주인 포함, 관전자 제외) 최대 인원. 관전 초대: 관전자 최대 인원. */
   maxMembers: number;
 }
+
+/** 초대 링크의 종류. pl은 PL로, spectator는 읽기만 하는 관전자로 들어온다. */
+export type InviteKind = "pl" | "spectator";
+
+/** 관전 초대의 기본 최대 관전자 수 */
+export const DEFAULT_MAX_SPECTATORS = 10;
 
 export interface RoomMeta {
   id: string;
@@ -15,6 +22,8 @@ export interface RoomMeta {
   ownerId: string;
   createdAt: number;
   invite: InviteConfig;
+  /** 관전 초대(읽기 전용). 주인이 만들 때까지 없다. 옛 저장 데이터에는 없다. */
+  spectatorInvite?: InviteConfig;
   /** 디스코드 알림 설정. 없으면 알림을 보내지 않는다. */
   discord?: DiscordConfig;
 }

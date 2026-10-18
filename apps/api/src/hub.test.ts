@@ -677,9 +677,9 @@ describe("대화·기록 저장", () => {
       await app.close();
 
       const raw = JSON.parse(readFileSync(join(dir, `${room.id}.json`), "utf8"));
-      expect(raw.data.schemaVersion).toBe(2);
+      expect(raw.data.schemaVersion).toBe(3);
       expect(raw.data.chat.map((m: { text: string }) => m.text)).toEqual(["저장될 말", "저장될 귓속말"]);
-      expect(raw.data.chatSettings).toEqual({ plWhisper: true });
+      expect(raw.data.chatSettings).toMatchObject({ plWhisper: true });
       expect(raw.data.log.map((e: { type: string }) => e.type)).toEqual(expect.arrayContaining(["start", "say"]));
 
       ({ app, port } = await boot({ store: new FileRoomRepository(dir) }));
@@ -691,7 +691,7 @@ describe("대화·기록 저장", () => {
       await han.waitFor((m) => m.event.type === "chat.history" && m.event.data.last);
       expect(chatHistory(han).map((m) => m.text)).toEqual(["저장될 말"]);
       const snap = han.messages.find(isType("snapshot"));
-      expect(snap?.event.type === "snapshot" && snap.event.data.chatSettings).toEqual({ plWhisper: true });
+      expect(snap?.event.type === "snapshot" && snap.event.data.chatSettings).toMatchObject({ plWhisper: true });
     } finally {
       await app.close().catch(() => {});
       rmSync(dir, { recursive: true, force: true });
@@ -700,3 +700,135 @@ describe("대화·기록 저장", () => {
 });
 
 const chatHistory = (c: Client) => c.messages.flatMap((m) => (m.event.type === "chat.history" ? m.event.data.messages : []));
+
+describe("관전 링크", () => {
+  const spectatorInvite = async (roomId: string, body: Record<string, unknown> = {}) => {
+    const r = await api("POST", `/rooms/${roomId}/invite`, "kp1", { kind: "spectator", ...body });
+    return r.json as { code: string; expiresAt: number | null; maxMembers: number };
+  };
+  const asSpectator = (room: { id: string }, code: string, user = "sp1", name = "구경꾼", role = "pl") => new Client(port, { room: room.id, user, name, role, invite: code });
+  const enter = async (room: { id: string }, code: string, user = "sp1", name = "구경꾼", role = "pl") => {
+    const c = asSpectator(room, code, user, name, role);
+    await c.open();
+    c.join();
+    await c.waitFor(isType("snapshot"));
+    return c;
+  };
+  const members = (c: Client) => {
+    const snap = c.messages.find(isType("snapshot"));
+    return snap?.event.type === "snapshot" ? snap.event.data.members : [];
+  };
+
+  it("주인만 관전 링크를 만들고, 링크로 들어온 사람은 PL로 요청해도 관전자다", async () => {
+    const room = await makeRoom();
+    expect((await api("POST", `/rooms/${room.id}/invite`, "pl1", { kind: "spectator" })).status).toBe(403);
+    const inv = await spectatorInvite(room.id);
+    expect(inv.code.length).toBeGreaterThan(3);
+    expect(inv.code).not.toBe(room.invite);
+    const preview = await api("GET", `/rooms/${room.id}?invite=${inv.code}`, "sp1");
+    expect(preview.status).toBe(200);
+    expect(preview.json).toMatchObject({ joinAs: "spectator" });
+    expect(preview.json.invite).toBeUndefined();
+    expect(preview.json.spectatorInvite).toBeUndefined();
+    expect((await api("GET", `/rooms/${room.id}?invite=${room.invite}`, "pl1")).json).toMatchObject({ joinAs: "pl" });
+    const kp = await connect(room, GM);
+    const sp = await enter(room, inv.code);
+    expect(members(sp).find((m) => m.userId === "sp1")?.role).toBe("spectator");
+    await kp.waitFor((m) => m.event.type === "presence" && m.event.data.members.some((x) => x.userId === "sp1" && x.role === "spectator"));
+    // 주인에게 보이는 룸 정보에는 관전 링크가 있다
+    expect((await api("GET", `/rooms/${room.id}`, "kp1")).json.spectatorInvite).toMatchObject({ code: inv.code });
+  });
+
+  it("관전 링크 없이 PL 링크로 관전자로 들어오는 것은 그대로 되고, 틀린 코드는 거절한다", async () => {
+    const room = await makeRoom();
+    await spectatorInvite(room.id);
+    const viaPl = await enter(room, room.invite, "sp1", "구경꾼", "spectator");
+    expect(members(viaPl).find((m) => m.userId === "sp1")?.role).toBe("spectator");
+    const bad = asSpectator(room, "zzzzzz", "sp9");
+    expect(await bad.closed).toBe(4403);
+  });
+
+  it("관전자는 PL 목록에 보이지 않고 GM만 관전자를 본다", async () => {
+    const room = await makeRoom();
+    const inv = await spectatorInvite(room.id);
+    const kp = await connect(room, GM);
+    const pl = await connect(room, SEO);
+    await enter(room, inv.code);
+    await kp.waitFor((m) => m.event.type === "presence" && m.event.data.members.some((x) => x.role === "spectator"));
+    await new Promise((r) => setTimeout(r, 80));
+    const lastPresence = (c: Client) => [...c.messages].reverse().find(isType("presence"));
+    const roles = (c: Client) => {
+      const m = lastPresence(c);
+      return m?.event.type === "presence" ? m.event.data.members.map((x) => x.role) : [];
+    };
+    expect(roles(kp)).toContain("spectator");
+    expect(roles(pl)).not.toContain("spectator");
+    const lobby = await api("GET", "/rooms", "pl1");
+    expect(lobby.json).toBeDefined();
+  });
+
+  it("관전자의 모든 명령이 막히고, 대화는 GM이 켜야 한다", async () => {
+    const { room, kp } = await startedRoom();
+    const inv = await spectatorInvite(room.id);
+    const sp = await enter(room, inv.code);
+    const before = sp.messages.length;
+    sp.cmd("roll.request", { expr: "1d100", secret: false }, "r1");
+    sp.cmd("object.add", { kind: "token", name: "몰래", x: 1, y: 1 }, "r2");
+    sp.cmd("session.pause", {}, "r3");
+    sp.cmd("board.ping", { sceneId: "main", x: 5, y: 5 }, "r4");
+    sp.cmd("chat.send", { text: "안녕하세요" }, "r5");
+    await sp.waitFor((m) => m.event.type === "error" && m.event.data.requestId === "r5");
+    const errs = sp.messages.slice(before).flatMap((m) => (m.event.type === "error" ? [m.event.data] : []));
+    expect(errs.map((e) => e.requestId).sort()).toEqual(["r1", "r2", "r3", "r4", "r5"]);
+    expect(errs.every((e) => e.code === "forbidden")).toBe(true);
+    expect(chatOf(kp)).toHaveLength(0);
+    kp.cmd("settings.chat", { plWhisper: false, spectatorChat: true });
+    await sp.waitFor((m) => m.event.type === "settings.chat" && m.event.data.spectatorChat === true);
+    sp.cmd("chat.send", { text: "이제 말할 수 있어요" });
+    const heard = await kp.waitFor(isType("chat.posted"));
+    expect(heard.event.type === "chat.posted" && heard.event.data).toMatchObject({ text: "이제 말할 수 있어요", role: "spectator" });
+  });
+
+  it("관전자 정원을 넘으면 4409, 링크를 끄면 새로 오는 사람은 4403이지만 이미 있던 관전자는 다시 들어온다", async () => {
+    const room = await makeRoom();
+    const inv = await spectatorInvite(room.id, { maxMembers: 1 });
+    expect(inv.maxMembers).toBe(1);
+    const first = await enter(room, inv.code, "sp1", "하나");
+    expect(await asSpectator(room, inv.code, "sp2", "둘").closed).toBe(4409);
+    // PL은 관전자 수와 상관없이 들어온다
+    await connect(room, SEO);
+    const off = await api("POST", `/rooms/${room.id}/invite`, "kp1", { kind: "spectator", revoke: true });
+    expect(off.json).toEqual({ revoked: true });
+    expect(await asSpectator(room, inv.code, "sp3", "셋").closed).toBe(4403);
+    await first.close();
+    const again = await enter(room, inv.code, "sp1", "하나");
+    expect(members(again).find((m) => m.userId === "sp1")?.role).toBe("spectator");
+  });
+
+  it("만료된 관전 링크는 거절한다", async () => {
+    const room = await makeRoom();
+    const inv = await spectatorInvite(room.id, { expiresInMinutes: 5 });
+    expect(inv.expiresAt).toBe(1_000_000 + 5 * 60_000);
+    clock += 6 * 60_000;
+    expect(await asSpectator(room, inv.code, "sp1").closed).toBe(4403);
+  });
+
+  it("GM이 내보내면 알림을 받고 4410으로 닫히며, 링크 없이는 다시 못 들어온다", async () => {
+    const room = await makeRoom();
+    const inv = await spectatorInvite(room.id);
+    const kp = await connect(room, GM);
+    await connect(room, SEO);
+    const sp = await enter(room, inv.code);
+    kp.cmd("member.remove", { userId: "pl1" }, "bad");
+    const err = await kp.waitFor((m) => m.event.type === "error" && m.event.data.requestId === "bad");
+    expect(err.event.type === "error" && err.event.data.code).toBe("forbidden");
+    kp.cmd("member.remove", { userId: "sp1" });
+    await sp.waitFor(isType("member.removed"));
+    expect(await sp.closed).toBe(4410);
+    await kp.waitFor((m) => m.event.type === "presence" && !m.event.data.members.some((x) => x.userId === "sp1"));
+    // 멤버에서 지워졌으니 코드 없이는 못 들어온다(저장 데이터에서도 사라진다)
+    expect(await new Client(port, { room: room.id, user: "sp1", name: "구경꾼", role: "pl" }).closed).toBe(4403);
+    const back = await enter(room, inv.code);
+    expect(members(back).find((m) => m.userId === "sp1")?.role).toBe("spectator");
+  });
+});

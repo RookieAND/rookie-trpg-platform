@@ -13,6 +13,14 @@ export const getRoom = (me: Caller, id: string, invite?: string) =>
 export const regenerateInvite = (me: Caller, id: string, opts: { expiresInMinutes?: number | null; maxMembers?: number } = {}) =>
   http<Invite>(me, "POST", `/rooms/${encodeURIComponent(id)}/invite`, opts);
 
+/** 룸 주인 전용. 읽기 전용 관전 링크를 새로 만든다(이전 관전 링크는 못 쓴다). */
+export const createSpectatorInvite = (me: Caller, id: string, opts: { expiresInMinutes?: number | null; maxMembers?: number } = {}) =>
+  http<Invite>(me, "POST", `/rooms/${encodeURIComponent(id)}/invite`, { ...opts, kind: "spectator" });
+
+/** 룸 주인 전용. 관전 링크를 끈다. 이미 들어온 관전자는 그대로 있다. */
+export const revokeSpectatorInvite = (me: Caller, id: string) =>
+  http<{ revoked: true }>(me, "POST", `/rooms/${encodeURIComponent(id)}/invite`, { kind: "spectator", revoke: true });
+
 /** 룸 주인 전용. 웹훅 주소는 서버가 다시 돌려주지 않으므로 연결 여부와 알림 종류만 받는다. */
 export const getDiscord = async (me: Caller, id: string): Promise<DiscordSettings> => {
   const room = await http<{ discord?: DiscordSettings }>(me, "GET", `/rooms/${encodeURIComponent(id)}`);

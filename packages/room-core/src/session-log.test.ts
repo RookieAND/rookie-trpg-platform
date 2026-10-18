@@ -102,6 +102,7 @@ describe("세션 기록: 무엇을 남기나", () => {
     clock += 2000;
     must(room.handle(kp, cmd("chat.send", { text: "/w 서하 비밀 단서예요" })));
     clock += 2000;
+    must(room.handle(kp, cmd("settings.chat", { plWhisper: false, spectatorChat: true })));
     must(room.handle(spec, cmd("chat.send", { text: "구경 중" })));
     for (const w of [kp, pl1, pl2, spec]) {
       expect(room.logFor(w).entries.filter((e) => e.kind === "chat").map((e) => e.chat!.text)).toEqual(["안녕하세요", "구경 중"]);
@@ -250,11 +251,11 @@ describe("세션 기록: 저장하고 다시 열기", () => {
     clock += 2000;
     must(room.handle(kp, cmd("chat.send", { text: "귓말", to: "pl1" })));
     const data = JSON.parse(JSON.stringify(room.toData()));
-    expect(data.schemaVersion).toBe(2);
+    expect(data.schemaVersion).toBe(3);
     const back = Room.fromData(data, { now: () => (clock += 1000), newId: () => `x-${++n}` });
     expect(back.chatHistory(pl1).map((m) => m.text)).toEqual(["안녕", "귓말"]);
     expect(back.chatHistory(pl2).map((m) => m.text)).toEqual(["안녕"]);
-    expect(back.snapshot(kp).chatSettings).toEqual({ plWhisper: true });
+    expect(back.snapshot(kp).chatSettings).toMatchObject({ plWhisper: true });
     expect(back.logFor(kp).entries.length).toBeGreaterThan(0);
     back.join(kp); // 서버가 다시 켜진 뒤 GM이 돌아오면 자동으로 이어진다
     const ns = back.logFor(kp).entries.map((e) => e.n);

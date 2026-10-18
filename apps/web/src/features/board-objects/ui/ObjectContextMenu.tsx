@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { GameObject } from "@coc-vtt/shared";
+import type { ClientCommand, GameObject } from "@coc-vtt/shared";
 import { clampToViewport } from "../model/object-actions";
+import { MarkerPanel } from "./MarkerPanel";
 
 export interface ObjectMenuActions {
   onRename: (name: string) => void;
@@ -13,21 +14,22 @@ export interface ObjectMenuActions {
 }
 
 /** 토큰·소품을 오른쪽 클릭(터치는 길게 누르기)하면 뜨는 메뉴. 방향키로 고르고 Esc로 닫는다. */
-export function ObjectContextMenu({ obj, at, actions, onClose }: { obj: GameObject; at: { cx: number; cy: number }; actions: ObjectMenuActions; onClose: () => void }) {
+export function ObjectContextMenu({ obj, at, actions, send, onClose }: { obj: GameObject; at: { cx: number; cy: number }; actions: ObjectMenuActions; send: (c: ClientCommand) => unknown; onClose: () => void }) {
   const root = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: at.cx, top: at.cy });
   const [renaming, setRenaming] = useState(false);
+  const [marking, setMarking] = useState(false);
   const [name, setName] = useState(obj.name);
   const hidden = obj.layer === "gm";
 
   useLayoutEffect(() => {
     const r = root.current?.getBoundingClientRect();
     if (r) setPos(clampToViewport(at.cx, at.cy, r.width, r.height, window.innerWidth, window.innerHeight));
-  }, [at.cx, at.cy, renaming]);
+  }, [at.cx, at.cy, renaming, marking]);
 
   useEffect(() => {
-    if (!renaming) root.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
-  }, [renaming]);
+    if (!renaming) root.current?.querySelector<HTMLElement>('[role="menuitem"],[role="menuitemcheckbox"]:not(:disabled)')?.focus();
+  }, [renaming, marking]);
 
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
@@ -63,7 +65,7 @@ export function ObjectContextMenu({ obj, at, actions, onClose }: { obj: GameObje
   const move = (e: React.KeyboardEvent) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
-    const items = Array.from(root.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    const items = Array.from(root.current?.querySelectorAll<HTMLElement>('[role="menuitem"],[role="menuitemcheckbox"]:not(:disabled)') ?? []);
     const i = items.indexOf(document.activeElement as HTMLElement);
     items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
   };
@@ -85,9 +87,19 @@ export function ObjectContextMenu({ obj, at, actions, onClose }: { obj: GameObje
             if (e.key === "Escape") onClose();
           }}
         />
+      ) : marking ? (
+        <>
+          <button type="button" role="menuitem" data-testid="marker-back" onClick={() => setMarking(false)}>← 메뉴로</button>
+          <MarkerPanel obj={obj} canSecret enabled send={send} inMenu />
+        </>
       ) : (
         <>
           <button type="button" role="menuitem" onClick={() => setRenaming(true)}>이름 바꾸기</button>
+          {obj.kind === "token" && (
+            <button type="button" role="menuitem" data-testid="menu-markers" onClick={() => setMarking(true)}>
+              상태 표식{obj.markers?.length ? <kbd>{obj.markers.length}</kbd> : null}
+            </button>
+          )}
           <button type="button" role="menuitem" onClick={run(actions.onDuplicate)}>복제 <kbd>Ctrl+D</kbd></button>
           <button type="button" role="menuitem" onClick={run(actions.onToggleHidden)}>{hidden ? "보이기" : "숨기기"}</button>
           {obj.kind === "token" && (

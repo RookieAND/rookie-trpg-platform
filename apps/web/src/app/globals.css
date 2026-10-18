@@ -756,3 +756,27 @@ input[type="checkbox"] { accent-color: var(--accent); }
   .sheet-quick > .btn { min-height: 48px; }
   .zoom-ctl .btn { min-height: var(--tap); min-width: var(--tap); }
 }
+
+/* 토큰 상태 표식 패널 */
+.mk-panel { display: grid; gap: 6px; min-width: 210px; }
+.mk-head { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .02em; padding: 0 2px; }
+.mk-secret { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); padding: 2px; }
+.mk-list { display: grid; gap: 2px; }
+.mk-row { display: flex; gap: 4px; align-items: center; }
+.mk-btn { flex: 1; display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--text); font-size: 13px; text-align: left; }
+.mk-btn:hover:not(:disabled), .mk-btn:focus-visible { background: var(--hover); outline: none; }
+.mk-btn:disabled { opacity: .45; cursor: not-allowed; }
+.mk-btn.on { background: color-mix(in srgb, var(--accent) 14%, transparent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.mk-swatch { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 2px solid; font-size: 11px; font-weight: 700; line-height: 1; flex: none; }
+.mk-label { flex: 1; }
+.mk-tag { font-size: 10.5px; color: var(--amber); }
+.mk-secret-btn { flex: none; }
+.mk-text { height: 28px; font-size: 12px; }
+.mk-anchor { position: relative; display: inline-flex; }
+.mk-pop { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); z-index: 70; padding: 8px; border-radius: var(--radius-lg); border: 1px solid var(--line-2); background: var(--panel); box-shadow: var(--shadow); }
+.ctx-menu .mk-panel { min-width: 230px; }
+.ctx-menu .mk-btn { width: 100%; }
+@media (max-width: 640px) { .mk-pop { position: fixed; left: 8px; right: 8px; bottom: calc(var(--dock-h, 76px) + 8px); transform: none; max-height: 70vh; overflow: auto; } }
+.sep-line { height: 1px; margin: 8px 0 2px; background: var(--line); }
+.spec-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.spec-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }

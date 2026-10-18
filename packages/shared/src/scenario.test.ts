@@ -91,7 +91,7 @@ describe("parseScenario", () => {
   it("다른 형식·새 버전·깨진 JSON을 알려 준다", () => {
     expect(errs({ ...minimal(), format: "other" })[0]).toContain("roll-and-call-scenario");
     expect(errs({ ...minimal(), version: 9 })[0]).toContain("더 새로운 버전");
-    expect(errs({ ...minimal(), format: BACKUP_FORMAT, version: 2 })[0]).toContain("더 새로운 버전");
+    expect(errs({ ...minimal(), format: BACKUP_FORMAT, version: 9 })[0]).toContain("더 새로운 버전");
     const bad = parseScenarioText("{ 아님");
     expect(!bad.ok && bad.errors[0]!.message).toContain("JSON으로 읽을 수 없어요");
     expect(errs([])[0]).toContain("시나리오 파일이 아니에요");

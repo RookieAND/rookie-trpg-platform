@@ -47,6 +47,12 @@ import {
   MAX_MADNESS_ENTRIES,
   applyLuck,
   josa,
+  applyMarker,
+  isMarkerKey,
+  markerLabel,
+  markersFor,
+  sanitizeMarkers,
+  MARKER_TEXT_MAX,
   BEAT_KIND_LABEL_KO,
   CHAT_KEEP,
   CHAT_HISTORY_ON_JOIN,
@@ -412,7 +418,7 @@ export class Room {
     this.members.set(actor.userId, { userId: actor.userId, name: actor.name, role: actor.role, online: true });
     const out: Out[] = [];
     if (!(prev && prev.online && prev.role === actor.role && prev.name === actor.name)) {
-      out.push(this.emit({ type: "presence", data: { members: this.memberList() } }, { roles: ALL_ROLES }));
+      out.push(...this.presenceOuts());
     }
     if (actor.role === "kp") {
       if (this.kpAwaySince !== null) {
@@ -437,7 +443,7 @@ export class Room {
     const m = this.members.get(userId);
     if (!m || !m.online) return [];
     m.online = false;
-    const out: Out[] = [this.emit({ type: "presence", data: { members: this.memberList() } }, { roles: ALL_ROLES })];
+    const out: Out[] = this.presenceOuts();
     if (m.role === "kp" && this.status === "ACTIVE" && !this.kpOnline()) {
       this.kpAwaySince = this.now();
       out.push(this.emit({ type: "kp.away", data: { since: this.kpAwaySince } }, { roles: ALL_ROLES }));
@@ -484,7 +490,7 @@ export class Room {
       audioLibrary: viewer.role === "kp" ? this.audio.map((t) => ({ ...t })) : [],
       bgm: this.bgm ? { ...this.bgm } : null,
       now: this.now(),
-      members: this.memberList(),
+      members: this.memberListFor(viewer),
       rolls: this.rolls.filter((r) => !r.secret || viewer.role === "kp").map((r) => ({ ...r })),
       characters: [...this.characters.values()].filter((c) => canSeeCharacter(c, viewer)).map(cloneCharacter),
       handouts: [...this.handouts.values()].filter((h) => canSeeHandout(h, viewer)).map((h) => cloneHandout(h)),
@@ -615,6 +621,10 @@ export class Room {
         return this.objectMove(who, command.data);
       case "object.update":
         return this.objectUpdate(who, command.data);
+      case "object.marker":
+        return this.objectMarker(who, command.data);
+      case "member.remove":
+        return this.memberRemove(who, command.data.userId);
       case "board.ping":
         return this.boardPing(who, command.data);
       case "object.remove":
@@ -1516,7 +1526,10 @@ export class Room {
    * HP 요약은 GM, PC 토큰(PL의 시트), GM이 HP를 공개한 토큰에서만 붙는다.
    */
   private view(o: GameObject, m: Pick<Member, "userId" | "role">): GameObject {
-    const { vitals: _v, characterId, hpPublic, ...base } = o;
+    const { vitals: _v, characterId, hpPublic, markers: allMarkers, ...rest } = o;
+    // 비밀 표식은 GM에게만 간다.
+    const shownMarkers = markersFor(allMarkers, m.role);
+    const base: GameObject = { ...rest, ...(shownMarkers.length ? { markers: shownMarkers } : {}) };
     const c = characterId ? this.characters.get(characterId) : undefined;
     if (!characterId || !c) return base;
     if (m.role === "kp") return { ...base, characterId, ...(hpPublic ? { hpPublic } : {}), vitals: this.vitalsOf(c) };
@@ -1817,6 +1830,7 @@ export class Room {
         ...(t.vision ? { vision: t.vision } : {}),
         ...(charId ? { characterId: charId } : {}),
         ...(charId && t.hpPublic ? { hpPublic: true } : {}),
+        ...(t.kind === "token" && sanitizeMarkers(t.markers).length ? { markers: sanitizeMarkers(t.markers) } : {}),
       });
     }
     if (!opts.newRoom) for (const [label, n] of lostOwners) warn(`토큰 ${n}개의 소유자 ${josa(`'${label}'`, "을/를")} 찾지 못해 소유자 없음(NPC)으로 놓았어요.`);
@@ -2102,6 +2116,55 @@ export class Room {
     }
     obj.rev += 1;
     return ok(...this.fanOutObject(before, obj));
+  }
+
+  /**
+   * 토큰의 상태 표식 하나를 켜거나 끈다. GM은 모든 토큰·모든 표식(비밀 포함),
+   * 토큰의 주인 PL은 자기 토큰의 비밀이 아닌 표식만 바꾼다. 관전자는 바꿀 수 없다.
+   * GM이 몰래 붙인 같은 표식이 있으면 PL의 요청은 아무것도 바꾸지 않고 조용히 넘어간다(비밀 표식이 있다는 사실이 새지 않게).
+   */
+  private objectMarker(who: Actor, d: Extract<ClientCommand, { type: "object.marker" }>["data"]): Result {
+    const kpView = { userId: "", role: "kp" } as const;
+    if (who.role === "spectator") return fail("forbidden", "관전자는 표식을 바꿀 수 없어요.");
+    const obj = this.objects.get(d.id);
+    if (!obj || !canSee(obj, who, this.activeSceneId)) return fail("not_found", "토큰을 찾을 수 없어요.");
+    if (obj.kind !== "token") return fail("bad_message", "표식은 토큰에만 붙일 수 있어요.");
+    if (who.role === "pl") {
+      if (obj.ownerId !== who.userId) return fail("forbidden", "내 토큰에만 표식을 붙일 수 있어요.");
+      if (d.secret) return fail("forbidden", "비밀 표식은 GM만 쓸 수 있어요.");
+    }
+    if (d.on && d.key === "custom" && !d.text?.trim()) return fail("bad_message", `사용자 지정 표식에는 짧은 글(${MARKER_TEXT_MAX}자까지)이 필요해요.`);
+    if (d.text !== undefined && d.text.trim().length > MARKER_TEXT_MAX) return fail("bad_message", `표식 글은 ${MARKER_TEXT_MAX}자까지 적을 수 있어요.`);
+    const cur = obj.markers ?? [];
+    const existing = cur.find((m) => m.key === d.key);
+    if (who.role === "pl" && existing?.secret) return ok();
+    const next = applyMarker(cur, d.key, d.on, { ...(d.secret ? { secret: true } : {}), ...(d.text ? { text: d.text } : {}) });
+    if (!next) return ok();
+    const before = { ...obj };
+    if (next.length > 0) obj.markers = next;
+    else delete obj.markers;
+    // 모두에게 보이는 표식이 달라졌을 때만 rev를 올려 알린다. 비밀 표식만 바뀌었으면 GM에게만 알리고 rev는 그대로 둔다
+    // (PL이 rev나 이벤트로 GM의 비밀 표식 작업을 눈치채지 못하게).
+    const publicChanged = JSON.stringify(markersFor(before.markers, "pl")) !== JSON.stringify(markersFor(obj.markers, "pl"));
+    if (publicChanged) obj.rev += 1;
+    const label = markerLabel(d.key === "custom" ? { key: "custom", text: d.text ?? existing?.text ?? "" } : { key: d.key });
+    const hiddenMarker = d.secret === true || (!d.on && existing?.secret === true);
+    this.record("combat", "marker", `${obj.name}: 표식 '${label}'${hiddenMarker ? "(GM만 보임)" : ""} ${d.on ? "켬" : "끔"}`, hiddenMarker ? { audience: "gm" } : {});
+    if (publicChanged) return ok(...this.fanOutObject(before, obj));
+    this.fanned.add(obj.id);
+    return ok(this.emit({ type: "object.updated", data: this.view(obj, kpView) }, { roles: ["kp"] }));
+  }
+
+  /** GM이 관전자 한 명을 내보낸다. 그 사람은 알림을 받고 연결이 닫히며(허브가 닫는다), 다시 들어오려면 관전 초대 링크가 있어야 한다. */
+  private memberRemove(who: Actor, userId: string): Result {
+    if (who.role !== "kp") return fail("forbidden", "GM만 참가자를 내보낼 수 있어요.");
+    const m = this.members.get(userId);
+    if (!m) return fail("not_found", "그 참가자를 찾을 수 없어요.");
+    if (m.role !== "spectator") return fail("forbidden", "관전자만 내보낼 수 있어요.");
+    this.members.delete(userId);
+    this.rollTimes.delete(`chat:${userId}`);
+    this.record("session", "member.remove", `관전자 ${m.name} 내보냄`, { audience: "gm" });
+    return ok(this.emitTo({ type: "member.removed", data: {} }, { users: [userId] }), ...this.presenceOuts());
   }
 
   private objectRemove(who: Actor, id: string): Result {
@@ -2873,9 +2936,9 @@ export class Room {
     return { name: c.name, character: c };
   }
 
-  private setChatSettings(who: Actor, d: { plWhisper: boolean }): Result {
+  private setChatSettings(who: Actor, d: { plWhisper: boolean; spectatorChat?: boolean }): Result {
     if (who.role !== "kp") return fail("forbidden", "GM만 대화 설정을 바꿀 수 있어요.");
-    this.chatSettings = { ...this.chatSettings, plWhisper: d.plWhisper };
+    this.chatSettings = { ...this.chatSettings, plWhisper: d.plWhisper, ...(d.spectatorChat !== undefined ? { spectatorChat: d.spectatorChat } : {}) };
     return ok(this.emit({ type: "settings.chat", data: { ...this.chatSettings } }, { roles: ALL_ROLES }));
   }
 
@@ -2885,6 +2948,7 @@ export class Room {
    * GM도 자기와 무관한 PL끼리의 귓속말은 받지 못한다.
    */
   private chatSend(who: Actor, d: Extract<ClientCommand, { type: "chat.send" }>["data"]): Result {
+    if (who.role === "spectator" && !this.chatSettings.spectatorChat) return fail("forbidden", "관전자 대화가 꺼져 있어요. GM이 켜면 말할 수 있어요.");
     const text = normalizeChatText(d.text);
     if (!text) return fail("bad_message", "보낼 내용을 적어 주세요.");
     if (text.length > CHAT_MAX_LENGTH) return fail("bad_message", `대화는 ${CHAT_MAX_LENGTH}자까지 보낼 수 있어요.`);
@@ -2993,6 +3057,26 @@ export class Room {
 
   private memberList(): Member[] {
     return [...this.members.values()].map((m) => ({ ...m }));
+  }
+
+  /** 모든 참가자(관전자 포함). 서버 안(입장 판단·방 목록)에서만 쓴다. 보내는 목록은 memberListFor다. */
+  listMembers(): Member[] {
+    return this.memberList();
+  }
+
+  /** 보는 사람에게 알려 줄 참가자. 관전자는 GM에게만 보이고, 관전자 본인은 자기 자신만 안다(관전자 수는 GM만 안다). */
+  private memberListFor(viewer: Pick<Member, "userId" | "role">): Member[] {
+    return this.memberList().filter((m) => m.role !== "spectator" || viewer.role === "kp" || m.userId === viewer.userId);
+  }
+
+  /** 참가자 목록이 바뀌었다는 알림. 관전자가 있으면 GM에게만 전체 목록을, 나머지에게는 관전자를 뺀 목록을 보낸다. */
+  private presenceOuts(): Out[] {
+    const specs = [...this.members.values()].filter((m) => m.role === "spectator");
+    if (specs.length === 0) return [this.emit({ type: "presence", data: { members: this.memberList() } }, { roles: ALL_ROLES })];
+    const out: Out[] = [this.emit({ type: "presence", data: { members: this.memberList() } }, { roles: ["kp"] })];
+    out.push(this.emit({ type: "presence", data: { members: this.memberListFor({ userId: "", role: "pl" }) } }, { roles: ["pl"] }));
+    for (const sp of specs) out.push(this.emit({ type: "presence", data: { members: this.memberListFor(sp) } }, { users: [sp.userId] }));
+    return out;
   }
 
   private emit(event: Out["event"], audience: Audience): Out {

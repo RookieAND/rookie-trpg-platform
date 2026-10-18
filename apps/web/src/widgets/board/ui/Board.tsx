@@ -4,6 +4,7 @@ import { STATUS_LABEL_KO, type BoardPing, type FogArea, type GameObject, type Ro
 import { imageUrl } from "@/shared/api";
 import { dragHasFiles } from "@/shared/ui";
 import { objectAt } from "../model/drop-target";
+import { layoutBadges, shapePath, BADGE_R } from "../model/marker-badges";
 import {
   DEFAULT_CELL,
   FULL,
@@ -439,7 +440,9 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         // 몸통(링·배지·막대 포함)은 많이 축소했을 때만 커진다. 이름표는 따로 화면 글자 크기를 지킨다.
         const body = kt === 1 ? undefined : `translate(${pos.x} ${pos.y}) scale(${kt}) translate(${-pos.x} ${-pos.y})`;
         const labelY = pos.y + kt * (o.kind === "token" ? R + 8 : o.image ? 40 : 22) + labelFs * 0.95;
-        const desc = `${o.name}${mine ? ", 내 토큰" : ""}${hidden ? ", GM 전용" : ""}${o.locked ? ", 잠김" : ""}, 위치 ${Math.round(pos.x)} ${Math.round(pos.y)}`;
+        const badges = o.kind === "token" ? layoutBadges(o.markers, o.vitals?.status, R) : null;
+        const markerText = o.kind === "token" ? markerSummary(o, badges!) : "";
+        const desc = `${o.name}${mine ? ", 내 토큰" : ""}${hidden ? ", GM 전용" : ""}${o.locked ? ", 잠김" : ""}${markerText}, 위치 ${Math.round(pos.x)} ${Math.round(pos.y)}`;
         return (
           <g
             key={o.id}
@@ -516,6 +519,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
               </text>
             )}
             {o.kind === "token" && o.vitals && <TokenVitalsBar name={o.name} vitals={o.vitals} x={pos.x} y={pos.y} />}
+            {badges && (badges.badges.length > 0 || badges.more > 0) && <TokenMarkers name={o.name} layout={badges} x={pos.x} y={pos.y} />}
             {mine && (
               <g pointerEvents="none" data-testid="mine-badge">
                 <rect x={pos.x + R - 12} y={pos.y - R - 6} width="22" height="16" rx="8" fill="#4cc38a" />
@@ -585,6 +589,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
           >
             {o.name}
             {o.kind === "token" && o.ownerId === me.userId ? " (내 토큰)" : ""}
+            {o.kind === "token" ? markerNote(o) : ""}
             {o.layer === "gm" || o.visibleTo === "gm" ? " (GM 전용)" : ""}
             {canMove(o) ? "" : " (움직일 수 없음)"}
           </button>
@@ -622,6 +627,46 @@ function TokenVitalsBar({ name, vitals, x, y }: { name: string; vitals: NonNulla
         <g data-testid={`status-${name}`}>
           <rect x={x - R - 14} y={y - R - 6} width={34} height={16} rx={8} fill={STATUS_COLOR[status] ?? "#6b727c"} />
           <text x={x - R + 3} y={y - R + 6} textAnchor="middle" fill="#08090a" fontSize="11" fontWeight="700">{STATUS_LABEL_KO[status]}</text>
+        </g>
+      )}
+    </g>
+  );
+}
+
+/** 보드 위 토큰 목록(스크린 리더용)에 붙는 " (상태: 기절, 중독)". 표식이 없으면 빈 글. */
+function markerNote(o: GameObject): string {
+  const t = markerSummary(o, layoutBadges(o.markers, o.vitals?.status, R));
+  return t ? ` (${t.replace(/^, /, "")})` : "";
+}
+
+/** ", 상태: 기절, 중독 (GM만 보임)"처럼 스크린 리더용 요약. 표식이 없으면 빈 글. */
+function markerSummary(_o: GameObject, l: ReturnType<typeof layoutBadges>): string {
+  if (l.badges.length === 0 && l.more === 0) return "";
+  const names = l.badges.map((b) => b.aria.replace(/^상태 /, ""));
+  if (l.more > 0) names.push(`그 밖에 ${l.more}개`);
+  return `, 상태: ${names.join(", ")}`;
+}
+
+/** 토큰 둘레의 상태 표식 배지(모양·기호·색이 표식마다 다르다). 비밀 표식(GM만 보임)은 점선 테두리다. */
+function TokenMarkers({ name, layout, x, y }: { name: string; layout: ReturnType<typeof layoutBadges>; x: number; y: number }) {
+  return (
+    <g pointerEvents="none" data-testid={`markers-${name}`} data-count={layout.badges.length} data-more={layout.more || undefined}>
+      {layout.badges.map((b) => {
+        const d = shapePath(b.shape, BADGE_R);
+        const common = { fill: "#0f1115", stroke: b.color, strokeWidth: 2, strokeDasharray: b.secret ? "3 2" : undefined } as const;
+        return (
+          <g key={b.key} transform={`translate(${x + b.dx} ${y + b.dy})`} data-testid={`marker-${name}-${b.key}`} data-secret={b.secret ? "true" : undefined} role="img" aria-label={b.aria}>
+            <title>{b.aria.replace(/^상태 /, "")}</title>
+            {d ? <path d={d} {...common} /> : b.shape === "circle" ? <circle r={BADGE_R} {...common} /> : b.shape === "pill" ? <rect x={-BADGE_R * 1.25} y={-BADGE_R * 0.8} width={BADGE_R * 2.5} height={BADGE_R * 1.6} rx={BADGE_R * 0.8} {...common} /> : <rect x={-BADGE_R} y={-BADGE_R} width={BADGE_R * 2} height={BADGE_R * 2} rx={2} {...common} />}
+            <text y={4} textAnchor="middle" fill={b.color} fontSize="11" fontWeight="700">{b.glyph}</text>
+          </g>
+        );
+      })}
+      {layout.more > 0 && (
+        <g transform={`translate(${x + layout.moreAt.dx} ${y + layout.moreAt.dy})`} data-testid={`marker-more-${name}`} role="img" aria-label={layout.moreAria}>
+          <title>{layout.moreAria}</title>
+          <rect x={-12} y={-8} width="24" height="16" rx="8" fill="#0f1115" stroke="#b4b7bf" strokeWidth="1.5" />
+          <text y={4} textAnchor="middle" fill="#e7e9ec" fontSize="11" fontWeight="700">+{layout.more}</text>
         </g>
       )}
     </g>
