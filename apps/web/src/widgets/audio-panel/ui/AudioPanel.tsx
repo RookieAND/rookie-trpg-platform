@@ -23,8 +23,7 @@ export function AudioPanel({ me, library, bgm, enabled, send }: { me: Caller; li
     try {
       const assetId = await uploadAudio(me, file);
       const name = label.trim() || file.name.replace(/\.[^.]+$/, "").slice(0, 40) || "이름 없는 음원";
-      send({ type: "audio.track.add", data: { label: name, kind, assetId, volume } });
-      setLabel("");
+      if (send({ type: "audio.track.add", data: { label: name, kind, assetId, volume } }) !== false) setLabel("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "음원을 올리지 못했어요.");
     } finally {

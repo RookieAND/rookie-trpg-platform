@@ -3,7 +3,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { GameObject, Role } from "@coc-vtt/shared";
-import { useIdentity, type Identity } from "@/entities/user";
+import { beginDiscordLogin, refreshStoredSession, useIdentity, type Identity } from "@/entities/user";
+import { SUPABASE_URL } from "@/shared/config";
 import { ObjectToolbar, uniqueName } from "@/features/board-objects";
 import { FogToolbar } from "@/features/manage-fog";
 import { Hint } from "@/shared/ui";
@@ -13,6 +14,7 @@ import { useEffectPreference } from "@/features/effect-preference";
 import { SoundControl, useAudioEngine, useAudioPreference } from "@/features/audio-playback";
 import { LoadCharacter } from "@/features/load-character";
 import { useRoom } from "@/features/room-realtime";
+import { ConnectionBanner, MyTurnBadge, Toasts, isMyTurn, useRoomNotices, useUnseen } from "@/features/room-notices";
 import { MadnessResultCard } from "@/features/manage-madness";
 import { EndSummaryCard } from "@/features/session-control";
 import { SaveToVaultButton } from "@/features/save-to-vault";
@@ -49,7 +51,8 @@ export function RoomView({ roomId, invite }: { roomId: string; invite?: string }
 }
 
 function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: string }) {
-  const { state, connection, closeCode, send } = useRoom({ roomId, user: me.userId, name: me.name, token: me.token, invite });
+  const { state, connection, closeCode, send, retry, reconnected, sendFailed, authExpired } = useRoom({ roomId, user: me.userId, name: me.name, token: me.token, invite, refresh: me.token && SUPABASE_URL ? refreshStoredSession : undefined });
+  const notices = useRoomNotices({ lastError: state.lastError, sendFailed, reconnected });
   const [guideClosed, setGuideClosed] = useState(false);
   const [plGuideClosed, setPlGuideClosed] = useState(false);
   useEffect(() => setPlGuideClosed(readGuideClosed(roomId)), [roomId]);
@@ -100,6 +103,21 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   }, [isKp, shownScene, objects]);
   const audio = useAudioEngine({ bgm: state.bgm, lastSe: state.lastSe, clockOffset: state.clockOffset, lastRollId: state.rolls.at(-1)?.id ?? null, ready: state.ready, prefs: sound.prefs });
 
+  const handoutIds = useMemo(() => handoutList.map((h) => h.id), [handoutList]);
+  // 새로 받은 핸드아웃(PL만). 핸드아웃 탭을 보고 있으면 본 것으로 친다.
+  const newHandouts = useUnseen(handoutIds, { ready: state.ready, viewing: tab === "handout", enabled: !isKp });
+  const myTurn = isMyTurn(state.initiative, characters, me.userId);
+
+  if (authExpired) {
+    return (
+      <main className="login">
+        <div className="err" role="alert">로그인이 만료됐어요. 다시 로그인해 주세요.</div>
+        <button className="btn primary" onClick={beginDiscordLogin}>디스코드로 다시 로그인</button>
+        <Link className="btn" href="/">로비로</Link>
+      </main>
+    );
+  }
+
   if (closeCode !== null && REJECTED[closeCode]) {
     return (
       <main className="login">
@@ -115,16 +133,20 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     <div className="room">
       <RoomHeader me={me} roomId={roomId} role={role} status={state.sessionStatus} kpAway={kpAway} sessionNumber={state.sessionNumber} connection={connection} members={state.members} effects={state.effects} madnessTable={state.madnessTable} endingDefaults={endingDefaults} effectsEnabled={fx.enabled} onToggleEffects={fx.toggle} soundControl={<SoundControl prefs={sound.prefs} onChange={sound.update} unlocked={audio.unlocked} onUnlock={audio.unlock} playing={audio.playing} />} send={send} />
 
+      <Toasts toasts={notices.toasts} onDismiss={notices.dismiss} />
       <EndSummaryCard summary={state.lastEnd} />
       <MadnessResultCard last={state.lastMadness} />
 
       <RollEffect rolls={state.rolls} ready={state.ready} effects={state.effects} enabled={fx.enabled} />
       {spot && <HandoutSpotlight handout={spot} onClose={() => setDismissedN(state.spotlight?.n ?? 0)} />}
 
+      <ConnectionBanner connection={connection} retry={retry} />
+
       <div className="body">
         <main className="board">
           {kpAway && <div className="banner" role="status" data-testid="kp-away-banner">KP 연결이 끊겼어요. 잠시 기다려요.</div>}
           {paused && <div className="banner" role="status">세션이 일시정지 중이에요. KP가 돌아오면 이어서 진행해요.</div>}
+          {myTurn && state.initiative && <MyTurnBadge round={state.initiative.round} lowered={isKp} onOpen={() => setTab("combat")} />}
           {state.sessionStatus === "IDLE" && !isKp && (
             <div className="banner" role="status">KP가 세션을 시작하기를 기다리고 있어요.</div>
           )}
@@ -179,14 +201,14 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
           <div className="tabs" role="tablist">
             <button role="tab" aria-selected={tab === "roll"} onClick={() => setTab("roll")}>굴림</button>
             <button role="tab" aria-selected={tab === "sheet"} onClick={() => setTab("sheet")}>시트</button>
-            <button role="tab" aria-selected={tab === "handout"} onClick={() => setTab("handout")}>핸드아웃</button>
+            <button role="tab" aria-selected={tab === "handout"} onClick={() => setTab("handout")}>핸드아웃{newHandouts.length > 0 && <span className="tab-dot" data-testid="handout-new" aria-label={`새 핸드아웃 ${newHandouts.length}개`}>{newHandouts.length}</span>}</button>
             {isKp && state.flow && (
               <button role="tab" aria-selected={tab === "flow"} onClick={() => setTab("flow")}>흐름{state.flow.suggestions.length > 0 ? " ●" : ""}</button>
             )}
             {isKp && (
               <button role="tab" aria-selected={tab === "sound"} onClick={() => setTab("sound")}>음향{state.bgm ? " ♪" : ""}</button>
             )}
-            <button role="tab" aria-selected={tab === "combat"} onClick={() => setTab("combat")}>전투{state.initiative ? " ●" : ""}</button>
+            <button role="tab" aria-selected={tab === "combat"} onClick={() => setTab("combat")}>전투{myTurn ? <span className="tab-dot turn" data-testid="combat-my-turn" aria-label="내 차례">▶</span> : state.initiative ? " ●" : ""}</button>
           </div>
           {tab === "roll" ? (
             <RollPanel
@@ -197,7 +219,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               hidden={state.hiddenRolls}
               isKp={isKp}
               disabled={!active || role === "spectator"}
-              error={state.lastError?.message ?? null}
+              error={null}
               onRoll={(expr, secret) => send({ type: "roll.request", data: { expr, secret } })}
               onPush={(rollId) => send({ type: "roll.push", data: { rollId } })}
               onLuck={(rollId) => send({ type: "luck.spend", data: { rollId } })}
@@ -255,7 +277,6 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                 {role !== "spectator" && (isKp || !hasOwn) && <LoadCharacter me={me} send={send} disabled={paused && !isKp} />}
                 {characters.length === 0 && <SheetEmpty role={role} canLoad={!hasOwn} />}
                 {state.sessionStatus === "IDLE" && state.sessionNumber > 0 && sheet && sheet.ownerId === me.userId && <SaveToVaultButton key={`${sheet.id}-${sheet.rev}`} me={me} character={sheet} />}
-                {state.lastError && <div className="err" role="alert">{state.lastError.message}</div>}
               </div>
             </div>
           )}

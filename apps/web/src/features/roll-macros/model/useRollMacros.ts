@@ -11,7 +11,7 @@ export function useRollMacros(me: Caller) {
 
   const add = useCallback(
     (input: { name: string; expr: string; secret: boolean }): AddResult => {
-      if (!library) return { ok: false, message: "서재를 불러오는 중이에요. 잠시 뒤에 다시 해 주세요." };
+      if (!library) return { ok: false, message: "저장해 둔 목록을 불러오는 중이에요. 잠시 뒤에 다시 해 주세요." };
       const r = addMacro(library.macros, input, () => Math.random().toString(36).slice(2, 10));
       if (r.ok) update({ ...library, macros: r.macros });
       return r;

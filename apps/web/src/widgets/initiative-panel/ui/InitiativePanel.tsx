@@ -11,8 +11,7 @@ export function InitiativePanel({ initiative, isKp, enabled, send }: { initiativ
 
   const add = () => {
     if (!canAdd) return;
-    send({ type: "initiative.add", data: { name: name.trim(), dex: dexNum } });
-    setName("");
+    if (send({ type: "initiative.add", data: { name: name.trim(), dex: dexNum } }) !== false) setName("");
   };
 
   if (!initiative) {

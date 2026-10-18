@@ -25,9 +25,10 @@ export function HandoutPanel({ me, handouts, isKp, canEdit, canShow = canEdit, p
           players={players.filter((m) => m.role === "pl")}
           onCancel={() => setEditing(null)}
           onSave={(d) => {
-            if (editing.mode === "edit") send({ type: "handout.update", data: { id: editing.handout.id, ...d } });
-            else send({ type: "handout.create", data: { title: d.title, body: d.body, visibleTo: d.visibleTo, ...(d.kpOnly ? { kpOnly: true } : {}), ...(d.image ? { image: d.image } : {}) } });
-            setEditing(null);
+            const ok = editing.mode === "edit"
+              ? send({ type: "handout.update", data: { id: editing.handout.id, ...d } })
+              : send({ type: "handout.create", data: { title: d.title, body: d.body, visibleTo: d.visibleTo, ...(d.kpOnly ? { kpOnly: true } : {}), ...(d.image ? { image: d.image } : {}) } });
+            if (ok !== false) setEditing(null); // 보내지 못했으면 편집 창을 닫지 않는다
           }}
         />
       )}

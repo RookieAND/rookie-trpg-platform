@@ -1,5 +1,4 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
 
 export interface Identity {
   userId: string;
@@ -8,6 +7,8 @@ export interface Identity {
   token?: string;
   /** 토큰 만료 시각(초). */
   expiresAt?: number;
+  /** 액세스 토큰이 만료됐을 때 새로 받는 데 쓰는 갱신 토큰. 디스코드 로그인 때만 있다. */
+  refreshToken?: string;
 }
 
 const KEY = "coc-vtt.identity";
@@ -21,6 +22,18 @@ export function loadIdentity(): Identity | null {
     if (!v.userId || !v.name) return null;
     if (v.expiresAt && v.expiresAt <= Date.now() / 1000) return null; // 만료된 로그인은 없는 것으로 본다.
     return v;
+  } catch {
+    return null;
+  }
+}
+
+/** 만료 여부와 상관없이 저장된 로그인 세션을 읽는다(갱신용). 개발용 로그인은 null. */
+export function loadStoredSession(): Identity | null {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as Identity;
+    return v.userId && v.name && v.token ? v : null;
   } catch {
     return null;
   }
@@ -53,13 +66,4 @@ export function clearIdentity() {
   } catch {
     /* ignore */
   }
-}
-
-/** undefined: 아직 확인 전, null: 로그인 안 됨 */
-export function useIdentity() {
-  const [identity, setIdentity] = useState<Identity | null | undefined>(undefined);
-  useEffect(() => setIdentity(loadIdentity()), []);
-  const login = useCallback((name: string) => setIdentity(saveIdentity(name)), []);
-  const logout = useCallback(() => (clearIdentity(), setIdentity(null)), []);
-  return { identity, login, logout };
 }

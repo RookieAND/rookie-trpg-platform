@@ -73,7 +73,7 @@ export function useLibrary(me: Caller) {
         }
         if (alive) setLibrary(merged);
       } catch (e) {
-        if (alive) setError(e instanceof ApiError ? e.message : "서버에 연결하지 못했어요. 서재를 불러오지 못했어요.");
+        if (alive) setError(e instanceof ApiError ? e.message : "서버에 연결하지 못해서 저장해 둔 매크로·직업을 불러오지 못했어요.");
       }
     })();
     return () => {

@@ -34,8 +34,7 @@ export function FlowPanel({ flow, scenes, handouts, tracks, status, enabled, sen
           tracks={tracks}
           onCancel={() => setEditing(null)}
           onSave={(d) => {
-            send({ type: "flow.beat.upsert", data: d });
-            setEditing(null);
+            if (send({ type: "flow.beat.upsert", data: d }) !== false) setEditing(null);
           }}
         />
       </div>
@@ -51,8 +50,7 @@ export function FlowPanel({ flow, scenes, handouts, tracks, status, enabled, sen
           handouts={handouts.filter((h) => !h.kpOnly)}
           onCancel={() => setEditing(null)}
           onSave={(d) => {
-            send({ type: "flow.branch.upsert", data: d });
-            setEditing(null);
+            if (send({ type: "flow.branch.upsert", data: d }) !== false) setEditing(null);
           }}
         />
       </div>

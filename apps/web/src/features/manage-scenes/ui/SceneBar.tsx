@@ -12,8 +12,7 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
 
   const create = () => {
     if (!name.trim()) return;
-    send({ type: "scene.create", data: { name: name.trim() } });
-    setName("");
+    if (send({ type: "scene.create", data: { name: name.trim() } }) !== false) setName("");
   };
 
   return (

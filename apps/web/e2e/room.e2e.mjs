@@ -354,7 +354,9 @@ try {
   await kp.getByLabel("서하", { exact: true }).check();
   await kp.getByRole("button", { name: "저장", exact: true }).click();
   await kp.getByTestId("handout-item").getByText("낡은 편지").waitFor();
+  await pl.getByTestId("handout-new").waitFor(); // 핸드아웃 탭을 안 보는 PL에게 새 핸드아웃 표시
   await pl.getByRole("tab", { name: "핸드아웃" }).click();
+  await pl.getByTestId("handout-new").waitFor({ state: "detached" });
   await pl.getByTestId("handout-item").getByText("낡은 편지").waitFor();
   await pl.getByTestId("handout-item").getByText("낡은 편지").click();
   await pl.getByText("자정에 서재로 와 주게.").waitFor();
@@ -610,6 +612,7 @@ try {
   // 전투 순서: KP가 시작하고 NPC를 넣고 넘기면 PL 화면에 같은 순서와 차례가 보임
   await kp2.getByRole("tab", { name: /^전투/ }).click();
   await kp2.getByRole("button", { name: "전투 시작" }).click();
+  await pl.getByTestId("my-turn").waitFor(); // 전투 탭을 안 봐도 내 차례면 보드 위에 표시
   await pl.getByRole("tab", { name: /^전투/ }).click();
   await pl.getByTestId("initiative-entry").filter({ hasText: CHAR }).waitFor();
   await kp2.getByLabel("NPC 이름").fill("광신도");
