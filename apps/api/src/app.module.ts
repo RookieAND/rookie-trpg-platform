@@ -35,6 +35,8 @@ export interface AppOptions {
   /** 테스트에서 디스코드 전송을 바꿔 끼운다. */
   discord?: { gateway?: DiscordGateway; notifier?: NotifierOptions };
   joinTimeoutMs?: number;
+  /** KP 연결이 끊긴 뒤 자동 정지까지의 유예(ms). 기본 30초 */
+  kpAwayGraceMs?: number;
 }
 
 /**
@@ -71,7 +73,7 @@ export class AppModule {
           provide: RoomHub,
           inject: [RoomRegistry, AuthService, DiscordNotifier],
           useFactory: (registry: RoomRegistry, auth: AuthService, notifier: DiscordNotifier) =>
-            new RoomHub(registry, auth, options.joinTimeoutMs, notifier),
+            new RoomHub(registry, auth, options.joinTimeoutMs, notifier, options.kpAwayGraceMs),
         },
         { provide: VaultService, useFactory: () => new VaultService(options.vault ?? new MemoryVaultRepository()) },
         { provide: LibraryService, useFactory: () => new LibraryService(options.library ?? new MemoryLibraryRepository()) },

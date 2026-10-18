@@ -46,6 +46,7 @@ import {
   type RollLogEntry,
   type ServerEvent,
   type SessionStatus,
+  type PauseReason,
   type Snapshot,
   type Visibility,
 } from "@coc-vtt/shared";
@@ -130,6 +131,8 @@ export interface RoomData {
   roomId: string;
   seq: number;
   status: SessionStatus;
+  /** 일시정지 사유. 이전 버전에서 저장한 데이터에는 없을 수 있다(없으면 KP가 직접 누른 정지로 본다). */
+  pauseReason?: PauseReason;
   sessionNumber: number;
   objects: GameObject[];
   /** 이전 버전에서 저장한 데이터에는 없을 수 있다. */
@@ -148,10 +151,38 @@ export interface RoomData {
   handouts?: Handout[];
 }
 
+/**
+ * 일시정지 중에 KP에게도 막는 명령. 판정(굴림·밀어붙이기·행운·SAN·광기·피해)과 전투 진행,
+ * PL에게 바로 드러나는 진행(장면 전환·핸드아웃 펼치기·비트 이동)이다.
+ * 그 밖의 장면·시트·핸드아웃·흐름·안개·음향·토큰 편집은 KP가 준비할 수 있다.
+ */
+export const KP_BLOCKED_WHILE_PAUSED: ReadonlySet<ClientCommand["type"]> = new Set<ClientCommand["type"]>([
+  "roll.request",
+  "roll.push",
+  "luck.spend",
+  "san.check",
+  "madness.roll",
+  "damage.roll",
+  "initiative.start",
+  "initiative.add",
+  "initiative.remove",
+  "initiative.dex",
+  "initiative.next",
+  "initiative.end",
+  "scene.activate",
+  "handout.show",
+  "flow.goto",
+  "flow.ending.choose",
+]);
+
 export class Room {
   readonly roomId: string;
   private seq = 0;
   private status: SessionStatus = "IDLE";
+  /** PAUSED일 때만 의미가 있다. kp_disconnected면 KP가 돌아올 때 자동 재개한다. */
+  private pauseReason: PauseReason | null = null;
+  /** KP 연결이 끊겨 유예 중이면 끊긴 시각. 유예 시간은 모르며, 시간이 다 되면 호출자가 expireKpAway()를 부른다. */
+  private kpAwaySince: number | null = null;
   private sessionNumber: number;
   private objects = new Map<string, GameObject>();
   private scenes = new Map<string, Scene>([[DEFAULT_SCENE_ID, { id: DEFAULT_SCENE_ID, name: "장면 1" }]]);
@@ -192,6 +223,7 @@ export class Room {
       roomId: this.roomId,
       seq: this.seq,
       status: this.status,
+      ...(this.pauseReason ? { pauseReason: this.pauseReason } : {}),
       sessionNumber: this.sessionNumber,
       objects: [...this.objects.values()].map((o) => ({ ...o })),
       scenes: [...this.scenes.values()].map((sc) => this.sceneFor(sc, true)),
@@ -211,12 +243,14 @@ export class Room {
 
   /**
    * 저장된 상태에서 룸을 되살린다. 서버가 내려갔다 올라온 경우 KP가 없으므로
-   * 진행 중이던 세션은 일시정지로 둔다.
+   * 진행 중이던 세션은 자동 정지(kp_disconnected)로 두고, KP가 들어오면 자동 재개한다.
+   * 저장 때 이미 정지였다면 사유를 그대로 따른다(옛 데이터는 KP가 누른 정지로 본다).
    */
   static fromData(data: RoomData, opts: RoomOptions = {}): Room {
     const room = new Room(data.roomId, { ...opts, sessionNumber: data.sessionNumber });
     room.seq = data.seq;
     room.status = data.status === "ACTIVE" ? "PAUSED" : data.status;
+    room.pauseReason = room.status !== "PAUSED" ? null : data.status === "ACTIVE" ? "kp_disconnected" : (data.pauseReason ?? "kp_request");
     if (data.scenes?.length) {
       room.scenes = new Map(data.scenes.map((sc) => [sc.id, { ...sc }]));
       room.activeSceneId = room.scenes.has(data.activeSceneId ?? "") ? (data.activeSceneId as string) : data.scenes[0]!.id;
@@ -246,25 +280,63 @@ export class Room {
 
   // ── 접속 ───────────────────────────────────────────────
 
-  /** 접속. 처음이면 멤버를 만들고, 다시 접속이면 온라인으로 바꾼다. */
+  /**
+   * 접속. 처음이면 멤버를 만들고, 다시 접속이면 온라인으로 바꾼다.
+   * KP가 돌아오면 유예를 끝내고, 자동 정지(kp_disconnected) 상태였다면 자동으로 재개한다.
+   */
   join(actor: Actor): Out[] {
     const prev = this.members.get(actor.userId);
     this.members.set(actor.userId, { userId: actor.userId, name: actor.name, role: actor.role, online: true });
-    if (prev && prev.online && prev.role === actor.role && prev.name === actor.name) return [];
-    return [this.emit({ type: "presence", data: { members: this.memberList() } }, { roles: ALL_ROLES })];
+    const out: Out[] = [];
+    if (!(prev && prev.online && prev.role === actor.role && prev.name === actor.name)) {
+      out.push(this.emit({ type: "presence", data: { members: this.memberList() } }, { roles: ALL_ROLES }));
+    }
+    if (actor.role === "kp") {
+      if (this.kpAwaySince !== null) {
+        this.kpAwaySince = null;
+        out.push(this.emit({ type: "kp.back", data: {} }, { roles: ALL_ROLES }));
+      }
+      if (this.status === "PAUSED" && this.pauseReason === "kp_disconnected") {
+        this.status = "ACTIVE";
+        this.pauseReason = null;
+        out.push(this.emit({ type: "session.resumed", data: {} }, { roles: ALL_ROLES }));
+      }
+    }
+    return out;
   }
 
-  /** 한 사용자의 마지막 연결이 닫혔을 때 부른다. KP면 세션을 일시정지한다. */
+  /**
+   * 한 사용자의 마지막 연결이 닫혔을 때 부른다. KP였고 진행 중이면 바로 멈추지 않고 유예를 시작한다
+   * (kp.away). 유예가 지나도 안 돌아오면 호출자가 expireKpAway()를 부른다. 시계는 호출자의 몫이다.
+   */
   leave(userId: string): Out[] {
     const m = this.members.get(userId);
     if (!m || !m.online) return [];
     m.online = false;
     const out: Out[] = [this.emit({ type: "presence", data: { members: this.memberList() } }, { roles: ALL_ROLES })];
-    if (m.role === "kp" && this.status === "ACTIVE") {
-      this.status = "PAUSED";
-      out.push(this.emit({ type: "session.paused", data: { reason: "kp_disconnected" } }, { roles: ALL_ROLES }));
+    if (m.role === "kp" && this.status === "ACTIVE" && !this.kpOnline()) {
+      this.kpAwaySince = this.now();
+      out.push(this.emit({ type: "kp.away", data: { since: this.kpAwaySince } }, { roles: ALL_ROLES }));
     }
     return out;
+  }
+
+  /** 유예가 끝났을 때 부른다. 아직 KP가 없고 진행 중이면 자동 정지(kp_disconnected)한다. */
+  expireKpAway(): Out[] {
+    if (this.kpAwaySince === null) return [];
+    this.kpAwaySince = null;
+    if (this.status !== "ACTIVE" || this.kpOnline()) return [];
+    this.status = "PAUSED";
+    this.pauseReason = "kp_disconnected";
+    return [this.emit({ type: "session.paused", data: { reason: "kp_disconnected" } }, { roles: ALL_ROLES })];
+  }
+
+  get kpAway(): number | null {
+    return this.kpAwaySince;
+  }
+
+  private kpOnline(): boolean {
+    return [...this.members.values()].some((m) => m.role === "kp" && m.online);
   }
 
   // ── 조회 ───────────────────────────────────────────────
@@ -274,6 +346,8 @@ export class Room {
       roomId: this.roomId,
       seq: this.seq,
       sessionStatus: this.status,
+      pauseReason: this.status === "PAUSED" ? this.pauseReason : null,
+      kpAwaySince: this.kpAwaySince,
       sessionNumber: this.sessionNumber,
       objects: [...this.objects.values()].filter((o) => this.visibleTo(o, viewer)).map((o) => ({ ...o })),
       scenes: [...this.scenes.values()].filter((sc) => viewer.role === "kp" || sc.id === this.activeSceneId).map((sc) => this.sceneFor(sc, viewer.role === "kp")),
@@ -343,7 +417,11 @@ export class Room {
         return this.sessionEnd(who, command.data);
     }
 
-    if (this.status === "PAUSED") return fail("paused", "세션이 일시정지 중이에요. KP가 돌아오면 이어서 진행해요.");
+    if (this.status === "PAUSED") {
+      if (who.role !== "kp") return fail("paused", "세션이 일시정지 중이에요. KP가 돌아오면 이어서 진행해요.");
+      // KP는 준비성 명령(편집)만 할 수 있다. 판정과 전투, 이야기를 앞으로 미는 명령은 이어하기 뒤에 한다.
+      if (KP_BLOCKED_WHILE_PAUSED.has(command.type)) return fail("paused", "일시정지 중에는 판정·전투·장면 전환을 할 수 없어요. 이어하기를 눌러 주세요.");
+    }
     // 세션이 없을 때는 KP만 장면을 준비할 수 있다(준비 모드).
     // 캐릭터 등록은 세션 전에도 할 수 있다(미리 불러오기).
     if (this.status === "IDLE" && who.role !== "kp" && command.type !== "character.add") return fail("idle", "아직 세션이 시작되지 않았어요.");
@@ -459,6 +537,7 @@ export class Room {
     if (this.status !== "IDLE") return fail("bad_message", "이미 세션이 진행 중이에요.");
     this.sessionNumber += 1;
     this.status = "ACTIVE";
+    this.pauseReason = null;
     const started = this.emit({ type: "session.started", data: { number: this.sessionNumber } }, { roles: ALL_ROLES });
     // 시작 비트가 있으면 그 큐를 실행하고 현재 비트로 둔다.
     const startBeat = this.flow.beats.find((b) => b.kind === "start");
@@ -476,6 +555,7 @@ export class Room {
     if (who.role !== "kp") return fail("forbidden", "KP만 세션을 멈출 수 있어요.");
     if (this.status !== "ACTIVE") return fail("bad_message", "진행 중인 세션이 아니에요.");
     this.status = "PAUSED";
+    this.pauseReason = "kp_request";
     return ok(this.emit({ type: "session.paused", data: { reason: "kp_request" } }, { roles: ALL_ROLES }));
   }
 
@@ -483,6 +563,7 @@ export class Room {
     if (who.role !== "kp") return fail("forbidden", "KP만 세션을 이어갈 수 있어요.");
     if (this.status !== "PAUSED") return fail("bad_message", "일시정지 중인 세션이 없어요.");
     this.status = "ACTIVE";
+    this.pauseReason = null;
     return ok(this.emit({ type: "session.resumed", data: {} }, { roles: ALL_ROLES }));
   }
 
@@ -540,6 +621,8 @@ export class Room {
     }
 
     this.status = "IDLE";
+    this.pauseReason = null;
+    this.kpAwaySince = null;
     outs.push(this.emit({ type: "session.ended", data: summary }, { roles: ALL_ROLES }));
     return ok(...outs);
   }

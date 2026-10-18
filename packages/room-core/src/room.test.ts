@@ -37,11 +37,14 @@ const addToken = (room: Room, extra: Partial<{ name: string; ownerId: string; la
 };
 
 describe("접속과 일시정지", () => {
-  it("KP 연결이 끊기면 세션이 일시정지된다", () => {
+  it("KP 연결이 끊겨도 바로 멈추지 않고, 유예가 끝나야 자동 정지된다", () => {
     const room = setup();
     const outs = room.leave("kp1");
+    expect(room.sessionStatus).toBe("ACTIVE");
+    expect(outs.map((o) => o.event.type)).toEqual(["presence", "kp.away"]);
+    const expired = room.expireKpAway();
     expect(room.sessionStatus).toBe("PAUSED");
-    expect(outs.map((o) => o.event.type)).toEqual(["presence", "session.paused"]);
+    expect(expired.map((o) => o.event.type)).toEqual(["session.paused"]);
   });
 
   it("PL 연결이 끊겨도 세션은 계속된다", () => {
@@ -53,20 +56,21 @@ describe("접속과 일시정지", () => {
   it("일시정지 중에는 보드 입력과 굴림이 막힌다", () => {
     const room = setup();
     const t = addToken(room, { ownerId: "pl1" });
-    room.leave("kp1");
-    room.join(kp);
+    must(room.handle(kp, cmd("session.pause", {})));
     const move = room.handle(seo, cmd("object.move", { id: t.id, x: 1, y: 1, rev: t.rev }));
     expect(move).toMatchObject({ ok: false, code: "paused" });
     const roll = room.handle(seo, cmd("roll.request", { expr: "1d100", secret: false }));
     expect(roll).toMatchObject({ ok: false, code: "paused" });
   });
 
-  it("KP가 돌아와 이어하기를 하면 다시 진행된다", () => {
+  it("KP가 직접 멈춘 세션은 KP가 돌아와도 풀리지 않고, 이어하기를 해야 진행된다", () => {
     const room = setup();
     const t = addToken(room, { ownerId: "pl1" });
+    must(room.handle(kp, cmd("session.pause", {})));
     room.leave("kp1");
+    room.expireKpAway();
     room.join(kp);
-    expect(room.sessionStatus).toBe("PAUSED"); // 접속만으로는 풀리지 않는다
+    expect(room.sessionStatus).toBe("PAUSED"); // 직접 누른 정지는 접속만으로 풀리지 않는다
     must(room.handle(kp, cmd("session.resume", {})));
     expect(room.sessionStatus).toBe("ACTIVE");
     expect(room.handle(seo, cmd("object.move", { id: t.id, x: 5, y: 5, rev: t.rev })).ok).toBe(true);
@@ -340,9 +344,11 @@ describe("저장과 복원", () => {
     expect(restored.snapshot(kp).sessionNumber).toBe(1);
   });
 
-  it("진행 중이던 세션은 일시정지로 복원하고, 세션 없음은 그대로 둔다", () => {
+  it("진행 중이던 세션은 자동 정지로 복원하고, 세션 없음은 그대로 둔다", () => {
     const active = setup();
-    expect(Room.fromData(active.toData()).sessionStatus).toBe("PAUSED");
+    const restored = Room.fromData(active.toData());
+    expect(restored.sessionStatus).toBe("PAUSED");
+    expect(restored.snapshot(kp).pauseReason).toBe("kp_disconnected");
     const idle = newRoom();
     idle.join(kp);
     expect(Room.fromData(idle.toData()).sessionStatus).toBe("IDLE");
@@ -356,11 +362,12 @@ describe("저장과 복원", () => {
     expect(restored.eventsSince(seo, lastSeq)).toEqual([]);
   });
 
-  it("복원한 룸에서 KP가 이어하기를 하면 다시 진행된다", () => {
+  it("복원한 룸에서 KP가 들어오면 자동으로 재개되어 다시 진행된다", () => {
     const restored = Room.fromData(setup().toData());
-    restored.join(kp);
     restored.join(seo);
-    must(restored.handle(kp, cmd("session.resume", {})));
+    expect(restored.sessionStatus).toBe("PAUSED");
+    restored.join(kp);
+    expect(restored.sessionStatus).toBe("ACTIVE");
     expect(restored.handle(seo, cmd("roll.request", { expr: "1d6", secret: false })).ok).toBe(true);
   });
 });

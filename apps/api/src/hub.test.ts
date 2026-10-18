@@ -78,7 +78,7 @@ let clock = 1_000_000;
 
 async function boot(options: AppOptions = {}) {
   const moduleRef = await Test.createTestingModule({
-    imports: [AppModule.register({ joinTimeoutMs: 300, registry: { now: () => clock, saveDebounceMs: 20 }, ...options })],
+    imports: [AppModule.register({ joinTimeoutMs: 300, kpAwayGraceMs: 150, registry: { now: () => clock, saveDebounceMs: 20 }, ...options })],
   }).compile();
   const a = moduleRef.createNestApplication();
   a.useWebSocketAdapter(new WsAdapter(a));
@@ -263,23 +263,79 @@ describe("실시간 동작", () => {
     expect(names).toEqual(["책상"]);
   });
 
-  it("KP가 나가면 PL이 일시정지를 받고, 돌아와 이어하면 진행된다", async () => {
+  it("KP가 나가도 유예 동안은 정지하지 않고, 유예가 지나면 PL이 자동 정지를 받는다", async () => {
     const { room, kp } = await startedRoom();
     const pl = await connect(room, SEO);
     await kp.close();
-    const paused = await pl.waitFor(isType("session.paused"));
-    expect(paused.event).toMatchObject({ data: { reason: "kp_disconnected" } });
-
-    pl.cmd("roll.request", { expr: "1d100" }, "r-1");
-    await pl.waitFor((m) => m.event.type === "error" && m.event.data.code === "paused");
-
-    const kp2 = await open(room, KP);
-    const snap = await kp2.waitFor(isType("snapshot"));
-    expect(snap.event.type === "snapshot" && snap.event.data.sessionStatus).toBe("PAUSED");
-    kp2.cmd("session.resume", {});
-    await pl.waitFor(isType("session.resumed"));
+    const away = await pl.waitFor(isType("kp.away"));
+    expect(away.event.type === "kp.away" && typeof away.event.data.since).toBe("number");
+    // 유예 중에는 PL이 계속 굴릴 수 있다
     pl.cmd("roll.request", { expr: "1d100" });
     await pl.waitFor(isType("roll.result"));
+    expect(pl.types()).not.toContain("session.paused");
+
+    const paused = await pl.waitFor(isType("session.paused"));
+    expect(paused.event).toMatchObject({ data: { reason: "kp_disconnected" } });
+    pl.cmd("roll.request", { expr: "1d100" }, "r-1");
+    await pl.waitFor((m) => m.event.type === "error" && m.event.data.code === "paused");
+  });
+
+  it("유예 안에 KP가 돌아오면 정지 없이 계속된다", async () => {
+    const { room, kp } = await startedRoom();
+    const pl = await connect(room, SEO);
+    await kp.close();
+    await pl.waitFor(isType("kp.away"));
+    const kp2 = await open(room, KP);
+    await kp2.waitFor(isType("snapshot"));
+    await pl.waitFor(isType("kp.back"));
+    await new Promise((r) => setTimeout(r, 350)); // 유예(150ms)가 지나도
+    expect(pl.types()).not.toContain("session.paused");
+    pl.cmd("roll.request", { expr: "1d100" });
+    await pl.waitFor(isType("roll.result"));
+  });
+
+  it("자동 정지 뒤 KP가 돌아오면 자동 재개하고, KP가 직접 멈춘 세션은 그대로 둔다", async () => {
+    const { room, kp } = await startedRoom();
+    const pl = await connect(room, SEO);
+    await kp.close();
+    await pl.waitFor(isType("session.paused"));
+    const kp2 = await open(room, KP);
+    await pl.waitFor(isType("session.resumed"));
+    const snap = await kp2.waitFor(isType("snapshot"));
+    expect(snap.event.type === "snapshot" && snap.event.data.sessionStatus).toBe("ACTIVE");
+    pl.cmd("roll.request", { expr: "1d100" });
+    await pl.waitFor(isType("roll.result"));
+
+    // KP가 직접 멈춘 경우
+    kp2.cmd("session.pause", {});
+    await pl.waitFor((m) => m.event.type === "session.paused" && m.event.data.reason === "kp_request");
+    await kp2.close();
+    await new Promise((r) => setTimeout(r, 350));
+    const kp3 = await open(room, KP);
+    const snap3 = await kp3.waitFor(isType("snapshot"));
+    expect(snap3.event.type === "snapshot" && snap3.event.data).toMatchObject({ sessionStatus: "PAUSED", pauseReason: "kp_request" });
+  });
+
+  it("정지 중에도 KP는 준비성 편집을 할 수 있고, 굴림은 막힌다", async () => {
+    const { room, kp } = await startedRoom();
+    kp.cmd("session.pause", {});
+    await kp.waitFor(isType("session.paused"));
+    kp.cmd("object.add", { kind: "prop", name: "책상", x: 1, y: 1 });
+    await kp.waitFor(isType("object.added"));
+    kp.cmd("roll.request", { expr: "1d100", secret: true }, "k-1");
+    await kp.waitFor((m) => m.event.type === "error" && m.event.data.code === "paused");
+    expect(room.id).toBeTruthy();
+  });
+
+  it("KP 새로고침(연결을 닫고 곧바로 다시 붙임)에는 정지 이벤트가 없다", async () => {
+    const { room, kp } = await startedRoom();
+    const pl = await connect(room, SEO);
+    await kp.close();
+    const kp2 = await open(room, KP);
+    await kp2.waitFor(isType("snapshot"));
+    await new Promise((r) => setTimeout(r, 350));
+    expect(pl.types()).not.toContain("session.paused");
+    expect(pl.types()).not.toContain("session.resumed");
   });
 
   it("세션 시작 전에는 PL의 굴림이 막힌다", async () => {
@@ -360,7 +416,7 @@ describe("REST", () => {
 });
 
 describe("저장과 복원", () => {
-  it("서버를 다시 켜도 룸 상태가 남고, 진행 중이던 세션은 일시정지로 돌아온다", async () => {
+  it("서버를 다시 켜도 룸 상태가 남고, 진행 중이던 세션은 자동 정지로 돌아와 KP가 들어오면 재개된다", async () => {
     await app.close();
     const dir = mkdtempSync(join(tmpdir(), "coc-vtt-"));
     try {
@@ -383,15 +439,19 @@ describe("저장과 복원", () => {
       const mine = await api("GET", "/rooms", "kp1");
       expect(mine.json).toEqual([expect.objectContaining({ id: room.id, name: "붉은 달의 의식", sessionStatus: "PAUSED", sessionNumber: 1 })]);
 
+      // KP보다 먼저 들어온 PL은 자동 정지 상태를 본다
+      const pl1 = await connect({ id: room.id, invite: "" }, SEO);
+      const plSnap = pl1.messages.find(isType("snapshot"));
+      expect(plSnap?.event.type === "snapshot" && plSnap.event.data).toMatchObject({ sessionStatus: "PAUSED", pauseReason: "kp_disconnected" });
+
       const kp2 = await open(room, KP);
       const snap = await kp2.waitFor(isType("snapshot"));
       if (snap.event.type !== "snapshot") throw new Error();
       expect(snap.event.data.objects.map((o) => o.name)).toEqual(["윤서하"]);
       expect(snap.event.data.rolls).toHaveLength(1);
-      expect(snap.event.data.sessionStatus).toBe("PAUSED");
-
-      kp2.cmd("session.resume", {});
-      await kp2.waitFor(isType("session.resumed"));
+      // KP가 들어오면 별도 이어하기 없이 자동 재개된다
+      expect(snap.event.data.sessionStatus).toBe("ACTIVE");
+      await pl1.waitFor(isType("session.resumed"));
       // 복원된 PL은 초대 코드 없이도 다시 들어올 수 있다
       const pl2 = await connect({ id: room.id, invite: "" }, SEO);
       expect(pl2.types()).toContain("snapshot");

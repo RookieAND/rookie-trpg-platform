@@ -32,7 +32,10 @@ async function bootstrap() {
   const images = db ? new PostgresImageStorage(db) : dir === "memory" ? new MemoryImageStorage() : new FileImageStorage(resolve(dir, "images"));
   // SUPABASE_JWT_SECRET이 있으면 디스코드 로그인(Supabase 토큰)만 받고, 없으면 개발용 신원을 쓴다.
   const jwtSecret = process.env.SUPABASE_JWT_SECRET;
-  const app = await NestFactory.create(AppModule.register({ authenticate: jwtSecret ? supabaseAuthenticate(jwtSecret) : devAuthenticate, store, vault, library, images }));
+  // KP_AWAY_GRACE_MS: KP 연결이 끊긴 뒤 자동 정지까지의 유예(기본 30000ms). 테스트·e2e에서 줄여 쓴다.
+  const grace = Number(process.env.KP_AWAY_GRACE_MS);
+  const kpAwayGraceMs = Number.isFinite(grace) && grace >= 0 && process.env.KP_AWAY_GRACE_MS ? grace : undefined;
+  const app = await NestFactory.create(AppModule.register({ authenticate: jwtSecret ? supabaseAuthenticate(jwtSecret) : devAuthenticate, store, vault, library, images, kpAwayGraceMs }));
   app.enableCors({ origin: process.env.WEB_ORIGIN ?? "http://localhost:3000" });
   app.useWebSocketAdapter(new WsAdapter(app));
   app.enableShutdownHooks();

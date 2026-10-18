@@ -164,7 +164,8 @@ describe("sheet.patch", () => {
     expect(patch(room, seo, c.id, [{ path: "notes", value: "x" }])).toMatchObject({ ok: false, code: "rate_limited" });
     t = 1500;
     room.leave("kp1");
-    room.join(kp);
+    room.expireKpAway(); // 유예가 지나면 자동 정지
+    room.join(spec); // KP가 아닌 접속으로는 풀리지 않는다
     expect(patch(room, seo, c.id, [{ path: "notes", value: "y" }])).toMatchObject({ ok: false, code: "paused" });
   });
 });

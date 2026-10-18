@@ -84,6 +84,20 @@ describe("applyServerMessage", () => {
     expect(s.sessionStatus).toBe("IDLE");
   });
 
+  it("KP 유예(kp.away)는 정지 없이 끊긴 시각만 기록하고, 돌아오거나 정지되면 사라진다", () => {
+    let s = applyServerMessage(initialRoomState(), snap());
+    s = applyServerMessage(s, { seq: 6, event: { type: "session.started", data: { number: 1 } } });
+    s = applyServerMessage(s, { seq: 7, event: { type: "kp.away", data: { since: 1234 } } });
+    expect(s).toMatchObject({ sessionStatus: "ACTIVE", kpAwaySince: 1234 });
+    s = applyServerMessage(s, { seq: 8, event: { type: "kp.back", data: {} } });
+    expect(s.kpAwaySince).toBeNull();
+    s = applyServerMessage(s, { seq: 9, event: { type: "kp.away", data: { since: 2000 } } });
+    s = applyServerMessage(s, { seq: 10, event: { type: "session.paused", data: { reason: "kp_disconnected" } } });
+    expect(s).toMatchObject({ sessionStatus: "PAUSED", pauseReason: "kp_disconnected", kpAwaySince: null });
+    s = applyServerMessage(s, { seq: 11, event: { type: "session.resumed", data: {} } });
+    expect(s).toMatchObject({ sessionStatus: "ACTIVE", pauseReason: null });
+  });
+
   it("오류는 seq를 건드리지 않고 기록만 한다", () => {
     let s = applyServerMessage(initialRoomState(), snap());
     s = applyServerMessage(s, { seq: 0, event: { type: "error", data: { code: "paused", message: "멈춤" } } });

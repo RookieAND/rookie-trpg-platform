@@ -5,6 +5,8 @@ import { CHARACTERISTIC_KEYS, CONDITIONS, MADNESS_KINDS, MAX_WEAPONS, STAT_PATHS
 export type Role = "kp" | "pl" | "spectator";
 /** IDLE: 진행 중인 세션이 없음(첫 시작 전, 또는 세션 종료 뒤). KP는 이때 장면을 준비할 수 있다. */
 export type SessionStatus = "IDLE" | "ACTIVE" | "PAUSED";
+/** kp_disconnected는 자동 정지(KP가 돌아오면 자동 재개), kp_request는 KP가 직접 누른 정지 */
+export type PauseReason = "kp_disconnected" | "kp_request";
 export type Layer = "background" | "object" | "gm";
 export type Visibility = "all" | "gm" | string[]; // string[] = 보이는 사용자 id 목록
 
@@ -232,6 +234,10 @@ export interface Snapshot {
   roomId: string;
   seq: number;
   sessionStatus: SessionStatus;
+  /** 일시정지 사유. 옛 서버가 보낸 snapshot에는 없을 수 있다. */
+  pauseReason?: PauseReason | null;
+  /** KP 연결이 끊겨 유예 중이면 끊긴 시각(서버 시계). 아니면 null */
+  kpAwaySince?: number | null;
   sessionNumber: number;
   objects: GameObject[];
   members: Member[];
@@ -613,7 +619,11 @@ export type ServerEvent =
   | { type: "roll.hidden"; data: { id: string; userId: string; userName: string; at: number } }
   | { type: "presence"; data: { members: Member[] } }
   | { type: "session.started"; data: { number: number } }
-  | { type: "session.paused"; data: { reason: "kp_disconnected" | "kp_request" } }
+  | { type: "session.paused"; data: { reason: PauseReason } }
+  /** KP의 마지막 연결이 닫혀 유예가 시작됨. 아직 정지는 아니다. */
+  | { type: "kp.away"; data: { since: number } }
+  /** 유예 안에 KP가 돌아옴 */
+  | { type: "kp.back"; data: Record<string, never> }
   | { type: "session.resumed"; data: Record<string, never> }
   | { type: "session.ended"; data: EndSummary };
 

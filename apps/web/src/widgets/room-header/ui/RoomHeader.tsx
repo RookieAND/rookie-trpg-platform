@@ -21,6 +21,7 @@ export function RoomHeader({
   roomId,
   role,
   status,
+  kpAway = false,
   sessionNumber,
   connection,
   members,
@@ -36,6 +37,8 @@ export function RoomHeader({
   roomId: string;
   role: Role;
   status: SessionStatus;
+  /** KP 연결이 끊겨 유예 중(PL에게만 의미가 있다) */
+  kpAway?: boolean;
   sessionNumber: number;
   connection: Connection;
   members: Member[];
@@ -56,6 +59,7 @@ export function RoomHeader({
       <span className="sep" />
       <Link href="/" className="crumb">← 로비</Link>
       <span className={`badge ${isKp ? "kp" : ""}`}>{ROLE_LABEL[role]}</span>
+      {kpAway && <span className="badge paused" role="status" data-testid="kp-away-badge">KP 끊김</span>}
       <span className={`badge status ${status === "ACTIVE" ? "live" : ""} ${status === "PAUSED" ? "paused" : ""}`} data-testid="session-status">
         {sessionNumber > 0 ? `세션 ${sessionNumber} · ` : "세션 시작 전 · "}
         {SESSION_STATUS_LABEL[status]}
