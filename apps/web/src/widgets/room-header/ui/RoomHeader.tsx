@@ -60,7 +60,7 @@ export function RoomHeader({
         {sessionNumber > 0 ? `세션 ${sessionNumber} · ` : "세션 시작 전 · "}
         {SESSION_STATUS_LABEL[status]}
       </span>
-      <span className="badge" data-testid="connection">{CONNECTION_LABEL[connection]}</span>
+      <span className="badge" data-testid="connection" data-state={connection}>{CONNECTION_LABEL[connection]}</span>
       <div style={{ flex: 1 }} />
       <span className="presence" title={members.filter((m) => m.online).map((m) => m.name).join(", ")}>접속 {members.filter((m) => m.online).map((m) => m.name).join(", ")}</span>
       <span className="sep" />

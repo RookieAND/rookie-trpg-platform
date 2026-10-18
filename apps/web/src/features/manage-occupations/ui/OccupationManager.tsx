@@ -59,7 +59,7 @@ export function OccupationManager({ error: syncError, occupations, onAdd, onEdit
 
   return (
     <section className="card" style={{ gap: 12 }} data-testid="occupations">
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="wrap-row" style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <strong style={{ flex: 1 }}>내 직업 정의 ({occupations.length})</strong>
         <button className="btn" disabled={occupations.length === 0} onClick={() => downloadText(`occupations-${new Date().toISOString().slice(0, 10)}.json`, exportText(), "application/json;charset=utf-8")}>내보내기</button>
         <button className="btn" onClick={() => fileRef.current?.click()}>가져오기</button>
@@ -69,7 +69,7 @@ export function OccupationManager({ error: syncError, occupations, onAdd, onEdit
       {info && <div role="status" style={{ color: "var(--accent)", fontSize: 13 }}>{info}</div>}
       {syncError && <div className="err" role="alert">{syncError}</div>}
       {occupations.map((o) => (
-        <div key={o.id} data-testid="occupation-item" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div key={o.id} className="wrap-row" data-testid="occupation-item" style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span style={{ flex: 1 }}>
             <strong>{o.name}</strong>
             <span style={{ color: "var(--muted)", fontSize: 12.5 }}> · {OCCUPATION_POINT_FORMULAS.find((f) => f.id === o.formula)?.label} · 신용도 {o.creditMin}~{o.creditMax} · {o.skills.join(", ") || "직업 기능 없음"}</span>

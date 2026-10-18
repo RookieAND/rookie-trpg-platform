@@ -116,6 +116,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
               }
             }}
           >
+            <circle className="tok-hit" cx={pos.x} cy={pos.y} r={44} />
             {selectedId === o.id && <circle cx={pos.x} cy={pos.y} r={R + 8} fill="none" stroke="#7c86f7" strokeWidth="2" />}
             {o.image ? (
               <>

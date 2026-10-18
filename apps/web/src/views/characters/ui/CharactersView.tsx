@@ -63,8 +63,8 @@ function Vault({ me }: { me: Identity }) {
         <div style={{ flex: 1 }} />
         <span className="badge">{me.name}</span>
       </header>
-      <main style={{ maxWidth: 760, margin: "0 auto", padding: "28px 24px", display: "grid", gap: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <main className="vault-main" style={{ maxWidth: 760, margin: "0 auto", padding: "28px 24px", display: "grid", gap: 20 }}>
+        <div className="vault-head" style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <h1 style={{ margin: 0, fontSize: 22 }}>내 캐릭터</h1>
           <div style={{ flex: 1 }} />
           {!editing && <button className="btn" onClick={() => setEditing({ mode: "wizard" })}>마법사로 만들기</button>}
@@ -86,7 +86,7 @@ function Vault({ me }: { me: Identity }) {
         {items && items.length === 0 && !editing && <div style={{ color: "var(--muted)" }}>아직 캐릭터가 없어요. 새 캐릭터를 만들어 보세요.</div>}
         {!editing &&
           items?.map((c) => (
-            <article key={c.id} className="card" data-testid="vault-card" style={{ flexDirection: "row", alignItems: "center" }}>
+            <article key={c.id} className="card vault-card" data-testid="vault-card" style={{ flexDirection: "row", alignItems: "center" }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600 }}>{c.name}</div>
                 <div style={{ color: "var(--muted)", fontSize: 12.5 }}>{c.occupation || "직업 없음"} · {c.age}세 · 기능 {c.skills.length}개</div>

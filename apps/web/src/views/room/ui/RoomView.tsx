@@ -61,6 +61,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   const [viewSceneId, setViewSceneId] = useState<string | null>(null);
   const [fogPicking, setFogPicking] = useState(false);
   const [fogRadius, setFogRadius] = useState(120);
+  const [panelOpen, setPanelOpen] = useState(true); // 좁은 화면에서만 보이는 패널 접기
 
   // 역할은 서버가 확정한 값을 쓴다. 접속 전에는 PL로 임시 표시한다.
   const role: Role = state.members.find((m) => m.userId === me.userId)?.role ?? "pl";
@@ -158,7 +159,8 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
           )}
         </main>
 
-        <aside className="side">
+        <aside className={`side${panelOpen ? "" : " collapsed"}`}>
+          <button type="button" className="side-toggle" aria-expanded={panelOpen} onClick={() => setPanelOpen((o) => !o)}>{panelOpen ? "패널 접기" : "패널 펴기"}</button>
           <div className="tabs" role="tablist">
             <button role="tab" aria-selected={tab === "roll"} onClick={() => setTab("roll")}>굴림</button>
             <button role="tab" aria-selected={tab === "sheet"} onClick={() => setTab("sheet")}>시트</button>
