@@ -27,7 +27,7 @@ export class SheetImportController {
   @Post("google")
   @HttpCode(200)
   async google(@Req() req: IncomingMessage, @Body() body: unknown) {
-    const me = this.auth.fromRequest(req);
+    const me = await this.auth.fromRequest(req);
     if (!me) throw new UnauthorizedException("로그인이 필요해요.");
     const url = body && typeof body === "object" ? (body as { url?: unknown }).url : undefined;
     const r = await this.service.fetchCsv(me.userId, url);

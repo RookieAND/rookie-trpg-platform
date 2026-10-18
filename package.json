@@ -10,6 +10,11 @@
     "dev:web": "pnpm --filter @coc-vtt/web dev",
     "e2e": "pnpm --filter @coc-vtt/web e2e",
     "arch": "node scripts/check-architecture.mjs",
-    "import:scenario": "pnpm --filter @coc-vtt/api import:scenario"
+    "import:scenario": "pnpm --filter @coc-vtt/api import:scenario",
+    "build:api": "pnpm --filter @coc-vtt/api build",
+    "start:api": "pnpm --filter @coc-vtt/api start",
+    "build:web": "pnpm --filter @coc-vtt/web build",
+    "cleanup:images": "pnpm --filter @coc-vtt/api cleanup:images",
+    "smoke:prod": "node scripts/smoke-prod.mjs"
   }
 }

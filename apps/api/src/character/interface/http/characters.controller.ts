@@ -27,8 +27,8 @@ export class CharactersController {
     @Inject(AuthService) private readonly auth: AuthService,
   ) {}
 
-  private me(req: IncomingMessage) {
-    const id = this.auth.fromRequest(req);
+  private async me(req: IncomingMessage) {
+    const id = await this.auth.fromRequest(req);
     if (!id) throw new UnauthorizedException("로그인이 필요해요.");
     return id.userId;
   }
@@ -43,20 +43,20 @@ export class CharactersController {
   }
 
   @Get()
-  list(@Req() req: IncomingMessage) {
-    return this.vault.list(this.me(req));
+  async list(@Req() req: IncomingMessage) {
+    return this.vault.list(await this.me(req));
   }
 
   @Post()
   async create(@Req() req: IncomingMessage, @Body() body: unknown) {
-    const r = await this.vault.create(this.me(req), this.parse(body));
+    const r = await this.vault.create(await this.me(req), this.parse(body));
     if (!r.ok) throw new ConflictException("보관함이 가득 찼어요. 쓰지 않는 캐릭터를 지워 주세요.");
     return r.character;
   }
 
   @Put(":id")
   async update(@Req() req: IncomingMessage, @Param("id") id: string, @Body() body: unknown) {
-    const r = await this.vault.update(this.me(req), id, this.parse(body));
+    const r = await this.vault.update(await this.me(req), id, this.parse(body));
     if (!r.ok) throw new NotFoundException("캐릭터를 찾을 수 없어요.");
     return r.character;
   }
@@ -64,6 +64,6 @@ export class CharactersController {
   @Delete(":id")
   @HttpCode(204)
   async remove(@Req() req: IncomingMessage, @Param("id") id: string) {
-    if (!(await this.vault.remove(this.me(req), id))) throw new NotFoundException("캐릭터를 찾을 수 없어요.");
+    if (!(await this.vault.remove(await this.me(req), id))) throw new NotFoundException("캐릭터를 찾을 수 없어요.");
   }
 }

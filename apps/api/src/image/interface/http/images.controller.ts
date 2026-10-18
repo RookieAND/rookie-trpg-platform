@@ -24,7 +24,7 @@ export class ImagesController {
 
   @Post()
   async upload(@Req() req: IncomingMessage) {
-    const me = this.auth.fromRequest(req);
+    const me = await this.auth.fromRequest(req);
     if (!me) throw new UnauthorizedException("로그인이 필요해요.");
     const body = await readBody(req, MAX_IMAGE_BYTES);
     const r = body === "too_large" ? ({ ok: false, code: "too_large" } as const) : await this.images.upload(me.userId, body, this.ips.of(req));
@@ -62,7 +62,7 @@ export class AudioController {
 
   @Post()
   async upload(@Req() req: IncomingMessage) {
-    const me = this.auth.fromRequest(req);
+    const me = await this.auth.fromRequest(req);
     if (!me) throw new UnauthorizedException("로그인이 필요해요.");
     const body = await readBody(req, MAX_AUDIO_BYTES);
     const r = body === "too_large" ? ({ ok: false, code: "too_large" } as const) : await this.images.uploadAudio(me.userId, body, this.ips.of(req));

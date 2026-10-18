@@ -1,6 +1,6 @@
-import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { IMAGE_ID, type ImageStorage, type MediaMime, type StoredImage } from "../domain/image-storage";
+import { IMAGE_ID, type ImageStorage, type MediaMime, type StoredImage, type StoredImageInfo } from "../domain/image-storage";
 
 const EXT: Record<MediaMime, string> = {
   "image/png": "png",
@@ -45,5 +45,24 @@ export class FileImageStorage implements ImageStorage {
       }
     }
     return null;
+  }
+
+  async *list(): AsyncGenerator<StoredImageInfo> {
+    let names: string[];
+    try {
+      names = await readdir(this.dir);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw e;
+    }
+    for (const n of names) {
+      const id = n.split(".")[0] ?? "";
+      if (!IMAGE_ID.test(id) || !((n.split(".")[1] ?? "") in MIME_BY_EXT)) continue;
+      try {
+        yield { id, createdAt: (await stat(join(this.dir, n))).mtimeMs };
+      } catch {
+        /* 그 사이 지워졌다 */
+      }
+    }
   }
 }

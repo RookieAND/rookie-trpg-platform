@@ -28,7 +28,6 @@ import { RoomLimitError, RoomRegistry } from "../../application/room-registry";
 import { MAX_SCENARIO_BODY, ScenarioService } from "../../application/scenario.service";
 import { RoomHub } from "../ws/room.hub";
 import { isValidWebhookUrl } from "../../domain/discord";
-import { APP_VERSION } from "../../../version";
 
 const createSchema = z.object({ name: z.string().trim().min(1).max(60) });
 const inviteSchema = z.object({
@@ -54,22 +53,16 @@ export class RoomsController {
     @Inject(RoomHub) private readonly hub: RoomHub,
   ) {}
 
-  private who(req: IncomingMessage) {
-    const id = this.auth.fromRequest(req);
+  private async who(req: IncomingMessage) {
+    const id = await this.auth.fromRequest(req);
     if (!id) throw new UnauthorizedException("로그인이 필요해요.");
     return id;
-  }
-
-  @Get("health")
-  health() {
-    // 비밀이나 설정은 싣지 않는다. 배포 확인용 최소 정보만.
-    return { ok: true, rooms: this.registry.roomCount(), version: APP_VERSION, uptimeSec: Math.floor(process.uptime()) };
   }
 
   /** 내 룸 목록(내가 만들었거나 참가한 룸) */
   @Get("rooms")
   async mine(@Req() req: IncomingMessage) {
-    const me = this.who(req);
+    const me = await this.who(req);
     const rooms = await this.registry.listFor(me.userId);
     return rooms.map((r) => ({
       id: r.meta.id,
@@ -83,7 +76,7 @@ export class RoomsController {
 
   @Post("rooms")
   async create(@Req() req: IncomingMessage, @Body() body: unknown) {
-    const me = this.who(req);
+    const me = await this.who(req);
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException("룸 이름을 입력해 주세요.");
     const entry = await this.registry.create(me.userId, parsed.data.name).catch((e) => {
@@ -101,7 +94,7 @@ export class RoomsController {
   @Delete("rooms/:roomId")
   @HttpCode(204)
   async remove(@Req() req: IncomingMessage, @Param("roomId") roomId: string) {
-    const me = this.who(req);
+    const me = await this.who(req);
     const r = await this.registry.remove(roomId, me.userId);
     if (!r.ok) {
       if (r.reason === "not_found") throw new NotFoundException("룸을 찾을 수 없어요.");
@@ -112,7 +105,7 @@ export class RoomsController {
   /** 초대 링크로 들어온 사람이 룸 이름과 입장 가능 여부를 보는 용도 */
   @Get("rooms/:roomId")
   async room(@Req() req: IncomingMessage, @Param("roomId") roomId: string, @Query("invite") invite?: string) {
-    const me = this.who(req);
+    const me = await this.who(req);
     const entry = await this.registry.get(roomId);
     if (!entry) throw new NotFoundException("룸을 찾을 수 없어요.");
     const decision = this.registry.decideJoin(entry, me.userId, "pl", invite ?? null);
@@ -151,7 +144,7 @@ export class RoomsController {
   /** 이전 대화 더 보기. before(seq) 앞의 대화를 최근 것부터 limit개 돌려준다. 귓속말은 보낸 사람과 받는 사람에게만 간다. */
   @Get("rooms/:roomId/chat")
   async chatPage(@Req() req: IncomingMessage, @Param("roomId") roomId: string, @Query("before") before?: string, @Query("limit") limit?: string) {
-    const me = this.who(req);
+    const me = await this.who(req);
     const { entry, viewer } = await this.viewerOf(me, roomId);
     const b = this.intParam(before, "before") ?? Number.MAX_SAFE_INTEGER;
     const l = Math.min(this.intParam(limit, "limit") ?? 50, CHAT_PAGE_MAX);
@@ -174,7 +167,7 @@ export class RoomsController {
     @Query("limit") limit?: string,
     @Query("view") view?: string,
   ) {
-    const me = this.who(req);
+    const me = await this.who(req);
     const { entry, viewer } = await this.viewerOf(me, roomId);
     const kindList = (kinds ?? "").split(",").map((k) => k.trim()).filter(Boolean);
     if (kindList.some((k) => !isLogKind(k))) throw new BadRequestException(`종류는 ${LOG_KINDS.join(", ")} 중에서 골라 주세요.`);
@@ -195,7 +188,7 @@ export class RoomsController {
   @Post("rooms/:roomId/invite")
   @HttpCode(200)
   async regenerate(@Req() req: IncomingMessage, @Param("roomId") roomId: string, @Body() body: unknown) {
-    const me = this.who(req);
+    const me = await this.who(req);
     const parsed = inviteSchema.safeParse(body ?? {});
     if (!parsed.success) throw new BadRequestException("초대 설정이 올바르지 않아요.");
     const r = await this.registry.regenerateInvite(roomId, me.userId, parsed.data);
@@ -209,7 +202,7 @@ export class RoomsController {
   /** 디스코드 알림 설정(룸 주인만). webhookUrl이 null이면 해제한다. */
   @Put("rooms/:roomId/discord")
   async setDiscord(@Req() req: IncomingMessage, @Param("roomId") roomId: string, @Body() body: unknown) {
-    const me = this.who(req);
+    const me = await this.who(req);
     const parsed = discordSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException("디스코드 설정이 올바르지 않아요.");
     const { webhookUrl, events } = parsed.data;
@@ -229,7 +222,7 @@ export class RoomsController {
   @Post("rooms/:roomId/discord/test")
   @HttpCode(200)
   async testDiscord(@Req() req: IncomingMessage, @Param("roomId") roomId: string) {
-    const me = this.who(req);
+    const me = await this.who(req);
     const entry = await this.registry.get(roomId);
     if (!entry) throw new NotFoundException("룸을 찾을 수 없어요.");
     if (entry.meta.ownerId !== me.userId) throw new ForbiddenException("룸 주인만 시험 메시지를 보낼 수 있어요.");
@@ -245,7 +238,7 @@ export class RoomsController {
   /** 룸 주인이 룸 이름을 바꾼다. */
   @Patch("rooms/:roomId")
   async rename(@Req() req: IncomingMessage, @Param("roomId") roomId: string, @Body() body: unknown) {
-    const me = this.who(req);
+    const me = await this.who(req);
     const parsed = renameSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException("룸 이름을 1~60자로 적어 주세요.");
     const r = await this.registry.rename(roomId, me.userId, parsed.data.name);
@@ -276,7 +269,7 @@ export class RoomsController {
   @Post("rooms/:roomId/scenario")
   @HttpCode(200)
   async importInto(@Req() req: IncomingMessage, @Param("roomId") roomId: string, @Query("dryRun") dryRun?: string) {
-    const me = this.who(req);
+    const me = await this.who(req);
     const entry = await this.registry.get(roomId);
     if (!entry) throw new NotFoundException("룸을 찾을 수 없어요.");
     if (entry.meta.ownerId !== me.userId) throw new ForbiddenException("룸 주인(GM)만 시나리오를 가져올 수 있어요.");
@@ -299,7 +292,7 @@ export class RoomsController {
   @Post("rooms/import")
   @HttpCode(201)
   async importNew(@Req() req: IncomingMessage, @Query("name") name?: string) {
-    const me = this.who(req);
+    const me = await this.who(req);
     if (this.scenarios.tooMany(me.userId)) throw new HttpException("시나리오를 너무 많이 가져왔어요. 잠시 뒤에 다시 해 주세요.", 429);
     const doc = await this.readDoc(req);
     const title = (name ?? "").trim().slice(0, 60) || doc.roomName;
@@ -333,7 +326,7 @@ export class RoomsController {
     @Query("sheets") sheets: string | undefined,
     @Res({ passthrough: true }) res: ServerResponse,
   ) {
-    const me = this.who(req);
+    const me = await this.who(req);
     const entry = await this.registry.get(roomId);
     if (!entry) throw new NotFoundException("룸을 찾을 수 없어요.");
     if (entry.meta.ownerId !== me.userId) throw new ForbiddenException("룸 주인만 룸을 내보낼 수 있어요.");

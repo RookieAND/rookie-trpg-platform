@@ -20,4 +20,8 @@ export class MemoryRoomRepository implements RoomRepository {
   async listFor(userId: string) {
     return [...this.rooms.values()].map((r) => JSON.parse(r) as StoredRoom).filter((r) => involvesUser(r, userId));
   }
+
+  async *listAll() {
+    for (const r of [...this.rooms.values()]) yield JSON.parse(r) as StoredRoom;
+  }
 }

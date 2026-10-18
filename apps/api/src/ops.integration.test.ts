@@ -4,6 +4,7 @@ import WebSocket from "ws";
 import { Test } from "@nestjs/testing";
 import { WsAdapter } from "@nestjs/platform-ws";
 import type { INestApplication } from "@nestjs/common";
+import { createLogger, setLogger } from "./platform/log";
 import { AppModule, type AppOptions } from "./app.module";
 
 let app: INestApplication | null = null;
@@ -168,14 +169,14 @@ describe("/health", () => {
     expect(r.json.ok).toBe(true);
     expect(typeof r.json.version).toBe("string");
     expect(r.json.uptimeSec).toBeGreaterThanOrEqual(0);
-    expect(Object.keys(r.json).sort()).toEqual(["ok", "rooms", "uptimeSec", "version"]);
+    expect(Object.keys(r.json).sort()).toEqual(["connections", "db", "ok", "rooms", "saves", "status", "uptimeSec", "version"]);
   });
 });
 
 describe("디스코드 웹훅 주소 비노출", () => {
   it("전송 오류에 주소가 섞여도 응답과 로그에 나가지 않는다", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const lines: string[] = [];
+    const prev = setLogger(createLogger({ sink: (l) => void lines.push(l) }));
     await boot({
       discord: {
         gateway: { send: async (url) => { throw new Error(`요청 실패: ${url}`); } },
@@ -192,7 +193,8 @@ describe("디스코드 웹훅 주소 비노출", () => {
     c.ws.send(JSON.stringify({ id: "s", command: { type: "session.start", data: {} } }));
     await sleep(300);
     c.ws.close();
-    const logged = [...warn.mock.calls, ...err.mock.calls].flat().map(String).join("\n");
+    setLogger(prev);
+    const logged = lines.join("\n");
     expect(logged).not.toContain("abcdefghij");
     expect(logged).toContain("[웹훅 주소]");
   });

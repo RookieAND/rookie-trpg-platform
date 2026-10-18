@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { errFields, log } from "../../platform/log";
 import { MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, isAudioMime, sniffAudio, sniffImage, type ImageStorage, type StoredImage } from "../domain/image-storage";
 
 export const UPLOADS_PER_USER_PER_HOUR = 30;
@@ -114,7 +115,7 @@ export class ImageService {
         await this.storage.remove(id);
         removed += 1;
       } catch (e) {
-        console.warn(`파일 ${id} 지우기 실패:`, e instanceof Error ? e.message : e);
+        log.warn("파일 지우기 실패", { imageId: id, ...errFields(e) });
       }
     }
     return removed;

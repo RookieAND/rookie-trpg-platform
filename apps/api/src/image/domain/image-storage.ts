@@ -15,6 +15,13 @@ export interface ImageStorage {
   get(id: string): Promise<StoredImage | null>;
   /** 파일을 지운다. 없는 id면 아무 일도 없다. */
   remove(id: string): Promise<void>;
+  /** 저장된 모든 파일의 id와 올린 시각(ms). 쓰이지 않는 파일 정리(cleanup:images)가 쓴다. */
+  list(): AsyncIterable<StoredImageInfo>;
+}
+
+export interface StoredImageInfo {
+  id: string;
+  createdAt: number;
 }
 
 export const MAX_IMAGE_BYTES = 3 * 1024 * 1024;

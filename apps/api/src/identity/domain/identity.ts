@@ -10,4 +10,4 @@ export interface Identity {
 }
 
 /** 요청에서 신원을 읽는 규칙(포트). 구현은 infrastructure에 둔다. */
-export type Authenticate = (req: IncomingMessage, url: URL) => Identity | null;
+export type Authenticate = (req: IncomingMessage, url: URL) => Identity | null | Promise<Identity | null>;

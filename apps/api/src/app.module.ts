@@ -24,6 +24,10 @@ import { MemoryRoomRepository } from "./room/infrastructure/memory-room.reposito
 import { RoomsController } from "./room/interface/http/rooms.controller";
 import { RoomGateway } from "./room/interface/ws/room.gateway";
 import { RoomHub, type HubOptions } from "./room/interface/ws/room.hub";
+import { AllExceptionsFilter } from "./platform/all-exceptions.filter";
+import { HEALTH_DB, HealthController } from "./platform/health.controller";
+import type { Db } from "./platform/postgres";
+import { APP_FILTER } from "@nestjs/core";
 import { ClientIpResolver } from "./identity/application/client-ip";
 import { collectMediaIds } from "./media-refs";
 import { SheetImportService, type SheetImportOptions } from "./sheet-import/application/sheet-import.service";
@@ -48,6 +52,8 @@ export interface AppOptions {
   trustProxyHops?: number;
   /** GM 연결이 끊긴 뒤 자동 정지까지의 유예(ms). 기본 30초 */
   kpAwayGraceMs?: number;
+  /** /health·/ready가 DB에 닿는지 확인할 때 쓴다. 없으면 DB 항목은 none. */
+  db?: Db | null;
 }
 
 /**
@@ -69,8 +75,10 @@ export class AppModule {
   static register(options: AppOptions = {}): DynamicModule {
     return {
       module: AppModule,
-      controllers: [RoomsController, CharactersController, LibraryController, ImagesController, AudioController, SheetImportController],
+      controllers: [HealthController, RoomsController, CharactersController, LibraryController, ImagesController, AudioController, SheetImportController],
       providers: [
+        { provide: HEALTH_DB, useValue: options.db ?? null },
+        { provide: APP_FILTER, useClass: AllExceptionsFilter },
         { provide: AuthService, useFactory: () => new AuthService(options.authenticate ?? devAuthenticate) },
         { provide: ClientIpResolver, useFactory: () => new ClientIpResolver(options.trustProxyHops ?? 0) },
         {

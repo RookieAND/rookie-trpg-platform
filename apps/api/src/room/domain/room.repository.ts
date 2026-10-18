@@ -35,6 +35,8 @@ export interface RoomRepository {
   listFor(userId: string): Promise<StoredRoom[]>;
   /** 룸을 통째로 지운다. 없는 룸이면 아무 일도 없다. */
   remove(id: string): Promise<void>;
+  /** 저장된 모든 룸을 하나씩. 정리 작업(쓰이지 않는 이미지 찾기)용이라 느려도 괜찮다. */
+  listAll(): AsyncIterable<StoredRoom>;
 }
 
 /** 룸을 만들었거나 멤버로 참가한 사용자인지 */

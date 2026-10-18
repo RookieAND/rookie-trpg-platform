@@ -34,4 +34,14 @@ export class PostgresRoomRepository implements RoomRepository {
     const { rows } = await this.db.query<Row>("select meta, data from rooms where owner_id = $1 or member_ids @> array[$1]::text[] order by updated_at desc", [userId]);
     return rows.map(toStored);
   }
+
+  async *listAll() {
+    let after = "";
+    for (;;) {
+      const { rows } = await this.db.query<Row & { id: string }>("select id, meta, data from rooms where id > $1 order by id limit 50", [after]);
+      if (rows.length === 0) return;
+      for (const r of rows) yield toStored(r);
+      after = rows[rows.length - 1]!.id;
+    }
+  }
 }

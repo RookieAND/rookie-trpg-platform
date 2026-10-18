@@ -1,70 +1,94 @@
 import "reflect-metadata";
-import { resolve } from "node:path";
+import type { Server } from "node:http";
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { WsAdapter } from "@nestjs/platform-ws";
 import { AppModule } from "./app.module";
-import { PostgresVaultRepository } from "./character/infrastructure/postgres-vault.repository";
-import { FileLibraryRepository } from "./library/infrastructure/file-library.repository";
-import { MemoryLibraryRepository } from "./library/infrastructure/memory-library.repository";
-import { PostgresLibraryRepository } from "./library/infrastructure/postgres-library.repository";
-import { PostgresImageStorage } from "./image/infrastructure/postgres-image.storage";
-import { PostgresRoomRepository } from "./room/infrastructure/postgres-room.repository";
-import { connectPostgres, migrate } from "./platform/postgres";
-import { FileVaultRepository } from "./character/infrastructure/file-vault.repository";
-import { MemoryVaultRepository } from "./character/infrastructure/memory-vault.repository";
 import { ConfigError, authenticateFor, loadConfig } from "./config";
-import { redactWebhooks } from "./room/domain/discord";
+import { errFields, log } from "./platform/log";
+import { installProcessGuards } from "./platform/process-guards";
+import { buildStores } from "./platform/wiring";
 import { APP_VERSION } from "./version";
-import { FileImageStorage } from "./image/infrastructure/file-image.storage";
-import { MemoryImageStorage } from "./image/infrastructure/memory-image.storage";
-import { FileRoomRepository } from "./room/infrastructure/file-room.repository";
-import { MemoryRoomRepository } from "./room/infrastructure/memory-room.repository";
 
-const fmt = (e: unknown) => redactWebhooks(e instanceof Error ? (e.stack ?? e.message) : String(e));
+/** 종료를 기다려 주는 최대 시간. 호스트의 종료 유예(Fly kill_timeout 등)보다 짧게 둔다. */
+const SHUTDOWN_DEADLINE_MS = Number(process.env.SHUTDOWN_TIMEOUT_MS) || 8000;
 
 async function bootstrap() {
   const config = loadConfig();
-  // DATABASE_URL이 있으면 Postgres(Supabase 포함)에 저장하고, 없으면 ./data 폴더에 파일로 저장한다.
-  // DATA_DIR=memory 로 두면 메모리만 쓴다.
-  const dir = config.dataDir;
-  const db = config.databaseUrl ? connectPostgres(config.databaseUrl) : null;
-  if (db) await migrate(db);
-  const store = db ? new PostgresRoomRepository(db) : dir === "memory" ? new MemoryRoomRepository() : new FileRoomRepository(resolve(dir));
-  const vault = db ? new PostgresVaultRepository(db) : dir === "memory" ? new MemoryVaultRepository() : new FileVaultRepository(resolve(dir, "vault"));
-  const library = db ? new PostgresLibraryRepository(db) : dir === "memory" ? new MemoryLibraryRepository() : new FileLibraryRepository(resolve(dir, "library"));
-  const images = db ? new PostgresImageStorage(db) : dir === "memory" ? new MemoryImageStorage() : new FileImageStorage(resolve(dir, "images"));
-  // SUPABASE_JWT_SECRET이 있으면 디스코드 로그인(Supabase 토큰)만 받는다.
-  // 없으면 개발용 신원을 쓰는데, production에서는 ALLOW_DEV_AUTH=1이 아니면 loadConfig가 부팅을 거부한다.
+  const stores = await buildStores(config);
   // KP_AWAY_GRACE_MS: GM 연결이 끊긴 뒤 자동 정지까지의 유예(기본 30000ms). 테스트·e2e에서 줄여 쓴다.
   const grace = Number(process.env.KP_AWAY_GRACE_MS);
   const kpAwayGraceMs = Number.isFinite(grace) && grace >= 0 && process.env.KP_AWAY_GRACE_MS ? grace : undefined;
-  const app = await NestFactory.create(
-    AppModule.register({ authenticate: authenticateFor(config), store, vault, library, images, trustProxyHops: config.trustProxyHops, kpAwayGraceMs }),
+  const app = await NestFactory.create<NestExpressApplication>(
+    AppModule.register({
+      authenticate: authenticateFor(config),
+      store: stores.store,
+      vault: stores.vault,
+      library: stores.library,
+      images: stores.images,
+      db: stores.db,
+      trustProxyHops: config.trustProxyHops,
+      kpAwayGraceMs,
+    }),
+    // Nest 기본 로그는 줄 단위 글자라 수집기에서 다루기 어렵다. 오류와 경고만 남기고 나머지는 우리 로그를 쓴다.
+    { logger: ["error", "warn"], bodyParser: true },
   );
+  app.disable("x-powered-by");
   app.enableCors({ origin: config.webOrigin, exposedHeaders: ["x-export-notes"] });
   app.useWebSocketAdapter(new WsAdapter(app));
-  app.enableShutdownHooks(); // SIGTERM/SIGINT 때 연결을 닫고 마지막 상태를 저장한 뒤 종료한다.
-  if (db) process.once("beforeExit", () => void db.close());
 
-  // 처리 못 한 오류는 기록한다. 거절된 약속은 로그만 남기고 계속 돌고,
-  // 잡히지 않은 예외는 상태를 믿을 수 없으니 저장하고 내려간다(프로세스 관리자가 다시 띄운다).
-  process.on("unhandledRejection", (reason) => console.error("[unhandledRejection]", fmt(reason)));
-  process.on("uncaughtException", (err) => {
-    console.error("[uncaughtException]", fmt(err));
-    const force = setTimeout(() => process.exit(1), 5000);
+  // 프록시(Fly, Render, Cloudflare)의 유휴 연결 제한(보통 60초)보다 길게 둬서 재사용된 연결이 갑자기 끊기는 502를 막는다.
+  const http = app.getHttpServer() as Server;
+  http.keepAliveTimeout = 65_000;
+  http.headersTimeout = 66_000;
+
+  // ── 종료와 오류 처리 ────────────────────────────────────
+  // SIGTERM(배포·재시작): 새 연결을 막고, 접속자에게 "서버 재시작"(1012)을 알려 닫고, 모든 룸을 저장한 뒤 끝낸다.
+  // 접속자 화면은 1012를 받으면 알아서 다시 붙는다.
+  let stopping: Promise<void> | null = null;
+  const stop = (reason: string, code: number): Promise<void> => {
+    if (stopping) return stopping;
+    log.info("종료를 시작해요", { reason });
+    const force = setTimeout(() => {
+      log.error("종료가 늦어져 강제로 끝내요", { deadlineMs: SHUTDOWN_DEADLINE_MS });
+      process.exit(code || 1);
+    }, SHUTDOWN_DEADLINE_MS);
     force.unref();
-    app.close().finally(() => process.exit(1));
-  });
+    stopping = (async () => {
+      try {
+        await app.close(); // Lifecycle이 연결을 닫고 모든 룸을 저장한다
+      } catch (e) {
+        log.error("종료 중 오류", errFields(e));
+        code = code || 1;
+      }
+      try {
+        await stores.db?.close();
+      } catch (e) {
+        log.error("DB 연결을 닫지 못했어요", errFields(e));
+      }
+      log.info("종료했어요", { code });
+      process.exit(code);
+    })();
+    return stopping;
+  };
+  installProcessGuards(stop);
 
   await app.listen(config.port);
-  const warn = config.warnings.length ? `\n  ${config.warnings.map((w) => `[경고] ${w}`).join("\n  ")}` : "";
-  console.log(
-    `api v${APP_VERSION} on http://localhost:${config.port} (ws: /ws, data: ${db ? "postgres" : dir}, auth: ${config.authMode}${config.authMode === "dev" ? " (개발용)" : ""}, env: ${config.production ? "production" : "development"}, proxy: ${config.trustProxyHops})${warn}`,
-  );
+  log.info("api started", {
+    version: APP_VERSION,
+    port: config.port,
+    rooms: stores.describe.rooms,
+    images: stores.describe.images,
+    auth: config.authMode === "dev" ? "dev(개발용)" : `supabase(${[config.supabaseUrl ? "jwks" : null, config.jwtSecret ? "hs256" : null].filter(Boolean).join("+")})`,
+    env: config.production ? "production" : "development",
+    trustProxy: config.trustProxyHops,
+    webOrigin: config.webOrigin,
+  });
+  for (const w of config.warnings) log.warn(w);
 }
 
 bootstrap().catch((e) => {
-  if (e instanceof ConfigError) console.error(`설정 오류: ${e.message}`);
-  else console.error("시작하지 못했어요:", fmt(e));
+  if (e instanceof ConfigError) log.error(`설정 오류: ${e.message}`);
+  else log.error("시작하지 못했어요", errFields(e));
   process.exit(1);
 });

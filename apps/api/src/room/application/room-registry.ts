@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { Room, type RoomOptions } from "@coc-vtt/room-core";
 import type { Role } from "@coc-vtt/shared";
+import { errFields, log } from "../../platform/log";
 import { decideJoin, type JoinDecision } from "../domain/join-policy";
 import type { DiscordEvents } from "../domain/discord";
 import type { InviteConfig, RoomMeta, RoomRepository } from "../domain/room.repository";
@@ -58,6 +59,14 @@ export class RoomRegistry {
     return this.loaded.size;
   }
 
+  /** 저장 실패 횟수와 마지막 실패 시각(/health용). 성공하면 연속 실패 수는 0으로 돌아간다. */
+  private failedSaves = 0;
+  private consecutiveSaveFailures = 0;
+  private lastSaveFailureAt: number | null = null;
+  saveStats() {
+    return { failedSaves: this.failedSaves, consecutiveSaveFailures: this.consecutiveSaveFailures, lastSaveFailureAt: this.lastSaveFailureAt };
+  }
+
   /** 룸이 지워졌을 때 알림을 받는다(연결 끊기용). */
   onRemoved(cb: (roomId: string) => void) {
     this.removeListeners.push(cb);
@@ -78,7 +87,7 @@ export class RoomRegistry {
     try {
       await this.opts.onRemoving?.(entry);
     } catch (e) {
-      console.warn(`room ${id} 딸린 파일 정리 실패:`, e instanceof Error ? e.message : e);
+      log.warn("룸에 딸린 파일 정리 실패", { roomId: id, ...errFields(e) });
     }
     this.loaded.delete(id);
     for (const cb of this.removeListeners) cb(id);
@@ -254,7 +263,15 @@ export class RoomRegistry {
       if (this.removed.has(id)) return;
       // 차례가 왔을 때의 최신 상태를 저장한다.
       const seq = entry.room.currentSeq;
-      await this.opts.store.save({ meta: entry.meta, data: entry.room.toData() });
+      try {
+        await this.opts.store.save({ meta: entry.meta, data: entry.room.toData() });
+      } catch (e) {
+        this.failedSaves += 1;
+        this.consecutiveSaveFailures += 1;
+        this.lastSaveFailureAt = this.now();
+        throw e;
+      }
+      this.consecutiveSaveFailures = 0;
       entry.savedSeq = Math.max(entry.savedSeq, seq);
     });
     // 한 번 실패해도 다음 저장은 계속 시도한다.
@@ -268,13 +285,19 @@ export class RoomRegistry {
 
   /** 기다리지 않는 저장. 실패해도 서버가 죽지 않게 기록만 남기고, 다음 변경 때 다시 시도한다. */
   private saveInBackground(entry: LoadedRoom) {
-    this.save(entry).catch((e) => console.error(`room ${entry.meta.id} 저장 실패:`, e));
+    this.save(entry).catch((e) => log.error("룸 저장 실패", { roomId: entry.meta.id, ...errFields(e) }));
   }
 
   async flushAll() {
     for (const t of this.timers.values()) clearTimeout(t);
     this.timers.clear();
     const all = await Promise.all([...this.loaded.values()]);
-    await Promise.all(all.filter((e): e is LoadedRoom => !!e && e.room.currentSeq !== e.savedSeq).map((e) => this.save(e)));
+    // 한 룸의 저장이 실패해도 나머지 룸은 끝까지 저장한다.
+    const dirty = all.filter((e): e is LoadedRoom => !!e && e.room.currentSeq !== e.savedSeq);
+    const results = await Promise.allSettled(dirty.map((e) => this.save(e)));
+    results.forEach((r, i) => {
+      if (r.status === "rejected") log.error("종료 저장 실패", { roomId: dirty[i]?.meta.id, ...errFields(r.reason) });
+    });
+    return { saved: results.filter((r) => r.status === "fulfilled").length, failed: results.filter((r) => r.status === "rejected").length };
   }
 }

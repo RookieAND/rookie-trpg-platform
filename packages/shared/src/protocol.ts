@@ -842,7 +842,8 @@ export type ErrorCode =
   | "idle"
   | "bad_roll"
   | "bad_sheet"
-  | "rate_limited";
+  | "rate_limited"
+  | "internal";
 
 /** GM이 PL에게 요청한 판정. */
 export interface RollAsk {

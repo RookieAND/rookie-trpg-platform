@@ -50,4 +50,19 @@ export class FileRoomRepository implements RoomRepository {
     }
     return out;
   }
+
+  async *listAll() {
+    let names: string[];
+    try {
+      names = await readdir(this.dir);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw e;
+    }
+    for (const n of names) {
+      if (!n.endsWith(".json")) continue;
+      const stored = await this.load(n.slice(0, -5));
+      if (stored) yield stored;
+    }
+  }
 }

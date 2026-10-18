@@ -11,20 +11,20 @@ export class LibraryController {
     @Inject(AuthService) private readonly auth: AuthService,
   ) {}
 
-  private me(req: IncomingMessage) {
-    const id = this.auth.fromRequest(req);
+  private async me(req: IncomingMessage) {
+    const id = await this.auth.fromRequest(req);
     if (!id) throw new UnauthorizedException("로그인이 필요해요.");
     return id.userId;
   }
 
   @Get()
-  get(@Req() req: IncomingMessage) {
-    return this.library.get(this.me(req));
+  async get(@Req() req: IncomingMessage) {
+    return this.library.get((await this.me(req)));
   }
 
   @Put()
   async put(@Req() req: IncomingMessage, @Body() body: unknown) {
-    const r = await this.library.replace(this.me(req), body);
+    const r = await this.library.replace((await this.me(req)), body);
     if (!r.ok) {
       if (r.reason === "conflict") throw new ConflictException({ message: "다른 기기에서 서재가 먼저 바뀌었어요.", library: r.library });
       throw new BadRequestException(r.message);

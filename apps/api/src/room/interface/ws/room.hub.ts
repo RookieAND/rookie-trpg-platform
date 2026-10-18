@@ -5,6 +5,7 @@ import { inAudience, type Actor, type Out } from "@coc-vtt/room-core";
 import type { AuthService } from "../../../identity/application/auth.service";
 import type { DiscordNotifier } from "../../application/discord-notifier";
 import type { LoadedRoom, RoomRegistry } from "../../application/room-registry";
+import { errFields, log } from "../../../platform/log";
 import { DEFAULT_RATE_LIMIT, MessageRateLimiter, type RateLimitOptions } from "./rate-limit";
 
 /**
@@ -37,6 +38,10 @@ export const CLOSE = {
   full: 4409,
   /** 속도 제한을 계속 넘겨 끊긴 경우. 1008(정책 위반)을 쓰므로 클라이언트가 천천히 다시 붙을 수 있다. */
   rateLimited: 1008,
+  /** 서버가 내려가는 중(배포·재시작). 1012는 "service restart"라 클라이언트가 곧 다시 붙는다. */
+  serverRestarting: 1012,
+  /** 연결을 처리하다 서버 쪽 오류가 났다. 룸은 살아 있고, 클라이언트는 다시 붙을 수 있다. */
+  internal: 1011,
 } as const;
 
 export interface HubOptions {
@@ -46,6 +51,8 @@ export interface HubOptions {
   now?: () => number;
   /** GM의 마지막 연결이 닫힌 뒤 정지하기까지의 유예(ms). 기본 30초 */
   kpAwayGraceMs?: number;
+  /** 종료할 때 연결이 스스로 닫히길 기다리는 시간(ms). 기본 300 */
+  closeWaitMs?: number;
 }
 
 export const HEARTBEAT_MS = 30_000;
@@ -64,6 +71,7 @@ export class RoomHub {
   private readonly rate: RateLimitOptions;
   private readonly now: () => number;
   private readonly kpAwayGraceMs: number;
+  private readonly closeWaitMs: number;
 
   constructor(
     private readonly registry: RoomRegistry,
@@ -75,6 +83,7 @@ export class RoomHub {
     this.rate = { ...DEFAULT_RATE_LIMIT, ...opts.rate };
     this.now = opts.now ?? Date.now;
     this.kpAwayGraceMs = opts.kpAwayGraceMs ?? KP_AWAY_GRACE_MS;
+    this.closeWaitMs = opts.closeWaitMs ?? 300;
     const hb = opts.heartbeatMs ?? HEARTBEAT_MS;
     if (hb > 0) {
       this.heartbeat = setInterval(() => this.sweep(), hb);
@@ -118,18 +127,27 @@ export class RoomHub {
     const timer = setTimeout(() => {
       this.graceTimers.delete(roomId);
       if (this.closing) return;
-      const outs = entry.room.expireKpAway();
-      if (outs.length === 0) return;
-      this.deliver(roomId, outs);
-      this.notifier?.publish(entry.meta, outs);
-      this.registry.markChanged(entry, true);
+      try {
+        const outs = entry.room.expireKpAway();
+        if (outs.length === 0) return;
+        this.deliver(roomId, outs);
+        this.notifier?.publish(entry.meta, outs);
+        this.registry.markChanged(entry, true);
+      } catch (e) {
+        log.error("GM 유예 타이머 처리 실패", { roomId, ...errFields(e) });
+      }
     }, this.kpAwayGraceMs);
     timer.unref?.();
     this.graceTimers.set(roomId, timer);
   }
 
   private send(ws: WebSocket, msg: ServerMessage) {
-    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+    try {
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+    } catch (e) {
+      // 한 연결의 전송 실패가 다른 연결로 번지지 않게 한다.
+      log.warn("메시지를 보내지 못했어요", errFields(e));
+    }
   }
 
   private deliver(roomId: string, outs: Out[]) {
@@ -151,15 +169,13 @@ export class RoomHub {
     this.registry.markChanged(entry);
   }
 
-  /** 새 ws 연결을 붙인다. 룸을 불러오는 동안 온 메시지는 순서대로 쌓아 둔다. */
+  /**
+   * 새 ws 연결을 붙인다. 로그인 확인(JWKS 조회가 걸릴 수 있다)과 룸을 불러오는 동안 온 메시지는 순서대로 쌓아 둔다.
+   * HTTP와 같은 AuthService를 쓰므로 토큰 검증 규칙이 같다.
+   */
   attach(ws: WebSocket, req: IncomingMessage): void {
     const url = new URL(req.url ?? "/", "http://localhost");
     const roomId = url.searchParams.get("room");
-    const identity = this.auth.fromRequest(req);
-    if (!roomId || !identity) {
-      ws.close(CLOSE.unauthorized, "unauthorized");
-      return;
-    }
 
     const queue: RawData[] = [];
     let handler: ((raw: RawData) => void) | null = null;
@@ -179,25 +195,45 @@ export class RoomHub {
     ws.on("close", () => {
       closed = true;
       this.alive.delete(ws);
-      cleanup();
+      try {
+        cleanup();
+      } catch (e) {
+        log.error("연결 정리 중 오류", { roomId, ...errFields(e) });
+      }
     });
-    ws.on("error", () => ws.close());
+    ws.on("error", (e) => {
+      log.debug("ws 오류", errFields(e));
+      try {
+        ws.close();
+      } catch {
+        /* 이미 닫혔다 */
+      }
+    });
+    if (this.closing) return void ws.close(CLOSE.serverRestarting, "server_restarting");
 
-    void this.registry
-      .get(roomId)
-      .then((entry) => {
-        if (closed) return;
-        if (!entry) return ws.close(CLOSE.notFound, "room_not_found");
-        const decision = this.registry.decideJoin(entry, identity.userId, identity.requestedRole, url.searchParams.get("invite"));
-        if (!decision.ok) {
-          return ws.close(decision.reason === "room_full" ? CLOSE.full : CLOSE.noAccess, decision.reason);
-        }
-        const actor: Actor = { userId: identity.userId, name: identity.name, role: decision.role };
-        cleanup = this.bind(ws, entry, actor);
-        handler = (raw) => this.onMessage(ws, entry, actor, raw);
-        for (const raw of queue.splice(0)) handler(raw);
-      })
-      .catch(() => ws.close(1011, "internal"));
+    void (async () => {
+      const identity = roomId ? await this.auth.fromRequest(req) : null;
+      if (closed) return;
+      if (!roomId || !identity) return void ws.close(CLOSE.unauthorized, "unauthorized");
+      const entry = await this.registry.get(roomId);
+      if (closed) return;
+      if (!entry) return void ws.close(CLOSE.notFound, "room_not_found");
+      const decision = this.registry.decideJoin(entry, identity.userId, identity.requestedRole, url.searchParams.get("invite"));
+      if (!decision.ok) {
+        return void ws.close(decision.reason === "room_full" ? CLOSE.full : CLOSE.noAccess, decision.reason);
+      }
+      const actor: Actor = { userId: identity.userId, name: identity.name, role: decision.role };
+      cleanup = this.bind(ws, entry, actor);
+      handler = (raw) => this.onMessage(ws, entry, actor, raw);
+      for (const raw of queue.splice(0)) handler(raw);
+    })().catch((e) => {
+      log.error("연결을 붙이지 못했어요", { roomId, ...errFields(e) });
+      try {
+        ws.close(CLOSE.internal, "internal");
+      } catch {
+        /* 이미 닫혔다 */
+      }
+    });
   }
 
   private connOf = new WeakMap<WebSocket, Conn>();
@@ -221,18 +257,35 @@ export class RoomHub {
       // 서버를 내리는 중에는 접속 종료 알림이나 저장을 만들지 않는다(마지막 저장은 shutdown이 한다).
       if (this.closing) return;
       const stillHere = [...set].some((c) => c.joined && c.actor.userId === actor.userId);
-      if (conn.joined && !stillHere) {
-        const outs = entry.room.leave(actor.userId);
-        this.deliver(roomId, outs);
-        this.notifier?.publish(entry.meta, outs);
-        this.registry.markChanged(entry, true);
-        if (entry.room.kpAway !== null) this.startGrace(entry);
+      try {
+        if (conn.joined && !stillHere) {
+          const outs = entry.room.leave(actor.userId);
+          this.deliver(roomId, outs);
+          this.notifier?.publish(entry.meta, outs);
+          this.registry.markChanged(entry, true);
+          if (entry.room.kpAway !== null) this.startGrace(entry);
+        }
+      } catch (e) {
+        log.error("접속 종료 처리 실패", { roomId, ...errFields(e) });
       }
       if (set.size === 0) this.conns.delete(roomId);
     };
   }
 
+  /**
+   * 메시지 하나를 처리한다. 룸 엔진이나 알림에서 예외가 나도 이 연결에 오류를 돌려주고 끝낸다.
+   * 다른 룸과 다른 연결, 서버 프로세스는 영향받지 않는다.
+   */
   private onMessage(ws: WebSocket, entry: LoadedRoom, actor: Actor, raw: RawData) {
+    try {
+      this.handleMessage(ws, entry, actor, raw);
+    } catch (e) {
+      log.error("메시지 처리 중 예외", { roomId: entry.meta.id, userId: actor.userId, ...errFields(e) });
+      this.send(ws, errorMsg("internal", "서버에 문제가 생겼어요. 잠시 뒤에 다시 해 주세요."));
+    }
+  }
+
+  private handleMessage(ws: WebSocket, entry: LoadedRoom, actor: Actor, raw: RawData) {
     const conn = this.connOf.get(ws);
     if (!conn) return;
     const roomId = entry.meta.id;
@@ -288,12 +341,33 @@ export class RoomHub {
     fail(result.code, result.message, parsed.data.id);
   }
 
-  /** 서버를 내리기 전에 모든 연결을 닫고 저장한다. */
+  isClosing() {
+    return this.closing;
+  }
+
+  /** 지금 붙어 있는 ws 연결 수(/health용) */
+  connectionCount() {
+    return this.alive.size;
+  }
+
+  /**
+   * 서버를 내리기 전에 새 연결을 막고, 모든 연결에 "서버 재시작"(1012)으로 닫는다는 걸 알린 뒤 저장한다.
+   * 클라이언트는 1012를 받으면 알아서 다시 붙는다. 저장이 실패해도 연결은 이미 닫힌 상태로 끝낸다.
+   */
   async shutdown() {
     this.closing = true;
     if (this.heartbeat) clearInterval(this.heartbeat);
     for (const id of [...this.graceTimers.keys()]) this.clearGrace(id);
-    for (const set of this.conns.values()) for (const c of set) c.ws.terminate();
+    for (const ws of [...this.alive.keys()]) {
+      try {
+        ws.close(CLOSE.serverRestarting, "server_restarting");
+      } catch {
+        ws.terminate();
+      }
+    }
+    // 정상 종료 핸드셰이크를 잠깐 기다리고, 안 닫힌 연결은 끊는다.
+    await new Promise((r) => setTimeout(r, Math.min(this.closeWaitMs, 1000)));
+    for (const ws of [...this.alive.keys()]) ws.terminate();
     await this.registry.flushAll();
   }
 }
