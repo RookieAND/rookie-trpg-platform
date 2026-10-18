@@ -122,3 +122,13 @@ export function validateScenario(sc: ScenarioFile, readAudio: ReadAudio): string
 
   return errors;
 }
+
+/**
+ * 가져오기 파일에서 제목이 `[KP]`(또는 `[GM]`)로 시작하면 GM 전용 노트다.
+ * 표시용 제목에서는 이 머리말을 떼어 사용자 화면에 보이지 않게 한다.
+ */
+export function splitNoteTitle(title: string): { title: string; kpOnly: boolean } {
+  const m = /^\[(?:KP|GM)\]\s*/i.exec(title);
+  if (!m) return { title, kpOnly: false };
+  return { title: title.slice(m[0].length).trim() || title, kpOnly: true };
+}

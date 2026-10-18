@@ -23,9 +23,10 @@ export function LoginForm({ title, description, submitLabel, onLogin }: { title:
         이름
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && name.trim() && onLogin(name)} />
       </label>
-      <button className="btn primary lg" disabled={!name.trim()} onClick={() => onLogin(name)}>
+      <button className="btn primary lg" disabled={!name.trim()} aria-describedby={name.trim() ? undefined : "login-why"} onClick={() => onLogin(name)}>
         {submitLabel}
       </button>
+      {!name.trim() && <div className="why" id="login-why" data-testid="login-why">이름을 적으면 시작할 수 있어요.</div>}
     </main>
   );
 }

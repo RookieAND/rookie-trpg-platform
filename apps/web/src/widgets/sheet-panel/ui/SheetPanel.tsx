@@ -1,9 +1,12 @@
 "use client";
 import { useMemo, useState } from "react";
+import { StatInput } from "./StatInput";
+import { SyncedTextarea } from "./SyncedTextarea";
+import { stepDelta } from "../model/stat-input";
 import { downloadCharacterCsv } from "@/entities/character";
 import { SanPanel } from "@/features/san-check";
-import { Group, Hint } from "@/shared/ui";
-import { CHARACTERISTIC_KEYS, CONDITIONS, CONDITION_LABEL_KO, deriveCharacter, fifth, half, isSkillEdited, sheetCsvSourceFromCharacter, skillBaseValues, type Character, type SheetOp, type StatPath } from "@coc-vtt/shared";
+import { Group, Hint, useAsk } from "@/shared/ui";
+import { josa, CHARACTERISTIC_KEYS, CONDITIONS, CONDITION_LABEL_KO, deriveCharacter, fifth, half, isSkillEdited, sheetCsvSourceFromCharacter, skillBaseValues, type Character, type SheetOp, type StatPath } from "@coc-vtt/shared";
 
 export interface RollOptions {
   bonus: number;
@@ -18,6 +21,8 @@ interface Props {
   onSelect: (id: string) => void;
   /** 세션이 진행 중이고 관전자가 아닐 때만 true */
   canAct: boolean;
+  /** 굴리지 못하는 이유 한 줄(canAct가 false일 때 특성치 위에 보여 준다) */
+  rollWhy?: string | null;
   /** 수치·상태·메모 편집. 판정(굴림·SAN 체크)은 canAct. GM은 세션 밖·일시정지 중에도 고칠 수 있다. 생략하면 canAct를 따른다. */
   canEdit?: boolean;
   /** 소지품·인물 배경·메모. 세션 전에도 고칠 수 있어서 canEdit와 따로 둔다. 생략하면 canEdit를 따른다. */
@@ -41,7 +46,8 @@ const BARS: Array<{ path: StatPath; label: string }> = [
 ];
 
 /** 캐릭터 시트: 기본 정보 / 파생 수치(상태 바) / 특성치 / 무기 / 기능 / 소지품 / 비고 묶음. 묶음 제목을 눌러 접고 펼친다. */
-export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit = canAct, canEditText = canEdit, onPatch, onRoll, isKp, onSanCheck, onNewDay, onMadnessRoll, onDamage, onRemove }: Props) {
+export function SheetPanel({ characters, selectedId, onSelect, canAct, rollWhy, canEdit = canAct, canEditText = canEdit, onPatch, onRoll, isKp, onSanCheck, onNewDay, onMadnessRoll, onDamage, onRemove }: Props) {
+  const ask = useAsk();
   const c = characters.find((x) => x.id === selectedId) ?? characters[0];
   const [bonus, setBonus] = useState(0);
   const [difficulty, setDifficulty] = useState<RollOptions["difficulty"]>(undefined);
@@ -68,6 +74,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
 
   return (
     <div className="sheet" data-testid="sheet">
+      {ask.node}
       <Group title="기본 정보" testId="sheet-basic">
         <div className="sheet-head">
           {characters.length > 1 ? (
@@ -93,10 +100,13 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
                   <div style={{ width: `${Math.min(100, (cur / max) * 100)}%`, height: "100%", background: path === "hp" ? "var(--danger)" : "var(--accent)" }} />
                 </div>
                 <span className="bar-ctl">
+                  <button className="btn ico" aria-label={`${label} 5 감소`} disabled={!canEdit || stepDelta(-5, cur, max) === null} onClick={() => onPatch(c.id, [{ path, delta: stepDelta(-5, cur, max) ?? 0 }])}>−5</button>
                   <button className="btn ico" aria-label={`${label} 감소`} disabled={!canEdit} onClick={() => onPatch(c.id, [{ path, delta: -1 }])}>−</button>
                   <span className="mono bar-val" data-testid={`stat-${path}`}>{cur}/{max}</span>
                   <button className="btn ico" aria-label={`${label} 증가`} disabled={!canEdit} onClick={() => onPatch(c.id, [{ path, delta: 1 }])}>+</button>
+                  <button className="btn ico" aria-label={`${label} 5 증가`} disabled={!canEdit || stepDelta(5, cur, max) === null} onClick={() => onPatch(c.id, [{ path, delta: stepDelta(5, cur, max) ?? 0 }])}>+5</button>
                 </span>
+                <StatInput label={label} current={cur} max={max} disabled={!canEdit} onApply={(edit) => onPatch(c.id, [{ path, ...edit }])} />
               </div>
             );
           })}
@@ -156,6 +166,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
               비밀 판정
             </label>
           )}
+          {!canAct && rollWhy && <div className="why" data-testid="sheet-roll-why">{rollWhy}</div>}
           <div className="stat-grid">
             {CHARACTERISTIC_KEYS.map((k) => (
               <button key={k} className="btn stat-btn" disabled={!canAct} onClick={() => roll(c.id, k, opts)} aria-label={`${k} 굴리기`}>
@@ -207,38 +218,40 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
       </Group>
 
       <Group title="소지품" defaultOpen={canEditText || (c.possessions ?? "") !== ""} testId="sheet-possessions">
-        <textarea
-          key={`pos-${c.id}-${c.rev}`}
+        <SyncedTextarea
+          key={`pos-${c.id}`}
           className="input"
           style={{ height: 64 }}
           aria-label="소지품"
-          defaultValue={c.possessions ?? ""}
+          value={c.possessions ?? ""}
           disabled={!canEditText}
-          onBlur={(e) => e.currentTarget.value !== (c.possessions ?? "") && onPatch(c.id, [{ path: "possessions", value: e.currentTarget.value }])}
+          onCommit={(value) => onPatch(c.id, [{ path: "possessions", value }])}
         />
       </Group>
 
       <Group title="비고" defaultOpen={canEditText || (c.backstory ?? "") !== "" || c.notes !== ""} testId="sheet-notes">
         <label className="sheet-sec">
           <span className="section-title">인물 배경</span>
-          <textarea
-            key={`bg-${c.id}-${c.rev}`}
+          <SyncedTextarea
+            key={`bg-${c.id}`}
+            aria-label="인물 배경"
             className="input"
             style={{ height: 72 }}
-            defaultValue={c.backstory ?? ""}
+            value={c.backstory ?? ""}
             disabled={!canEditText}
-            onBlur={(e) => e.currentTarget.value !== (c.backstory ?? "") && onPatch(c.id, [{ path: "backstory", value: e.currentTarget.value }])}
+            onCommit={(value) => onPatch(c.id, [{ path: "backstory", value }])}
           />
         </label>
         <label className="sheet-sec">
           <span className="section-title">메모</span>
-          <textarea
-            key={`${c.id}-${c.rev}`}
+          <SyncedTextarea
+            key={`notes-${c.id}`}
+            aria-label="메모"
             className="input"
             style={{ height: 72 }}
-            defaultValue={c.notes}
+            value={c.notes}
             disabled={!canEditText}
-            onBlur={(e) => e.currentTarget.value !== c.notes && onPatch(c.id, [{ path: "notes", value: e.currentTarget.value }])}
+            onCommit={(value) => onPatch(c.id, [{ path: "notes", value }])}
           />
         </label>
       </Group>
@@ -248,7 +261,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
         {onRemove && (
           <button
             className="btn danger"
-            onClick={() => window.confirm(`'${c.name}'을(를) 이 룸에서 뺄까요? 시트 내용이 사라져요.${isKp ? "" : " 보관함의 원본은 그대로예요."}`) && onRemove(c.id)}
+            onClick={async () => (await ask.confirm({ title: `${josa(`'${c.name}'`, "을/를")} 이 룸에서 뺄까요?`, message: `시트 내용이 사라져요.${isKp ? "" : " 보관함의 원본은 그대로예요."}`, confirmLabel: "빼기", danger: true })) && onRemove(c.id)}
           >
             이 캐릭터 빼기
           </button>

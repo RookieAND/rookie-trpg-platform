@@ -345,7 +345,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
                 {o.name.slice(0, 1)}
               </text>
             )}
-            <text x={pos.x} y={pos.y + (o.kind === "token" ? R + 18 : o.image ? 48 : 32)} textAnchor="middle" fill={hidden ? "#e3a94a" : "#a0a7b0"} fontSize="12" pointerEvents="none">
+            <text x={pos.x} y={pos.y + (o.kind === "token" ? R + 18 : o.image ? 48 : 32)} textAnchor="middle" fill={hidden ? "#e3a94a" : "#a0a7b0"} fontSize="12" pointerEvents="none" stroke="#0a0b0d" strokeWidth="3.5" strokeLinejoin="round" paintOrder="stroke">
               {o.name}
               {hidden ? " · GM 전용" : ""}
               {o.locked ? " · 잠김" : ""}

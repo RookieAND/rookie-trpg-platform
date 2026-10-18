@@ -46,7 +46,7 @@ pnpm import:scenario ./my-scenario/scenario.json [--user 이름] [--api http://l
 
 ## handouts
 
-`key`, `title`, `body`, `visibleTo`(`"all"` 또는 `"gm"`). 제목이 `[KP]`로 시작하면 "GM 전용 노트"로 만들어져요. 노트는 PL에게 공개하거나 비트·분기 조건에 붙일 수 없어요.
+`key`, `title`, `body`, `visibleTo`(`"all"` 또는 `"gm"`). 제목이 `[KP]`(또는 `[GM]`)로 시작하면 "GM 전용 노트"로 만들어지고, 화면에 보이는 제목에서는 이 머리말을 떼요. 노트는 PL에게 공개하거나 비트·분기 조건에 붙일 수 없어요.
 
 ## beats
 

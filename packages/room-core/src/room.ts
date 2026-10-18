@@ -28,6 +28,7 @@ import {
   MAX_INITIATIVE_ENTRIES,
   MAX_MADNESS_ENTRIES,
   applyLuck,
+  josa,
   luckNeeded,
   luckBlockReason,
   pushBlockReason,
@@ -361,7 +362,7 @@ export class Room {
       activeSceneId: this.activeSceneId,
       effects: cloneEffects(this.effects),
       madnessTable: viewer.role === "kp" ? [...this.madnessTable] : [],
-      initiative: cloneInitiative(this.initiative),
+      initiative: this.initiativeFor(viewer),
       flow: viewer.role === "kp" ? cloneFlow(this.flow) : null,
       audioLibrary: viewer.role === "kp" ? this.audio.map((t) => ({ ...t })) : [],
       bgm: this.bgm ? { ...this.bgm } : null,
@@ -429,7 +430,9 @@ export class Room {
     }
 
     if (this.status === "PAUSED") {
-      if (who.role !== "kp") return fail("paused", "세션이 일시정지 중이에요. GM이 돌아오면 이어서 진행해요.");
+      if (who.role !== "kp") {
+        return fail("paused", this.pauseReason === "kp_request" ? "세션이 일시정지 중이에요. GM이 이어하기를 누르면 계속돼요." : "세션이 일시정지 중이에요. GM이 돌아오면 이어서 진행해요.");
+      }
       // GM은 준비성 명령(편집)만 할 수 있다. 판정과 전투, 이야기를 앞으로 미는 명령은 이어하기 뒤에 한다.
       if (KP_BLOCKED_WHILE_PAUSED.has(command.type)) return fail("paused", "일시정지 중에는 판정·전투·장면 전환을 할 수 없어요. 이어하기를 눌러 주세요.");
     }
@@ -539,7 +542,7 @@ export class Room {
       case "handout.remove":
         return this.handoutRemove(who, command.data.id);
       case "handout.show":
-        return this.handoutShow(who, command.data.id);
+        return this.handoutShow(who, command.data.id, command.data.reveal === true);
       case "character.add":
         return this.characterAdd(who, command.data);
       case "character.remove":
@@ -642,7 +645,20 @@ export class Room {
     this.status = "IDLE";
     this.pauseReason = null;
     this.kpAwaySince = null;
-    outs.push(this.emit({ type: "session.ended", data: summary }, { roles: ALL_ROLES }));
+    // NPC 시트의 보상·성장 기록은 GM에게만 보여 준다.
+    const forPl: EndSummary = { ...summary };
+    const isNpc = (id: string) => {
+      const c = this.characters.get(id);
+      return !c || this.isNpcSheet(c);
+    };
+    if (summary.sanRewards) forPl.sanRewards = summary.sanRewards.filter((r) => !isNpc(r.characterId));
+    if (summary.growth) forPl.growth = summary.growth.filter((g) => !isNpc(g.characterId));
+    if (JSON.stringify(forPl) === JSON.stringify(summary)) {
+      outs.push(this.emit({ type: "session.ended", data: summary }, { roles: ALL_ROLES }));
+    } else {
+      outs.push(this.emit({ type: "session.ended", data: summary }, { roles: ["kp"] }));
+      outs.push(this.emit({ type: "session.ended", data: forPl }, { roles: ["pl", "spectator"] }));
+    }
     return ok(...outs);
   }
 
@@ -894,12 +910,12 @@ export class Room {
     }
     if (c.type === "stat") {
       const key = c.stat;
-      for (const ch of this.characters.values()) if (ch[key] <= c.atMost) return `${ch.name}의 ${key.toUpperCase()}이(가) ${ch[key]}(기준 ${c.atMost} 이하)`;
+      for (const ch of this.characters.values()) if (ch[key] <= c.atMost) return `${ch.name}의 ${josa(String(key.toUpperCase()), "이/가")} ${ch[key]}(기준 ${c.atMost} 이하)`;
       return null;
     }
     if (c.type === "handout") {
       const shown = out.some((o) => o.event.type === "handout.shown" && o.event.data.id === c.handoutId);
-      return shown ? `핸드아웃 '${this.handouts.get(c.handoutId)?.title ?? "?"}'을(를) 공개함` : null;
+      return shown ? `핸드아웃 ${josa(`'${this.handouts.get(c.handoutId)?.title ?? "?"}'`, "을/를")} 공개함` : null;
     }
     return null;
   }
@@ -907,7 +923,35 @@ export class Room {
   // ── 전투 순서 ──────────────────────────────────────────
 
   private initiativeOut(): Result {
-    return ok(this.emit({ type: "initiative.updated", data: { initiative: cloneInitiative(this.initiative) } }, { roles: ALL_ROLES }));
+    const full = cloneInitiative(this.initiative);
+    const masked = this.initiativeFor({ role: "pl", userId: "" });
+    // 가릴 칸이 없으면 모두에게 한 번만 보낸다.
+    if (JSON.stringify(full) === JSON.stringify(masked)) return ok(this.emit({ type: "initiative.updated", data: { initiative: full } }, { roles: ALL_ROLES }));
+    return ok(
+      this.emit({ type: "initiative.updated", data: { initiative: full } }, { roles: ["kp"] }),
+      this.emit({ type: "initiative.updated", data: { initiative: masked } }, { roles: ["pl", "spectator"] }),
+    );
+  }
+
+  /**
+   * 보는 사람에게 보여 줄 전투 순서. GM은 전부, 나머지는 GM만 쓰는 시트(NPC)의 칸을
+   * 이름·DEX·시트 연결 없이 자리만 남겨 받는다(차례 위치는 그대로라 순서는 알 수 있다).
+   */
+  private initiativeFor(viewer: Pick<Member, "userId" | "role">): Initiative | null {
+    if (!this.initiative) return null;
+    if (viewer.role === "kp") return cloneInitiative(this.initiative);
+    const copy = cloneInitiative(this.initiative)!;
+    copy.entries = copy.entries.map((e) => {
+      const c = e.characterId ? this.characters.get(e.characterId) : undefined;
+      if (!c || !this.isNpcSheet(c)) return e;
+      return { id: e.id, name: "알 수 없는 상대", dex: 0, hidden: true };
+    });
+    return copy;
+  }
+
+  /** PL이 주인이 아닌 시트(GM이 만든 NPC 시트 등). 이런 시트의 이름·DEX·보상 기록은 PL에게 보내지 않는다. */
+  private isNpcSheet(c: Pick<Character, "ownerId">): boolean {
+    return this.members.get(c.ownerId)?.role !== "pl";
   }
 
   private initiativeGuard(who: Actor): Result | null {
@@ -1030,7 +1074,10 @@ export class Room {
     const scene = this.scenes.get(sceneId);
     if (!scene?.fog?.enabled) return undefined;
     const areas: FogArea[] = scene.fog.zones.map((z) => ({ x: z.x, y: z.y, r: z.r }));
-    for (const o of this.objects.values()) if (o.sceneId === sceneId && o.vision) areas.push({ x: o.x, y: o.y, r: o.vision });
+    // 숨긴 토큰(GM 층·일부에게만 공개)의 시야 원은 PL에게 보내면 위치가 드러나므로 밝히지 않는다.
+    for (const o of this.objects.values()) {
+      if (o.sceneId === sceneId && o.vision && o.layer !== "gm" && o.visibleTo === "all") areas.push({ x: o.x, y: o.y, r: o.vision });
+    }
     return areas;
   }
 
@@ -1690,16 +1737,25 @@ export class Room {
     return ok(...this.fanOutHandout(h, null));
   }
 
-  private handoutShow(who: Actor, id: string): Result {
+  private handoutShow(who: Actor, id: string, reveal = false): Result {
     if (who.role !== "kp") return fail("forbidden", "GM만 핸드아웃을 펼쳐 보일 수 있어요.");
     const h = this.handouts.get(id);
     if (!h) return fail("not_found", "핸드아웃을 찾을 수 없어요.");
     if (h.kpOnly) return fail("bad_message", "GM 전용 노트는 펼쳐 보일 수 없어요.");
-    if (h.visibleTo === "gm") return fail("bad_message", "초안은 펼쳐 보일 수 없어요. 먼저 공개 범위를 정해 주세요.");
+    const outs: Out[] = [];
+    if (h.visibleTo === "gm") {
+      if (!reveal) return fail("bad_message", "초안은 펼쳐 보일 수 없어요. 먼저 공개 범위를 정해 주세요.");
+      // 공개하기: 초안을 전원 공개로 바꾸고 바로 펼쳐 보인다.
+      const before = cloneHandout(h);
+      h.visibleTo = "all";
+      h.rev += 1;
+      outs.push(...this.fanOutHandout(before, h));
+    }
     // 한 번 쓰고 사라지는 연출이라 버퍼에는 남기지 않는다(늦게 들어온 사람에게 다시 띄우지 않는다).
     // 누른 GM 화면은 가리지 않는다.
     const users = [...this.members.values()].filter((m) => m.role !== "kp" && canSeeHandout(h, m)).map((m) => m.userId);
-    return ok(this.emitTo({ type: "handout.shown", data: { id } }, { users }));
+    outs.push(this.emitTo({ type: "handout.shown", data: { id } }, { users }));
+    return ok(...outs);
   }
 
   /** 공개 범위가 바뀌면 새로 보이는 사람에겐 added, 계속 보이면 updated, 가려지면 removed를 보낸다. */

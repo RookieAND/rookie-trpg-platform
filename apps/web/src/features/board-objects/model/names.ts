@@ -9,3 +9,8 @@ export function uniqueName(base: string, taken: ReadonlyArray<string>): string {
   }
   return root;
 }
+
+/** 새 토큰의 기본 이름. 직접 적은 이름 > 소유자(PL) 이름 > "토큰N". 소유자가 없는 NPC 토큰에는 PL 이름을 쓰지 않는다. */
+export function newTokenName(typed: string, ownerName: string | undefined, count: number): string {
+  return typed.trim() || ownerName?.trim() || `토큰${count + 1}`;
+}

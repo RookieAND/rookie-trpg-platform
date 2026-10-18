@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { SHEET_CSV_MAX_CHARS, decodeCsvBytes, deriveCharacter, parseGoogleSheetUrl, parseSheetCsv, type CharacterData } from "@coc-vtt/shared";
+import { SHEET_CSV_MAX_CHARS, decodeCsvBytes, deriveCharacter, josa, parseGoogleSheetUrl, parseSheetCsv, type CharacterData } from "@coc-vtt/shared";
 import { ApiError, type Caller } from "@/shared/api";
 import { fetchGoogleSheetCsv } from "../api/google-sheet-api";
 import { downloadSheetTemplate } from "../lib/csv-files";
@@ -56,7 +56,7 @@ function ImportPanel({ me, applyLabel, onApply, onClose }: { me: Caller; applyLa
     if (file.size > SHEET_CSV_MAX_CHARS) return setProblem("파일이 너무 커요. 1MB까지 가져올 수 있어요.");
     try {
       const { text: t, encoding } = decodeCsvBytes(new Uint8Array(await file.arrayBuffer()));
-      takeText(t, encoding === "utf-8" ? `'${file.name}'을(를) 읽었어요.` : `'${file.name}'을(를) 한글 윈도우 인코딩(EUC-KR)으로 읽었어요.`);
+      takeText(t, encoding === "utf-8" ? `${josa(`'${file.name}'`, "을/를")} 읽었어요.` : `${josa(`'${file.name}'`, "을/를")} 한글 윈도우 인코딩(EUC-KR)으로 읽었어요.`);
     } catch {
       setProblem("파일을 읽지 못했어요.");
     }

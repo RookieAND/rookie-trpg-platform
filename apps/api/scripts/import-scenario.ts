@@ -13,8 +13,8 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import WebSocket from "ws";
-import { validateScenario, type ScenarioFile } from "./scenario-validate";
-import { defaultSkillValues, type ClientCommand, type Flow, type Scene, type ServerMessage, type Snapshot } from "@coc-vtt/shared";
+import { splitNoteTitle, validateScenario, type ScenarioFile } from "./scenario-validate";
+import { defaultSkillValues, josa, type ClientCommand, type Flow, type Scene, type ServerMessage, type Snapshot } from "@coc-vtt/shared";
 
 function parseArgs(argv: string[]) {
   const positional: string[] = [];
@@ -185,7 +185,8 @@ async function main() {
   }
 
   for (const h of sc.handouts) {
-    const ev = await kp.send({ type: "handout.create", data: { title: h.title, body: h.body, visibleTo: h.visibleTo, ...(h.title.startsWith("[KP]") ? { kpOnly: true } : {}) } });
+    const note = splitNoteTitle(h.title);
+    const ev = await kp.send({ type: "handout.create", data: { title: note.title, body: h.body, visibleTo: h.visibleTo, ...(note.kpOnly ? { kpOnly: true } : {}) } });
     const added = ev.find((e) => e.type === "handout.added");
     if (!added || added.type !== "handout.added") throw new Error(`핸드아웃을 만들지 못했어요: ${h.title}`);
     handoutId.set(h.key, added.data.id);
@@ -215,7 +216,7 @@ async function main() {
   }
 
   kp.close();
-  console.log(`룸 "${created.name}"을(를) 만들었어요.`);
+  console.log(`룸 ${josa(`"${created.name}"`, "을/를")} 만들었어요.`);
   console.log(`  룸 id: ${created.id}`);
   console.log(`  초대 코드: ${created.invite.code}`);
   console.log(`  장면 ${sc.scenes.length} · 토큰 ${sc.tokens.length} · NPC 시트 ${sc.characters.length} · 핸드아웃 ${sc.handouts.length} · 비트 ${sc.beats.length} · 분기 ${sc.branches.length}`);

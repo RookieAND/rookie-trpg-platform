@@ -9,6 +9,8 @@ import { CharacterForm, CharacterWizard } from "@/features/edit-character";
 import { OccupationManager, useOccupations } from "@/features/manage-occupations";
 import { ApiError } from "@/shared/api";
 import { SERVICE_NAME } from "@/shared/config";
+import { useAsk } from "@/shared/ui";
+import { josa } from "@coc-vtt/shared";
 
 export function CharactersView() {
   const router = useRouter();
@@ -23,6 +25,7 @@ export function CharactersView() {
 type Editing = { mode: "new"; initial?: CharacterInput } | { mode: "wizard" } | { mode: "edit"; character: VaultCharacter } | null;
 
 function Vault({ me }: { me: Identity }) {
+  const ask = useAsk();
   const [items, setItems] = useState<VaultCharacter[] | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +49,7 @@ function Vault({ me }: { me: Identity }) {
   };
 
   const remove = async (c: VaultCharacter) => {
-    if (!window.confirm(`'${c.name}'을(를) 지울까요? 되돌릴 수 없어요.`)) return;
+    if (!(await ask.confirm({ title: `${josa(`'${c.name}'`, "을/를")} 지울까요?`, message: "되돌릴 수 없어요.", confirmLabel: "지우기", danger: true }))) return;
     try {
       await deleteCharacter(me, c.id);
       refresh();
@@ -57,6 +60,7 @@ function Vault({ me }: { me: Identity }) {
 
   return (
     <div style={{ minHeight: "100vh" }}>
+      {ask.node}
       <header className="topbar">
         <strong>{SERVICE_NAME}</strong>
         <Link href="/" style={{ color: "var(--muted)", textDecoration: "none" }}>← 로비</Link>

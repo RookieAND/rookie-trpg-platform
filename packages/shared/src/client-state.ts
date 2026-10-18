@@ -62,6 +62,8 @@ export interface RoomState {
   handouts: Record<string, Handout>;
   /** GM이 "바로 펼치기"를 눌렀을 때 화면에 띄울 핸드아웃. n이 바뀌면 같은 핸드아웃도 다시 띄운다. */
   spotlight: { id: string; n: number } | null;
+  /** 펼쳐 보인 횟수. 핸드아웃이 사라지거나 다시 접속해도 줄지 않아서, 화면이 닫은 번호(n)와 새 펼치기를 헷갈리지 않는다. */
+  spotlightSeq: number;
   /** 다른 사람의 비밀 굴림 알림("GM이 비밀 굴림을 했어요") */
   /** 마지막 세션 종료 정산. 다음 세션이 시작되면 지운다. */
   lastEnd: EndSummary | null;
@@ -101,6 +103,7 @@ export const initialRoomState = (roomId = ""): RoomState => ({
   characters: {},
   handouts: {},
   spotlight: null,
+  spotlightSeq: 0,
   hiddenRolls: [],
   pings: [],
   lastEnd: null,
@@ -145,6 +148,7 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       characters: Object.fromEntries(d.characters.map((c) => [c.id, c])),
       handouts: Object.fromEntries(d.handouts.map((h) => [h.id, h])),
       spotlight: null,
+      spotlightSeq: state.spotlightSeq,
       hiddenRolls: [],
       pings: [],
       lastEnd: null,
@@ -218,7 +222,7 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
     case "undo.done":
       return { ...next, lastUndo: { n: (state.lastUndo?.n ?? 0) + 1, label: ev.data.label } };
     case "handout.shown":
-      return { ...next, spotlight: { id: ev.data.id, n: (state.spotlight?.n ?? 0) + 1 } };
+      return { ...next, spotlight: { id: ev.data.id, n: state.spotlightSeq + 1 }, spotlightSeq: state.spotlightSeq + 1 };
     case "character.added":
     case "character.updated": {
       const cur = state.characters[ev.data.id];

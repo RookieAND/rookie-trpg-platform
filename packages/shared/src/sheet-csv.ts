@@ -1,3 +1,4 @@
+import { josa } from "./josa";
 import { CSV_BOM, guardCell, parseCsv, serializeCsv, unguardCell } from "./csv";
 import { deriveCharacter, CHARACTERISTIC_KEYS, DEFAULT_SKILLS, MAX_SKILLS, MAX_WEAPONS, SAN_CAP, LUCK_CAP, defaultSkillValues, type Character, type CharacteristicKey, type Weapon } from "./sheet";
 import { characterInputSchema, weaponSchema, type CharacterData } from "./protocol";
@@ -275,7 +276,7 @@ export function parseSheetCsv(text: string): SheetCsvResult {
       case SECTION_BASIC: {
         const field = BASIC_KEYS[k];
         if (!field) return void warn(`기본 정보에 '${key}' 항목은 없어서 건너뛰었어요.`, row);
-        if (seenBasic.has(field)) return void warn(`'${key}'이(가) 두 번 나와서 뒤의 것을 건너뛰었어요.`, row);
+        if (seenBasic.has(field)) return void warn(`${josa(`'${key}'`, "이/가")} 두 번 나와서 뒤의 것을 건너뛰었어요.`, row);
         seenBasic.add(field);
         const v = arg(1);
         if (field === "age") {
@@ -288,10 +289,10 @@ export function parseSheetCsv(text: string): SheetCsvResult {
       }
       case SECTION_STATS: {
         const stat = STAT_KEYS[k];
-        if (!stat) return void warn(`'${key}'은(는) 특성치 이름이 아니라서 건너뛰었어요.`, row);
-        if (stat in stats) return void warn(`${stat}이(가) 두 번 나와서 뒤의 것을 건너뛰었어요.`, row);
+        if (!stat) return void warn(`${josa(`'${key}'`, "은/는")} 특성치 이름이 아니라서 건너뛰었어요.`, row);
+        if (stat in stats) return void warn(`${josa(String(stat), "이/가")} 두 번 나와서 뒤의 것을 건너뛰었어요.`, row);
         const n = parseIntCell(arg(1));
-        if (n === null || n < 1 || n > 99) return void (bad.add(stat), err(`${stat}은(는) 1~99 사이 정수여야 해요. ('${arg(1)}')`, row));
+        if (n === null || n < 1 || n > 99) return void (bad.add(stat), err(`${josa(String(stat), "은/는")} 1~99 사이 정수여야 해요. ('${arg(1)}')`, row));
         stats[stat] = n;
         return;
       }
@@ -299,7 +300,7 @@ export function parseSheetCsv(text: string): SheetCsvResult {
         if (k === "항목") return;
         const d = DERIVED_KEYS[k];
         if (!d) return void warn(`파생 수치에 '${key}' 항목은 없어서 건너뛰었어요.`, row);
-        if (seenDerived.has(d)) return void warn(`${DERIVED_LABEL[d]}이(가) 두 번 나와서 뒤의 것을 건너뛰었어요.`, row);
+        if (seenDerived.has(d)) return void warn(`${josa(String(DERIVED_LABEL[d]), "이/가")} 두 번 나와서 뒤의 것을 건너뛰었어요.`, row);
         seenDerived.add(d);
         const cur = arg(1);
         if (cur !== "") {
@@ -315,28 +316,28 @@ export function parseSheetCsv(text: string): SheetCsvResult {
         const second = arg(1);
         if (["기능", "이름", "기능이름", "스킬", "skill", "name"].includes(k) && parseIntCell(second) === null) return; // 머리글 줄
         if (key === "") return void warn("기능 이름이 비어 있어 건너뛰었어요.", row);
-        if (key.length > SKILL_NAME_MAX) return void warn(`기능 이름 '${key.slice(0, 12)}…'이(가) ${SKILL_NAME_MAX}자를 넘어 건너뛰었어요.`, row);
+        if (key.length > SKILL_NAME_MAX) return void warn(`기능 이름 '${key.slice(0, 12)}…' 하나가 ${SKILL_NAME_MAX}자를 넘어 건너뛰었어요.`, row);
         const value = parseIntCell(second);
         if (value === null || value > 100) return void warn(`'${key}'의 값은 0~100 사이 정수여야 해서 건너뛰었어요. ('${second}')`, row);
-        if (skillNames.has(key)) return void warn(`기능 '${key}'이(가) 두 번 나와서 뒤의 것을 건너뛰었어요.`, row);
+        if (skillNames.has(key)) return void warn(`기능 ${josa(`'${key}'`, "이/가")} 두 번 나와서 뒤의 것을 건너뛰었어요.`, row);
         if (skills.length >= MAX_SKILLS) {
           skillOverflow++;
-          return void warn(`기능은 ${MAX_SKILLS}개까지라서 '${key}'을(를) 건너뛰었어요.`, row);
+          return void warn(`기능은 ${MAX_SKILLS}개까지라서 ${josa(`'${key}'`, "을/를")} 건너뛰었어요.`, row);
         }
         const mark = arg(2).toLowerCase();
         let grown = false;
         if (TRUE_MARKS.has(mark)) grown = true;
-        else if (!FALSE_MARKS.has(mark)) note(`'${key}'의 성장 칸 '${arg(2)}'을(를) 알아보지 못해 체크하지 않았어요. 성장은 O로 적어요.`, row);
+        else if (!FALSE_MARKS.has(mark)) note(`'${key}'의 성장 칸 ${josa(`'${arg(2)}'`, "을/를")} 알아보지 못해 체크하지 않았어요. 성장은 O로 적어요.`, row);
         skillNames.add(key);
         skills.push({ name: key, value, grown });
-        if (!isKnownSkillName(key)) note(`'${key}'은(는) 기본 기능 목록에 없는 이름이에요. 그대로 가져와요.`, row);
+        if (!isKnownSkillName(key)) note(`${josa(`'${key}'`, "은/는")} 기본 기능 목록에 없는 이름이에요. 그대로 가져와요.`, row);
         return;
       }
       case SECTION_WEAPONS: {
         if (["이름", "무기", "무기이름", "name"].includes(k) && ["기능", "공격기능", "skill"].includes(compact(arg(1)))) return; // 머리글 줄
         if (weapons.length >= MAX_WEAPONS) {
           weaponOverflow++;
-          return void warn(`무기는 ${MAX_WEAPONS}개까지라서 '${key}'을(를) 건너뛰었어요.`, row);
+          return void warn(`무기는 ${MAX_WEAPONS}개까지라서 ${josa(`'${key}'`, "을/를")} 건너뛰었어요.`, row);
         }
         const parsed = weaponSchema.safeParse({ name: key, skill: arg(1), damage: arg(2) });
         if (!parsed.success) {
@@ -345,8 +346,8 @@ export function parseSheetCsv(text: string): SheetCsvResult {
           const why =
             field === "damage" && arg(2) !== "" && arg(2).length <= 20
               ? "피해는 1d6+db처럼 주사위 식으로 적어 주세요."
-              : `${field === "name" ? "이름" : field === "skill" ? "공격 기능" : "피해"}이(가) 비었거나 너무 길어요.`;
-          return void warn(`무기 '${key || "(이름 없음)"}'을(를) 건너뛰었어요. ${why}`, row);
+              : `${josa(String(field === "name" ? "이름" : field === "skill" ? "공격 기능" : "피해"), "이/가")} 비었거나 너무 길어요.`;
+          return void warn(`무기 ${josa(`'${key || "(이름 없음)"}'`, "을/를")} 건너뛰었어요. ${why}`, row);
         }
         weapons.push(parsed.data);
         return;
@@ -359,7 +360,7 @@ export function parseSheetCsv(text: string): SheetCsvResult {
       case SECTION_NOTES: {
         const field = NOTE_KEYS[k];
         if (!field) return void warn(`비고에 '${key}' 항목은 없어서 건너뛰었어요. (메모, 인물 배경)`, row);
-        if (field in noteFields) return void warn(`'${key}'이(가) 두 번 나와서 뒤의 것을 건너뛰었어요.`, row);
+        if (field in noteFields) return void warn(`${josa(`'${key}'`, "이/가")} 두 번 나와서 뒤의 것을 건너뛰었어요.`, row);
         noteFields[field] = cleanText(cells[1] ?? "");
         return;
       }
@@ -384,11 +385,11 @@ export function parseSheetCsv(text: string): SheetCsvResult {
   const expectedMax: Record<DerivedKey, number> = { hp: limits.hp, mp: limits.mp, san: SAN_CAP, luck: LUCK_CAP };
   for (const d of ["hp", "mp", "san", "luck"] as const) {
     const given = derivedMax[d];
-    if (given !== undefined && given !== expectedMax[d]) note(`${DERIVED_LABEL[d]} 최대 ${given}은(는) 특성치로 다시 계산해요. (지금 ${expectedMax[d]})`);
+    if (given !== undefined && given !== expectedMax[d]) note(`${DERIVED_LABEL[d]} 최대 ${josa(String(given), "은/는")} 특성치로 다시 계산해요. (지금 ${expectedMax[d]})`);
     const cur = derivedCur[d];
     if (cur !== undefined && cur > expectedMax[d]) {
       derivedCur[d] = expectedMax[d];
-      warn(`${DERIVED_LABEL[d]} 현재값 ${cur}이(가) 최대 ${expectedMax[d]}보다 커서 최대로 맞췄어요.`);
+      warn(`${DERIVED_LABEL[d]} 현재값 ${josa(String(cur), "이/가")} 최대 ${expectedMax[d]}보다 커서 최대로 맞췄어요.`);
     }
   }
   if (derivedCur.luck === undefined) note("행운 현재값이 없어 0으로 들어가요. 가져온 뒤 고쳐 주세요.");
@@ -396,7 +397,7 @@ export function parseSheetCsv(text: string): SheetCsvResult {
   const clip = (field: keyof typeof TEXT_LIMITS, value: string): string => {
     if (value.length <= TEXT_LIMITS[field]) return value;
     const label = field === "possessions" ? "소지품" : field === "notes" ? "메모" : "인물 배경";
-    warn(`${label}이(가) ${TEXT_LIMITS[field]}자를 넘어 그만큼만 가져왔어요.`);
+    warn(`${josa(String(label), "이/가")} ${TEXT_LIMITS[field]}자를 넘어 그만큼만 가져왔어요.`);
     return value.slice(0, TEXT_LIMITS[field]);
   };
 

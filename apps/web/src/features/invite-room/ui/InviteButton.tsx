@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { getRoom, regenerateInvite, type Invite } from "@/entities/room";
 import type { Identity } from "@/entities/user";
-import { Dialog } from "@/shared/ui";
+import { Dialog, useAsk } from "@/shared/ui";
 
 const EXPIRY: Array<{ label: string; minutes: number | null }> = [
   { label: "만료 없음", minutes: null },
@@ -16,6 +16,7 @@ const EXPIRY: Array<{ label: string; minutes: number | null }> = [
  * 만료·인원을 정해 "새 링크 만들기"를 누를 때만 새 코드가 발급되고, 이전 링크는 못 쓰게 된다.
  */
 export function InviteButton({ me, roomId }: { me: Identity; roomId: string }) {
+  const ask = useAsk();
   const [invite, setInvite] = useState<Invite | null>(null);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export function InviteButton({ me, roomId }: { me: Identity; roomId: string }) {
   };
 
   const renew = async () => {
-    if (invite && !window.confirm("새 링크를 만들면 이전에 보낸 링크는 못 써요. 만들까요?")) return;
+    if (invite && !(await ask.confirm({ title: "새 링크를 만들까요?", message: "이전에 보낸 링크는 못 써요.", confirmLabel: "새 링크 만들기" }))) return;
     setError(null);
     setCopied(false);
     try {
@@ -62,6 +63,7 @@ export function InviteButton({ me, roomId }: { me: Identity; roomId: string }) {
 
   return (
     <>
+      {ask.node}
       <button className="btn keep" onClick={show} title="초대 링크를 보고 PL을 불러요">초대</button>
       {open && (
         <Dialog label="초대 링크" onClose={() => setOpen(false)} className="dialog">

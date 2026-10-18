@@ -1,3 +1,4 @@
+import { josa } from "./josa";
 import { evaluateLevel, meetsDifficulty, type RollOutcome } from "./dice";
 
 type CcOutcome = Extract<RollOutcome, { kind: "cc" }>;
@@ -24,4 +25,9 @@ export function applyLuck(o: CcOutcome, points: number): CcOutcome {
   const level = evaluateLevel(total, target);
   const success = o.difficulty ? meetsDifficulty(level, o.difficulty) : passes(level);
   return { ...o, percent: { ...o.percent, total }, level, success, luckSpent: (o.luckSpent ?? 0) + points };
+}
+
+/** 행운을 쓴 굴림의 설명 한 줄. 숫자 뒤 조사도 읽는 소리에 맞춘다(행운 32를 써서 62가 30이 됐어요). */
+export function luckSpentText(spent: number, total: number): string {
+  return `행운 ${josa(String(spent), "을/를")} 써서 ${josa(String(total + spent), "이/가")} ${josa(String(total), "이/가")} 됐어요.`;
 }

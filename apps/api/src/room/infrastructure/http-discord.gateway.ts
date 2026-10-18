@@ -1,3 +1,4 @@
+import { josa } from "@coc-vtt/shared";
 import type { DiscordGateway } from "../domain/discord";
 
 /** 웹훅으로 메시지를 보낸다. @everyone 같은 멘션은 사용자 입력이 섞여 있어도 울리지 않게 막는다. */
@@ -15,6 +16,6 @@ export class HttpDiscordGateway implements DiscordGateway {
       signal: AbortSignal.timeout(this.timeoutMs),
       redirect: "error",
     });
-    if (!res.ok) throw new Error(`디스코드가 ${res.status}로 응답했어요.`);
+    if (!res.ok) throw new Error(`디스코드가 ${josa(String(res.status), "으로/로")} 응답했어요.`);
   }
 }

@@ -110,7 +110,7 @@ describe("직업 정의", () => {
     const ok = checkAllocation(base, "edu4", { 관찰력: { occ: 30, personal: 0 }, 신용도: { occ: 15, personal: 0 }, 법률: { occ: 0, personal: 10 } }, o);
     expect(ok.errors).toEqual([]);
     expect(checkAllocation(base, "edu4", { 법률: { occ: 5, personal: 0 }, 신용도: { occ: 15, personal: 0 } }, o).errors.join()).toMatch(/법률: 직업 포인트는 '기자'/);
-    expect(checkAllocation(base, "edu4", {}, o).errors.join()).toMatch(/신용도은\(는\) '기자'에서 9~30 사이.*지금 0/);
+    expect(checkAllocation(base, "edu4", {}, o).errors.join()).toMatch(/신용도는 '기자'에서 9~30 사이.*지금 0/);
     expect(checkAllocation(base, "edu4", { 신용도: { occ: 31, personal: 0 } }, o).errors.join()).toMatch(/9~30/);
     // 직업을 안 고르면 이 제한은 없다
     expect(checkAllocation(base, "edu4", { 법률: { occ: 5, personal: 0 } }).errors).toEqual([]);

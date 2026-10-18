@@ -5,6 +5,8 @@ import { getRoom } from "@/entities/room";
 import { useIdentity } from "@/entities/user";
 import { LoginForm } from "@/features/auth";
 import { ApiError } from "@/shared/api";
+import { SERVICE_NAME } from "@/shared/config";
+import { roomTitle, useDocumentTitle } from "@/shared/lib";
 
 /** 초대 링크로 들어오는 첫 화면. 이름을 정하고, 룸을 확인한 뒤 입장한다. */
 export function JoinView({ roomId, invite }: { roomId: string; invite: string }) {
@@ -12,6 +14,8 @@ export function JoinView({ roomId, invite }: { roomId: string; invite: string })
   const { identity, login } = useIdentity();
   const [info, setInfo] = useState<{ name: string; online: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useDocumentTitle(info ? roomTitle(info.name, SERVICE_NAME) : null);
 
   useEffect(() => {
     if (!identity) return;

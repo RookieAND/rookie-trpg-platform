@@ -12,9 +12,9 @@ export function StartGuide({ steps, onClose }: { steps: Array<{ done: boolean; t
         {steps.map((s, i) => (
           <li key={i} data-done={s.done}>
             <span className="check" aria-hidden>✓</span>
-            <span>
+            <span style={{ display: "grid", gap: 2 }}>
               <b>{s.title}</b>
-              <div className="hint">{s.hint}</div>
+              <span className="hint">{s.hint}</span>
             </span>
           </li>
         ))}

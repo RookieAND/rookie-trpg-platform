@@ -8,13 +8,13 @@ import { LoginForm } from "@/features/auth";
 import { CreateRoomForm } from "@/features/create-room";
 import { JoinByLinkForm } from "@/features/join-by-link";
 import { ApiError } from "@/shared/api";
-import { SERVICE_NAME } from "@/shared/config";
+import { SERVICE_NAME, SUPABASE_URL } from "@/shared/config";
 
 export function LobbyView() {
   const { identity, login, logout } = useIdentity();
   if (identity === undefined) return null;
   if (identity === null) {
-    return <LoginForm title={SERVICE_NAME} description="개발용 로그인이에요. 이름만 정하면 시작할 수 있어요. Discord 로그인은 곧 연결돼요." submitLabel="시작하기" onLogin={login} />;
+    return <LoginForm title={SERVICE_NAME} description={SUPABASE_URL ? "디스코드 계정으로 로그인해요." : "개발용 로그인이에요. 이름만 정하면 시작할 수 있어요."} submitLabel="시작하기" onLogin={login} />;
   }
   return <Lobby me={identity} onLogout={logout} />;
 }

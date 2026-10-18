@@ -1,9 +1,11 @@
 "use client";
 import { useState } from "react";
 import type { ClientCommand, Initiative } from "@coc-vtt/shared";
+import { useAsk } from "@/shared/ui";
 
 /** 전투 순서. 모두가 보고, GM만 시작·넘기기·NPC 추가·DEX 수정을 한다. */
 export function InitiativePanel({ initiative, isKp, enabled, send }: { initiative: Initiative | null; isKp: boolean; enabled: boolean; send: (c: ClientCommand) => unknown }) {
+  const ask = useAsk();
   const [name, setName] = useState("");
   const [dex, setDex] = useState("50");
   const dexNum = Number(dex);
@@ -25,12 +27,13 @@ export function InitiativePanel({ initiative, isKp, enabled, send }: { initiativ
 
   return (
     <div className="panel" data-testid="initiative">
+      {ask.node}
       <div className="panel-head">
         <strong data-testid="initiative-round" style={{ flex: 1 }}>{initiative.round}라운드</strong>
         {isKp && (
           <>
             <button className="btn sm primary" disabled={!enabled || initiative.entries.length === 0} onClick={() => send({ type: "initiative.next", data: {} })}>다음 차례</button>
-            <button className="btn sm danger" disabled={!enabled} onClick={() => window.confirm("전투를 끝낼까요?") && send({ type: "initiative.end", data: {} })}>전투 종료</button>
+            <button className="btn sm danger" disabled={!enabled} onClick={async () => (await ask.confirm({ title: "전투를 끝낼까요?", confirmLabel: "전투 종료", danger: true })) && send({ type: "initiative.end", data: {} })}>전투 종료</button>
           </>
         )}
       </div>
@@ -65,7 +68,7 @@ export function InitiativePanel({ initiative, isKp, enabled, send }: { initiativ
                   }}
                 />
               ) : (
-                <span className="mono" style={{ color: "var(--muted)" }}>DEX {e.dex}</span>
+                <span className="mono" style={{ color: "var(--muted)" }}>{e.hidden ? "DEX ?" : `DEX ${e.dex}`}</span>
               )}
               {isKp && <button className="btn sm ghost" aria-label={`${e.name} 빼기`} disabled={!enabled} onClick={() => send({ type: "initiative.remove", data: { id: e.id } })}>빼기</button>}
             </li>

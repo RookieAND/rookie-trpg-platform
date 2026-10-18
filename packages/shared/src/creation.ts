@@ -1,3 +1,4 @@
+import { josa } from "./josa";
 import { rollDie, type Characteristics } from "./dice";
 import type { CharacterInput } from "./protocol";
 import { CHARACTERISTIC_KEYS, defaultSkillValues, type CharacteristicKey } from "./sheet";
@@ -40,7 +41,7 @@ export function checkAgeAdjustment(rules: AgeRules, cut: Partial<Record<Characte
   for (const k of CHARACTERISTIC_KEYS) {
     const v = cut[k] ?? 0;
     if (!Number.isInteger(v) || v < 0) return "깎는 값은 0 이상의 정수여야 해요.";
-    if (v > 0 && !rules.physicalKeys.includes(k)) return `${k}는 깎을 수 없어요.`;
+    if (v > 0 && !rules.physicalKeys.includes(k)) return `${josa(k, "은/는")} 깎을 수 없어요.`;
     sum += v;
   }
   if (sum !== rules.physicalPenalty) return `${rules.physicalKeys.join("·")}에서 합계 ${rules.physicalPenalty}만큼 깎아야 해요. (지금 ${sum})`;
@@ -98,7 +99,7 @@ export function checkOccupation(o: Omit<Occupation, "id">): string | null {
   if (new Set(o.skills).size !== o.skills.length) return "같은 기능이 두 번 들어 있어요.";
   const known = new Set(creationSkills({ STR: 50, CON: 50, SIZ: 50, DEX: 50, APP: 50, INT: 50, POW: 50, EDU: 50 }).map((s) => s.name));
   for (const s of o.skills) {
-    if (!known.has(s) || (FIXED_SKILLS as readonly string[]).includes(s) || s === CREDIT_RATING) return `'${s}'은(는) 직업 기능으로 넣을 수 없어요.`;
+    if (!known.has(s) || (FIXED_SKILLS as readonly string[]).includes(s) || s === CREDIT_RATING) return `${josa(`'${s}'`, "은/는")} 직업 기능으로 넣을 수 없어요.`;
   }
   return null;
 }
@@ -146,7 +147,7 @@ export function checkAllocation(c: Characteristics, id: OccupationFormulaId, all
   let personalUsed = 0;
   for (const [name, a] of Object.entries(alloc)) {
     if (!base.has(name)) {
-      errors.push(`'${name}'은(는) 알 수 없는 기능이에요.`);
+      errors.push(`${josa(`'${name}'`, "은/는")} 알 수 없는 기능이에요.`);
       continue;
     }
     if (!Number.isInteger(a.occ) || !Number.isInteger(a.personal) || a.occ < 0 || a.personal < 0) {
@@ -165,7 +166,7 @@ export function checkAllocation(c: Characteristics, id: OccupationFormulaId, all
       if (a.occ > 0 && !allowed.has(name)) errors.push(`${name}: 직업 포인트는 '${occupation.name}'의 직업 기능에만 쓸 수 있어요.`);
     }
     const credit = (base.get(CREDIT_RATING) ?? 0) + (alloc[CREDIT_RATING]?.occ ?? 0) + (alloc[CREDIT_RATING]?.personal ?? 0);
-    if (credit < occupation.creditMin || credit > occupation.creditMax) errors.push(`${CREDIT_RATING}은(는) '${occupation.name}'에서 ${occupation.creditMin}~${occupation.creditMax} 사이여야 해요. (지금 ${credit})`);
+    if (credit < occupation.creditMin || credit > occupation.creditMax) errors.push(`${josa(String(CREDIT_RATING), "은/는")} '${occupation.name}'에서 ${occupation.creditMin}~${occupation.creditMax} 사이여야 해요. (지금 ${credit})`);
   }
   const occPool = occupationPoints(c, id);
   const personalPool = personalPoints(c);

@@ -124,6 +124,31 @@ describe("핸드아웃", () => {
       expect(show(room, open, seo)).toMatchObject({ ok: false, code: "forbidden" });
       expect(show(room, "nope")).toMatchObject({ ok: false, code: "not_found" });
     });
+
+    it("reveal로 펼치면 초안이 전원 공개로 바뀌고 같은 명령에서 펼쳐진다(PL에게 added → shown 순서)", () => {
+      const room = setup();
+      const draft = create(room, "gm").id;
+      const outs = must(room.handle(kp, cmd("handout.show", { id: draft, reveal: true })));
+      expect(toWho(outs, seo)).toEqual(["handout.added", "handout.shown"]);
+      expect(toWho(outs, han)).toEqual(["handout.added", "handout.shown"]);
+      expect(toWho(outs, kp)).toEqual(["handout.updated"]);
+      expect(room.snapshot(seo).handouts.map((h) => h.id)).toEqual([draft]);
+      // 이미 공개된 핸드아웃은 reveal이 있어도 공개 범위를 건드리지 않는다
+      const picked = create(room, ["pl1"]).id;
+      const again = must(room.handle(kp, cmd("handout.show", { id: picked, reveal: true })));
+      expect(toWho(again, seo)).toEqual(["handout.shown"]);
+      expect(toWho(again, han)).toEqual([]);
+    });
+
+    it("reveal도 GM 전용 노트는 공개하지 못하고, PL은 쓸 수 없다", () => {
+      const room = setup();
+      const note = must(room.handle(kp, cmd("handout.create", { title: "진상", body: "x", visibleTo: "all", kpOnly: true })));
+      const id = (note[0]!.event as { data: { id: string } }).data.id;
+      expect(room.handle(kp, cmd("handout.show", { id, reveal: true }))).toMatchObject({ ok: false, code: "bad_message" });
+      const draft = create(room, "gm").id;
+      expect(room.handle(seo, cmd("handout.show", { id: draft, reveal: true }))).toMatchObject({ ok: false, code: "forbidden" });
+      expect(room.snapshot(seo).handouts).toEqual([]);
+    });
   });
 
   describe("GM 전용 노트", () => {

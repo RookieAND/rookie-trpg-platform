@@ -12,6 +12,14 @@ const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbo
 const ctx = async () => {
   const c = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   c.setDefaultTimeout(Number(process.env.E2E_TIMEOUT_MS ?? 30000));
+  // E2E_DEBUG=1이면 화면의 스크립트 오류와 console.error를 그대로 보여 준다(개발 서버의 오류 창이 클릭을 가릴 때 원인을 찾는 용도).
+  if (process.env.E2E_DEBUG) {
+    c.on("page", (p) => {
+      (globalThis.__pages ??= []).push(p);
+      p.on("pageerror", (e) => console.error("[pageerror]", e.message.slice(0, 400)));
+      p.on("console", (m) => m.type() === "error" && console.error("[console.error]", m.text().slice(0, 400)));
+    });
+  }
   return c;
 };
 // 같은 서버로 여러 번 돌려도 이전 실행의 룸·캐릭터와 섞이지 않게 이름에 실행 번호를 붙인다.
@@ -21,6 +29,8 @@ const CHAR = `윤서하 ${run}`;
 const SHOTS = process.env.SHOTS_DIR ?? "/tmp/shots-pltools";
 await (await import("node:fs/promises")).mkdir(SHOTS, { recursive: true });
 const step = (m) => console.log("✓", m);
+// 화면 안 확인 창(window.confirm 대신): 확인 버튼(submit)을 누른다.
+const confirmAsk = async (page) => { const d = page.getByTestId("ask-dialog"); await d.waitFor(); await d.locator('button[type="submit"]').click(); await d.waitFor({ state: "detached" }); };
 // 설정·장면 설정 메뉴 안의 항목은 메뉴를 먼저 열어야 보인다. 쓰고 나면 Esc로 닫아 아래 화면을 가리지 않게 한다.
 const openSettings = async (page) => { if (!(await page.getByRole("menu").count())) await page.getByTestId("settings-menu").click(); };
 // 판정 요청 폼과 안개 더보기는 접혀 있다. 필요할 때 펼친다.
@@ -40,6 +50,17 @@ for (const who of ["하늘", "서하", "낯선이"]) {
 
 const login = async (page, name) => {
   await page.goto(WEB);
+  if (!login.checked) {
+    // 이름이 비면 시작하기가 막히고, 이유가 버튼 아래 한 줄로 보이며 aria-describedby로 이어진다
+    login.checked = true;
+    await page.getByTestId("login-why").waitFor();
+    const startBtn = page.getByRole("button", { name: "시작하기" });
+    assert.equal(await startBtn.isDisabled(), true);
+    assert.equal(await startBtn.getAttribute("aria-describedby"), "login-why");
+    assert.match(await page.getByTestId("login-why").innerText(), /이름/);
+    assert.match(await page.title(), /^밤의 탁자$/);
+    assert.equal((await fetch(`${WEB}/icon.svg`)).status, 200, "파비콘이 있어야 해요");
+  }
   await page.getByLabel("이름").fill(name);
   await page.getByRole("button", { name: "시작하기" }).click();
 };
@@ -54,14 +75,15 @@ try {
   const roomUrl = kp.url();
   await kp.getByTestId("connection").getByText("연결됨").waitFor();
   await kp.getByText("세션 시작 전이에요").waitFor();
-  step("GM이 룸을 만들고 입장 (세션 시작 전)");
+  await kp.waitForFunction((n) => document.title.includes(n) && document.title.includes("밤의 탁자"), ROOM);
+  step("GM이 룸을 만들고 입장 (세션 시작 전, 탭 제목에 룸 이름)");
 
   // 초대 링크 받기
   await kp.getByRole("button", { name: "초대", exact: true }).click();
   const inviteLink = await kp.getByLabel("초대 링크 주소").inputValue();
   assert.match(inviteLink, /\/join\/.+\?invite=/);
   await kp.keyboard.press("Escape");
-  assert.equal(await kp.getByRole("dialog").count(), 0);
+  await kp.getByRole("dialog").waitFor({ state: "detached" });
   // 창을 다시 열어도 링크가 그대로여야 먼저 보낸 링크가 죽지 않는다
   await kp.getByRole("button", { name: "초대", exact: true }).click();
   assert.equal(await kp.getByLabel("초대 링크 주소").inputValue(), inviteLink);
@@ -79,7 +101,7 @@ try {
   await kp.getByText("저장했어요").waitFor();
   await kp.getByText("채널이 연결돼 있어요").waitFor();
   await kp.keyboard.press("Escape");
-  assert.equal(await kp.getByRole("dialog").count(), 0);
+  await kp.getByRole("dialog").waitFor({ state: "detached" });
   step("GM이 디스코드 웹훅을 연결함(주소는 다시 보여 주지 않음)");
 
   // 초대 없이 들어오려는 사람은 막힘
@@ -102,10 +124,13 @@ try {
 
   // 세션 시작 전에는 PL이 굴릴 수 없고, GM이 시작하면 열림
   assert.equal(await pl.getByLabel("굴림 식").isDisabled(), true);
+  assert.match(await pl.getByTestId("roll-why").innerText(), /GM이 세션을 시작/);
+  assert.equal(await pl.locator('button[aria-describedby="roll-why"]').isDisabled(), true);
   await kp.getByRole("button", { name: "세션 시작" }).click();
   await pl.getByTestId("session-status").getByText("진행 중").waitFor();
   assert.equal(await pl.getByLabel("굴림 식").isDisabled(), false);
-  step("GM이 세션을 시작하면 PL 입력이 열림");
+  assert.equal(await pl.getByTestId("roll-why").count(), 0);
+  step("GM이 세션을 시작하면 PL 입력이 열리고, 그 전에는 막힌 이유가 한 줄로 보임");
 
   // 로비 목록에 룸이 보임
   const lobby = await (await ctx()).newPage();
@@ -161,8 +186,8 @@ try {
   await lobby.getByRole("button", { name: "캐릭터 만들기" }).click();
   const wizCard = lobby.getByTestId("vault-card").filter({ hasText: WIZ });
   await wizCard.waitFor();
-  lobby.once("dialog", (d) => d.accept());
   await wizCard.getByRole("button", { name: "삭제" }).click();
+  await confirmAsk(lobby);
   await wizCard.waitFor({ state: "detached" });
   step("생성 마법사: 17세 나이 보정과 기능 포인트 규칙을 지켜야 진행되고, 만들면 보관함에 생김");
   // 직업 정의: 정의해 두면 마법사에서 직업 기능·신용도 범위를 지키게 하고, 지울 수 있다
@@ -181,20 +206,23 @@ try {
   await lobby.getByLabel("정의해 둔 직업").selectOption({ label: JOB });
   assert.equal(await lobby.getByLabel("직업", { exact: true }).inputValue(), JOB);
   await lobby.getByRole("button", { name: "다음" }).click();
+  assert.equal(await lobby.getByRole("button", { name: "다음" }).isDisabled(), true);
+  assert.match(await lobby.getByTestId("wizard-next-why").innerText(), /교육 향상 판정/);
+  assert.equal(await lobby.getByRole("button", { name: "다음" }).getAttribute("aria-describedby"), "wizard-next-why");
   await lobby.getByRole("button", { name: "교육 향상 판정" }).click();
   await lobby.getByTestId("edu-result").waitFor();
   await lobby.getByRole("button", { name: "다음" }).click();
   assert.equal(await lobby.getByLabel("설득 직업 포인트").isDisabled(), true);
   await lobby.getByLabel("법률 직업 포인트").fill("10");
-  await lobby.getByRole("alert").filter({ hasText: "신용도은(는)" }).waitFor();
+  await lobby.getByRole("alert").filter({ hasText: "신용도는" }).waitFor();
   assert.equal(await lobby.getByRole("button", { name: "다음" }).isDisabled(), true);
   await lobby.getByLabel("신용도 직업 포인트").fill("25");
   await lobby.getByRole("button", { name: "다음" }).click();
   await lobby.getByRole("button", { name: "캐릭터 만들기" }).click();
   const wizCard2 = lobby.getByTestId("vault-card").filter({ hasText: WIZ2 });
   await wizCard2.waitFor();
-  lobby.once("dialog", (d) => d.accept());
   await wizCard2.getByRole("button", { name: "삭제" }).click();
+  await confirmAsk(lobby);
   await wizCard2.waitFor({ state: "detached" });
   // 고치기·내보내기·가져오기
   await lobby.getByRole("button", { name: `${JOB} 직업 수정` }).click();
@@ -297,9 +325,66 @@ try {
   await kp.getByTestId("stat-hp").getByText("9/10").waitFor();
   step("PL의 HP 변경이 GM 시트에도 반영됨");
 
+  // 시트 글칸: 쓰는 도중 다른 쪽이 HP를 바꿔(시트 rev가 올라가도) 입력 중인 글이 지워지지 않고, 칸을 벗어나면 저장됨
+  {
+    const memo = pl.getByLabel("메모", { exact: true });
+    await memo.fill("지하실 열쇠는 서재에 있다");
+    await kp.getByRole("button", { name: "HP 증가" }).click();
+    await pl.getByTestId("stat-hp").getByText("10/10").waitFor();
+    await pl.waitForTimeout(300);
+    assert.equal(await memo.inputValue(), "지하실 열쇠는 서재에 있다", "다른 변경이 와도 입력 중인 글이 남아야 해요");
+    assert.equal(await memo.evaluate((e) => document.activeElement === e), true, "초점도 그대로여야 해요");
+    await pl.keyboard.type(" · 확인");
+    await kp.getByRole("button", { name: "HP 감소" }).click();
+    await pl.getByTestId("stat-hp").getByText("9/10").waitFor();
+    assert.equal(await memo.inputValue(), "지하실 열쇠는 서재에 있다 · 확인");
+    await pl.getByTestId("stat-hp").click(); // 칸을 벗어나면 저장
+    await kp.waitForFunction(() => [...document.querySelectorAll("textarea")].some((t) => t.value === "지하실 열쇠는 서재에 있다 · 확인"));
+  }
+  step("시트 메모에 쓰는 도중 상대가 HP를 바꿔도 글이 지워지지 않고, 칸을 벗어나면 GM 시트에 저장됨");
+
+  // HP 빠른 조정: ±5 버튼과 직접 입력(값, +3, -7)을 범위 안으로 맞춰 적용
+  {
+    const hp = pl.getByTestId("stat-hp");
+    await pl.getByRole("button", { name: "HP 5 감소" }).click();
+    await hp.getByText("4/10").waitFor();
+    await pl.getByRole("button", { name: "HP 5 증가" }).click();
+    await hp.getByText("9/10").waitFor();
+    const box = pl.getByLabel("HP 직접 입력");
+    await box.fill("-7");
+    await box.press("Enter");
+    await hp.getByText("2/10").waitFor();
+    await box.fill("+3");
+    await box.press("Enter");
+    await hp.getByText("5/10").waitFor();
+    await box.fill("-50");
+    await box.press("Enter");
+    await hp.getByText("0/10").waitFor();
+    await box.fill("99");
+    await box.press("Enter");
+    await hp.getByText("10/10").waitFor();
+    await kp.getByTestId("stat-hp").getByText("10/10").waitFor();
+    // GM도 같은 시트를 직접 입력으로 고칠 수 있고, 글자가 아니면 거절 표시만 한다
+    const gbox = kp.getByLabel("HP 직접 입력");
+    await gbox.fill("9");
+    await gbox.press("Enter");
+    await pl.getByTestId("stat-hp").getByText("9/10").waitFor();
+    await pl.getByLabel("HP 직접 입력").fill("abc");
+    await pl.getByLabel("HP 직접 입력").press("Enter");
+    assert.equal(await pl.getByLabel("HP 직접 입력").getAttribute("aria-invalid"), "true");
+    await pl.getByLabel("HP 직접 입력").fill("");
+    await hp.getByText("9/10").waitFor();
+  }
+  step("HP ±5 버튼과 직접 입력(값·+3·-7)이 0~최대 안으로 맞춰져 적용되고 GM에게도 반영됨");
+
   await pl.getByRole("button", { name: "도서관 이용 굴리기" }).click();
+  // 시트에서 굴려도 오른쪽 탭이 굴림으로 바뀌지 않고, 결과는 토스트로 바로 보인다(굴림 기록에는 쌓임)
+  await pl.getByTestId("toast").getByText(new RegExp(`${CHAR} · 도서관 이용 · \\d+`)).waitFor();
+  assert.equal(await pl.getByRole("tab", { name: "시트" }).getAttribute("aria-selected"), "true");
+  assert.equal(await pl.getByRole("tab", { name: "굴림" }).getAttribute("aria-selected"), "false");
   await kp.getByRole("tab", { name: "굴림" }).click();
   await kp.getByTestId("roll-entry").getByText(`${CHAR} · 도서관 이용`).waitFor();
+  await pl.getByRole("tab", { name: "굴림" }).click();
   assert.equal(await pl.getByTestId("roll-entry").first().getByText(`${CHAR} · 도서관 이용`).count(), 1);
   step("시트로 굴린 결과가 라벨과 함께 로그에 남음");
 
@@ -446,6 +531,7 @@ try {
   await pl.getByRole("tab", { name: "시트" }).click();
   await pl.getByTestId("weapons").getByText("주먹").waitFor();
   await pl.getByRole("button", { name: "주먹 피해" }).click();
+  await pl.getByRole("tab", { name: "굴림" }).click(); // 시트에서 굴려도 탭이 바뀌지 않으니 기록을 보려면 굴림 탭으로 간다
   await pl.getByTestId("roll-entry").getByText(`${CHAR} · 주먹 피해`).first().waitFor();
   await pl.getByRole("tab", { name: "시트" }).click();
   await pl.getByTestId("conditions").getByRole("button", { name: "중상" }).click();
@@ -492,11 +578,54 @@ try {
   await kp.getByRole("button", { name: "저장", exact: true }).click();
   await pl.getByTestId("handout-item").waitFor({ state: "detached" });
   step("초안으로 되돌리면 PL 화면에서 사라짐");
+
+  // 초안 핸드아웃: 펼쳐 보이기가 막힌 이유를 알려 주고, ‘공개하기’ 한 번으로 전원 공개 + 펼쳐 보이기
+  {
+    const item = kp.getByTestId("handout-item").filter({ hasText: "낡은 편지" });
+    assert.equal(await item.getByRole("button", { name: "펼쳐 보이기" }).isDisabled(), true);
+    assert.match(await item.getByTestId("handout-show-why").innerText(), /공개하기/);
+    assert.match((await item.getByRole("button", { name: "펼쳐 보이기" }).getAttribute("aria-describedby")) ?? "", /^handout-why-/);
+    await item.getByTestId("handout-publish").click();
+    await pl.getByRole("dialog", { name: "핸드아웃" }).getByText("자정에 서재로 와 주게.").waitFor();
+    await pl.keyboard.press("Escape");
+    await item.getByText("전원").waitFor();
+    assert.equal(await item.getByTestId("handout-publish").count(), 0);
+    await item.getByRole("button", { name: "편집" }).click();
+    await kp.getByLabel("공개 범위").selectOption("gm");
+    await kp.getByRole("button", { name: "저장", exact: true }).click();
+    await pl.getByTestId("handout-item").waitFor({ state: "detached" });
+  }
+  step("초안은 펼쳐 보이기가 막힌 이유가 보이고, 공개하기 한 번으로 전원 공개와 펼쳐 보이기가 됨");
   await kp.getByRole("tab", { name: "굴림" }).click();
   await pl.getByRole("tab", { name: "굴림" }).click();
 
 
+  // 새 토큰의 소유자 기본값은 "소유자 없음(NPC)": 이름을 비워도 PL 이름이 붙지 않고, PL은 그 토큰을 움직일 수 없다
+  assert.equal(await kp.getByLabel("새 토큰 소유자").inputValue(), "");
+  await kp.getByRole("button", { name: "+ 토큰" }).click();
+  await pl.locator('[data-testid^="obj-토큰"]').first().waitFor();
+  assert.equal(await pl.getByTestId("obj-서하").count(), 0, "소유자 없는 토큰에 PL 이름이 붙으면 안 돼요");
+  {
+    const npcId = await pl.locator('[data-testid^="obj-토큰"]').first().getAttribute("data-testid");
+    const npc = pl.getByTestId(npcId);
+    const x0 = await npc.getAttribute("data-x");
+    assert.notEqual(await npc.getAttribute("data-mine"), "true");
+    const nb = await npc.locator("circle").first().boundingBox();
+    await pl.mouse.move(nb.x + nb.width / 2, nb.y + nb.height / 2);
+    await pl.mouse.down();
+    await pl.mouse.move(nb.x + nb.width / 2 + 100, nb.y + nb.height / 2 + 40, { steps: 5 });
+    await pl.mouse.up();
+    await pl.waitForTimeout(700);
+    assert.equal(await kp.getByTestId(npcId).getAttribute("data-x"), x0, "PL이 소유자 없는 토큰을 움직였어요");
+    assert.equal(await pl.getByTestId(npcId).getAttribute("data-x"), x0);
+    await kp.getByTestId(npcId).click();
+    await kp.getByRole("button", { name: "삭제", exact: true }).click();
+    await pl.getByTestId(npcId).waitFor({ state: "detached" });
+  }
+  step("새 토큰 소유자 기본값은 소유자 없음(NPC): 이름이 PL 이름이 아니고 PL은 움직일 수 없음");
+
   // GM이 토큰을 만들고 PL이 받음
+  await kp.getByLabel("새 토큰 소유자").selectOption({ label: "서하" });
   await kp.getByRole("button", { name: "+ 토큰" }).click();
   await pl.getByTestId("obj-서하").waitFor();
   step("GM이 만든 토큰이 PL 화면에 나타남");
@@ -532,8 +661,8 @@ try {
   await pl.getByTestId("handout-item").getByText("사진 한 장").click();
   await pl.getByAltText("사진 한 장 이미지").waitFor();
   await kp.getByTestId("handout-item").getByRole("button", { name: "삭제" }).first().waitFor();
-  kp.once("dialog", (d) => d.accept());
   await kp.getByTestId("handout-item").filter({ hasText: "사진 한 장" }).getByRole("button", { name: "삭제" }).click();
+  await confirmAsk(kp);
   await pl.getByTestId("handout-item").waitFor({ state: "detached" });
   await kp.getByRole("tab", { name: "굴림" }).click();
   await pl.getByRole("tab", { name: "굴림" }).click();
@@ -1059,13 +1188,14 @@ try {
 
   // 전투 순서: GM이 시작하고 NPC를 넣고 넘기면 PL 화면에 같은 순서와 차례가 보임
   // 활성 장면(서재)에 서하 소유 토큰을 놓아 둔다: 차례 링과 이동 안내를 보려는 것
+  await kp2.getByLabel("새 토큰 소유자").selectOption({ label: "서하" });
   await kp2.getByLabel("새 토큰 이름").fill("전투서하");
   await kp2.getByRole("button", { name: "+ 토큰" }).click();
   await pl.getByTestId("obj-전투서하").waitFor();
   await kp2.getByRole("tab", { name: /^전투/ }).click();
   await kp2.getByRole("button", { name: "전투 시작" }).click();
   await pl.getByTestId("my-turn").waitFor();
-  await pl.getByTestId("obj-전투서하").getByTestId("turn-ring").waitFor();
+  await pl.getByTestId("turn-ring").first().waitFor(); // 캐릭터 이름과 같은 토큰이 있으면 그 토큰에, 없으면 PL의 토큰에 링이 붙는다
   await pl.screenshot({ path: `${SHOTS}/turn-ring-pl.png` }); // 전투 탭을 안 봐도 내 차례면 보드 위에 표시
   await pl.getByRole("tab", { name: /^전투/ }).click();
   await pl.getByTestId("initiative-entry").filter({ hasText: CHAR }).waitFor();
@@ -1103,6 +1233,38 @@ try {
   await kp2.getByRole("button", { name: "이동 풀기" }).click();
   await pl.getByTestId("obj-전투서하").and(pl.locator(":not([data-locked])")).waitFor();
   step("GM의 '이동 잠금/이동 풀기'로 PL 토큰이 한꺼번에 잠기고 풀림");
+
+  // 비밀: GM이 만든 NPC 시트의 이름·DEX는 전투 순서에서 PL에게 가려지고, 세션 정산에도 PL에게는 안 보임
+  const SECRET_NPC = "비밀교단원 " + run;
+  {
+    const fs = await import("node:fs/promises");
+    await kp2.getByRole("tab", { name: "시트" }).click();
+    const [tpl] = await Promise.all([kp2.waitForEvent("download"), kp2.getByRole("button", { name: "양식 받기" }).click()]);
+    const raw = (await fs.readFile(await tpl.path())).toString("utf8");
+    await kp2.getByRole("button", { name: "CSV로 가져오기" }).click();
+    await kp2.getByLabel("CSV 붙여넣기").fill(raw.replace("이름,\r\n", `이름,${SECRET_NPC}\r\n`));
+    await kp2.getByTestId("csv-apply").click();
+    await kp2.getByLabel("캐릭터 선택").selectOption({ label: SECRET_NPC });
+    await kp2.getByRole("tab", { name: /^전투/ }).click();
+    await kp2.getByRole("button", { name: "전투 종료" }).click();
+    await confirmAsk(kp2);
+    await kp2.getByRole("button", { name: "전투 시작" }).click();
+    await kp2.getByTestId("initiative-entry").filter({ hasText: SECRET_NPC }).waitFor();
+    await pl.getByRole("tab", { name: /^전투/ }).click();
+    await pl.getByTestId("initiative-entry").filter({ hasText: "알 수 없는 상대" }).waitFor();
+    assert.equal(await pl.getByTestId("initiative").getByText(SECRET_NPC).count(), 0, "NPC 시트 이름이 PL에게 보이면 안 돼요");
+    assert.equal(await pl.getByTestId("initiative-entry").filter({ hasText: "알 수 없는 상대" }).getByText(/DEX \?/).count(), 1);
+    assert.equal(await pl.getByTestId("initiative-entry").filter({ hasText: CHAR }).count(), 1);
+    await kp2.getByRole("button", { name: "전투 종료" }).click();
+    await kp2.getByTestId("ask-dialog").getByRole("button", { name: "취소" }).click(); // 취소하면 전투가 그대로
+    await kp2.getByTestId("initiative-entry").first().waitFor();
+    await kp2.getByRole("button", { name: "전투 종료" }).click();
+    await confirmAsk(kp2);
+    await kp2.getByRole("button", { name: "전투 시작" }).waitFor();
+    await kp2.getByRole("tab", { name: "굴림" }).click();
+    await pl.getByRole("tab", { name: "굴림" }).click();
+  }
+  step("전투 순서: GM 전용 NPC 시트는 PL에게 '알 수 없는 상대'로만 보이고(이름·DEX 숨김), GM에게는 그대로 보임");
   await kp2.getByRole("tab", { name: "굴림" }).click();
   await pl.getByRole("tab", { name: "굴림" }).click();
 
@@ -1143,9 +1305,16 @@ try {
   await kp2.getByRole("button", { name: "정산하고 종료" }).click();
   await pl.getByTestId("session-status").getByText("대기").waitFor();
   await pl.getByRole("dialog", { name: "세션 정산" }).getByText("엔딩 · 새벽의 생존자").waitFor();
+  {
+    const plSummary = await pl.getByRole("dialog", { name: "세션 정산" }).innerText();
+    assert.ok(plSummary.includes(CHAR), "PL 시트의 정산은 보여야 해요");
+    assert.ok(!plSummary.includes(SECRET_NPC), "NPC 시트가 PL의 정산에 보이면 안 돼요");
+    const gmSummary = await kp2.getByRole("dialog", { name: "세션 정산" }).innerText();
+    assert.ok(gmSummary.includes(SECRET_NPC), "GM의 정산에는 NPC 시트도 보여야 해요");
+  }
   await pl.keyboard.press("Escape");
   assert.equal(await pl.getByRole("dialog", { name: "세션 정산" }).count(), 0);
-  step("세션 종료 때 엔딩 이름이 모두에게 보이고 닫을 수 있음");
+  step("세션 종료 때 엔딩 이름이 모두에게 보이고 닫을 수 있음(NPC 시트의 SAN 보상은 GM에게만)");
   await pl.getByRole("tab", { name: "시트" }).click();
   await pl.getByRole("button", { name: "보관함에 반영" }).click();
   await pl.getByText("보관함에 반영했어요").waitFor();
@@ -1304,8 +1473,8 @@ try {
   await pl.getByTestId("scene-name").getByText("서재").waitFor();
   await kp2.getByRole("tab", { name: /^음향/ }).click();
   await track.getByTestId("audio-playing").waitFor();
-  kp2.once("dialog", (d) => d.accept());
   await track.getByRole("button", { name: /삭제$/ }).click();
+  await confirmAsk(kp2);
   await track.waitFor({ state: "detached" });
   step("음향: 비트 큐에 묶은 배경음이 비트에 들어가면 흐르고, 음원을 지우면 목록에서 사라짐");
 
@@ -1488,7 +1657,10 @@ try {
   console.log("\n모든 확인 통과");
 } catch (e) {
   console.error("\n실패:", e.message);
-  if (process.env.E2E_DEBUG) console.error(e.stack); // 어느 줄에서 멈췄는지 보고 싶을 때
+  if (process.env.E2E_DEBUG) {
+    console.error(e.stack); // 어느 줄에서 멈췄는지 보고 싶을 때
+    for (const [i, p] of (globalThis.__pages ?? []).entries()) await p.screenshot({ path: `${SHOTS}/fail-${i}.png` }).catch(() => {});
+  }
   process.exitCode = 1;
 } finally {
   await browser.close();

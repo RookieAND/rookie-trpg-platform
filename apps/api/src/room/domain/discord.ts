@@ -1,4 +1,4 @@
-import { describeOutcome, type ServerEvent } from "@coc-vtt/shared";
+import { describeOutcome, josa, type ServerEvent } from "@coc-vtt/shared";
 
 export interface DiscordEvents {
   /** 세션 시작·일시정지·재개·종료 */
@@ -34,7 +34,7 @@ export function formatNotification(event: ServerEvent, ctx: { roomName: string }
   const room = `**${plain(ctx.roomName)}**`;
   switch (event.type) {
     case "session.started":
-      return events.session ? `🎲 ${room} · 세션 ${event.data.number}을(를) 시작했어요.` : null;
+      return events.session ? `🎲 ${room} · 세션 ${josa(String(event.data.number), "을/를")} 시작했어요.` : null;
     case "session.paused":
       return events.session ? `⏸️ ${room} · 세션이 일시정지됐어요${event.data.reason === "kp_disconnected" ? " (GM 연결이 끊겼어요)" : ""}.` : null;
     case "session.resumed":

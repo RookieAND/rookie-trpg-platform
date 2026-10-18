@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_AUDIO_TRACKS, MAX_MADNESS_ENTRIES } from "@coc-vtt/shared";
-import { validateScenario, type ScenarioFile } from "./scenario-validate";
+import { splitNoteTitle, validateScenario, type ScenarioFile } from "./scenario-validate";
 
 const wav = Buffer.concat([Buffer.from("RIFF"), Buffer.from([0, 0, 0, 0]), Buffer.from("WAVE"), Buffer.alloc(8)]);
 const files: Record<string, Buffer> = { "a/bgm.wav": wav, "a/se.wav": wav, "a/text.wav": Buffer.from("not audio at all"), "a/empty.wav": Buffer.alloc(0) };
@@ -97,5 +97,20 @@ describe("validateScenario", () => {
     sc.beats[0]!.handouts = ["hh"];
     sc.branches.push({ from: "b1", to: "b9", label: "가요" });
     expect(validateScenario(sc, read)).toHaveLength(3);
+  });
+});
+
+describe("splitNoteTitle", () => {
+  it("[KP] 머리말이 있으면 GM 전용 노트로 보고 제목에서는 뗀다", () => {
+    expect(splitNoteTitle("[KP] 관리인의 비밀")).toEqual({ title: "관리인의 비밀", kpOnly: true });
+    expect(splitNoteTitle("[GM]비밀")).toEqual({ title: "비밀", kpOnly: true });
+    expect(splitNoteTitle("[kp]  소문")).toEqual({ title: "소문", kpOnly: true });
+  });
+  it("머리말이 없으면 그대로 둔다", () => {
+    expect(splitNoteTitle("편지")).toEqual({ title: "편지", kpOnly: false });
+    expect(splitNoteTitle("편지 [KP]")).toEqual({ title: "편지 [KP]", kpOnly: false });
+  });
+  it("머리말만 있으면 제목을 비우지 않는다", () => {
+    expect(splitNoteTitle("[KP]").title).toBe("[KP]");
   });
 });

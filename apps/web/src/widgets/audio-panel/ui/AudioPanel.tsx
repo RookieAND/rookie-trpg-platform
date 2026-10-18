@@ -1,13 +1,15 @@
 "use client";
 import { useRef, useState } from "react";
-import { MAX_AUDIO_TRACKS, type AudioKind, type AudioTrack, type BgmState, type ClientCommand } from "@coc-vtt/shared";
+import { josa, MAX_AUDIO_TRACKS, type AudioKind, type AudioTrack, type BgmState, type ClientCommand } from "@coc-vtt/shared";
 import { uploadAudio, type Caller } from "@/shared/api";
+import { useAsk } from "@/shared/ui";
 
 const KIND_LABEL: Record<AudioKind, string> = { bgm: "배경음", se: "효과음" };
 const FADES = [0, 1000, 3000];
 
 /** GM이 음원을 올리고 틀고 멈추는 곳. */
 export function AudioPanel({ me, library, bgm, enabled, send }: { me: Caller; library: AudioTrack[]; bgm: BgmState | null; enabled: boolean; send: (c: ClientCommand) => unknown }) {
+  const ask = useAsk();
   const input = useRef<HTMLInputElement>(null);
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<AudioKind>("bgm");
@@ -36,6 +38,7 @@ export function AudioPanel({ me, library, bgm, enabled, send }: { me: Caller; li
 
   return (
     <div style={{ padding: 16, display: "grid", gap: 12, alignContent: "start", overflow: "auto", flex: 1 }} data-testid="audio-panel">
+      {ask.node}
       <div className="card" style={{ gap: 8 }} data-testid="audio-now">
         <strong>지금 흐르는 배경음</strong>
         {bgm ? (
@@ -93,7 +96,7 @@ export function AudioPanel({ me, library, bgm, enabled, send }: { me: Caller; li
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <span style={{ color: "var(--muted)", fontSize: 12, flex: 1 }}>기본 볼륨 {t.volume}</span>
               <button className="btn" disabled={!enabled} onClick={() => send({ type: "audio.play", data: { trackId: t.id, fadeMs: t.kind === "bgm" ? fadeMs : 0 } })}>재생</button>
-              <button className="btn" disabled={!enabled} aria-label={`${t.label} 삭제`} onClick={() => window.confirm(`'${t.label}'을(를) 지울까요? 장면·비트에 묶어 둔 연결도 풀려요.`) && send({ type: "audio.track.remove", data: { id: t.id } })}>삭제</button>
+              <button className="btn" disabled={!enabled} aria-label={`${t.label} 삭제`} onClick={async () => (await ask.confirm({ title: `${josa(`'${t.label}'`, "을/를")} 지울까요?`, message: "장면·비트에 묶어 둔 연결도 풀려요.", confirmLabel: "지우기", danger: true })) && send({ type: "audio.track.remove", data: { id: t.id } })}>삭제</button>
             </div>
           </div>
         ))}

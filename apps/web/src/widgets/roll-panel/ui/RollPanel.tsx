@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { formatRollLog, luckBlockReason, luckNeeded, pushBlockReason, type Character, type RollLogEntry, type RollRuleInput } from "@coc-vtt/shared";
+import { formatRollLog, josa, luckBlockReason, luckNeeded, pushBlockReason, type Character, type RollLogEntry, type RollRuleInput } from "@coc-vtt/shared";
 import { MacroBar, useRollMacros } from "@/features/roll-macros";
 import type { Caller } from "@/shared/api";
 import { downloadText } from "@/shared/lib";
@@ -16,6 +16,8 @@ interface Props {
   hidden: Array<{ id: string; userName: string }>;
   isKp: boolean;
   disabled: boolean;
+  /** 굴리지 못하는 이유 한 줄(disabled일 때 버튼 옆에 보여 준다) */
+  disabledReason?: string | null;
   error: string | null;
   /** false를 돌려주면 보내지 못한 것이라 식을 지우지 않는다. */
   onRoll: (expr: string, secret: boolean) => unknown;
@@ -26,7 +28,7 @@ interface Props {
   onAsk?: (name: string, difficulty: "regular" | "hard" | "extreme" | undefined, targetUserId?: string) => unknown;
 }
 
-export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disabled, error, onRoll, onPush, onLuck, players, onAsk }: Props) {
+export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disabled, disabledReason, error, onRoll, onPush, onLuck, players, onAsk }: Props) {
   const [expr, setExpr] = useState("");
   const [secret, setSecret] = useState(false);
   const [help, setHelp] = useState(false);
@@ -71,7 +73,7 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
           )}
           {!luckWhy && need !== null && (
             <>
-              <button className="btn sm" disabled={disabled || luck < need} title={luck < need ? `행운이 모자라요 (보유 ${luck})` : `행운 ${need}을 깎아 성공으로 바꿔요`} onClick={() => onLuck(r.id)}>
+              <button className="btn sm" disabled={disabled || luck < need} title={luck < need ? `행운이 모자라요 (보유 ${luck})` : `행운 ${josa(String(need), "을/를")} 깎아 성공으로 바꿔요`} onClick={() => onLuck(r.id)}>
                 행운 {need} 쓰기
               </button>
               <Hint term="luck" />
@@ -117,14 +119,16 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
           <input
             className="input mono"
             aria-label="굴림 식"
+            aria-describedby={disabled && disabledReason ? "roll-why" : undefined}
             placeholder="CC<=60 또는 1d100"
             value={expr}
             disabled={disabled}
             onChange={(e) => setExpr(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
           />
-          <button className="btn primary" onClick={submit} disabled={disabled || !expr.trim()}>굴리기</button>
+          <button className="btn primary" onClick={submit} disabled={disabled || !expr.trim()} aria-describedby={disabled && disabledReason ? "roll-why" : undefined}>굴리기</button>
         </div>
+        {disabled && disabledReason && <div className="why" id="roll-why" data-testid="roll-why">{disabledReason}</div>}
         {error && <div className="err" role="alert">{error}</div>}
         <div className="row foot">
           {isKp && (

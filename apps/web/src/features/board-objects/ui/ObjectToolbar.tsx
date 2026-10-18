@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { ClientCommand, GameObject, Member } from "@coc-vtt/shared";
 import type { Caller } from "@/shared/api";
 import { ImageUploadButton } from "@/shared/ui";
-import { uniqueName } from "../model/names";
+import { newTokenName, uniqueName } from "../model/names";
 
 /** GM이 보드에 토큰·소품을 놓고, 숨기고, 지운다. */
 export function ObjectToolbar({
@@ -29,12 +29,12 @@ export function ObjectToolbar({
   onDeselect: () => void;
 }) {
   const takenNames = objects.map((o) => o.name);
-  const [owner, setOwner] = useState<string | undefined>(undefined); // undefined: 첫 PL, "": 소유자 없음
+  // 새 토큰의 소유자 기본값은 "소유자 없음(NPC)". 첫 PL로 두면 괴물·경비 토큰이 PL 것이 되어 버린다.
+  const [owner, setOwner] = useState(""); // "": 소유자 없음(NPC)
   const [newName, setNewName] = useState("");
   const [rename, setRename] = useState("");
-  const ownerId = owner === undefined ? (players[0]?.userId ?? "") : owner;
-  const ownerValid = ownerId === "" || players.some((p) => p.userId === ownerId);
-  const effectiveOwner = ownerValid ? ownerId : "";
+  const ownerValid = owner === "" || players.some((p) => p.userId === owner);
+  const effectiveOwner = ownerValid ? owner : "";
   const nameOf = (id: string) => players.find((p) => p.userId === id)?.name;
   useEffect(() => setRename(selected?.name ?? ""), [selected?.id, selected?.name]);
 
@@ -55,8 +55,7 @@ export function ObjectToolbar({
     });
   };
   const addToken = (forId: string, typed: string) => {
-    const base = typed.trim() || (forId ? (nameOf(forId) ?? "") : "") || `토큰${objects.length + 1}`;
-    const name = uniqueName(base, takenNames);
+    const name = uniqueName(newTokenName(typed, forId ? nameOf(forId) : undefined, takenNames.length), takenNames);
     takenNames.push(name);
     send({ type: "object.add", data: { kind: "token", name, x: 500, y: 400, layer: "object", sceneId, visibleTo: "all", autoPlace: true, ...(forId ? { ownerId: forId } : {}) } });
   };
@@ -112,7 +111,7 @@ export function ObjectToolbar({
         <option value="">소유자 없음(NPC)</option>
         {players.map((p) => <option key={p.userId} value={p.userId}>{p.name}</option>)}
       </select>
-      <input className="dock-input" style={{ width: 96 }} aria-label="새 토큰 이름" placeholder="이름(선택)" title="비우면 PL 이름이 쓰여요" value={newName} maxLength={40} disabled={!enabled}
+      <input className="dock-input" style={{ width: 96 }} aria-label="새 토큰 이름" placeholder="이름(선택)" title="비우면 소유자 이름이, 소유자가 없으면 ‘토큰N’이 쓰여요" value={newName} maxLength={40} disabled={!enabled}
         onChange={(e) => setNewName(e.target.value)} />
       {players.length > 1 && (
         <button className="btn" disabled={!enabled} title="PL마다 그 사람 이름으로 토큰을 하나씩 놓아요" onClick={addAll}>PL 전원 토큰 만들기</button>

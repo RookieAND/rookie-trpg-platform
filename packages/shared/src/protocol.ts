@@ -144,6 +144,8 @@ export interface InitiativeEntry {
   characterId?: string;
   /** 캐릭터의 주인(PL). 다른 PL의 시트는 안 보여도 보드에서 차례 토큰을 찾을 수 있게 서버가 채운다. */
   ownerId?: string;
+  /** PL에게 보내는 가려진 칸: GM만 쓰는 시트(NPC)의 이름·DEX는 지우고 자리만 알려 준다. GM 화면에는 붙지 않는다. */
+  hidden?: boolean;
 }
 
 /** 전투 순서(DEX 높은 순). turn은 지금 차례인 칸의 위치, round는 몇 라운드째인지. */
@@ -455,7 +457,8 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("handout.remove"), data: z.object({ id }) }),
   /** GM이 핸드아웃을 보는 사람 모두의 화면에 바로 펼친다. */
-  z.object({ type: z.literal("handout.show"), data: z.object({ id }) }),
+  /** reveal을 켜면 초안(GM만)인 핸드아웃을 먼저 전원 공개로 바꾼 뒤 펼쳐 보인다(한 번에 처리해 순서가 엇갈리지 않는다). */
+  z.object({ type: z.literal("handout.show"), data: z.object({ id, reveal: z.boolean().optional() }) }),
   z.object({ type: z.literal("character.remove"), data: z.object({ id }) }),
   z.object({
     type: z.literal("sheet.patch"),

@@ -1,11 +1,12 @@
 "use client";
 import { useState } from "react";
-import { BGM_STOP, type AudioTrack, type ClientCommand, type Scene } from "@coc-vtt/shared";
+import { josa, BGM_STOP, type AudioTrack, type ClientCommand, type Scene } from "@coc-vtt/shared";
 import type { Caller } from "@/shared/api";
-import { ImageUploadButton, Menu, MenuLabel, onTabListKeyDown } from "@/shared/ui";
+import { ImageUploadButton, Menu, MenuLabel, onTabListKeyDown, useAsk } from "@/shared/ui";
 
 /** GM의 장면 막대: 장면을 고르고, 만들고, 지금 장면으로 바꾼다(컷/페이드). 활성이 아닌 장면은 PL에게 보이지 않아 미리 꾸며 둘 수 있다. */
 export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled, canActivate = enabled, send }: { me: Caller; scenes: Scene[]; tracks: AudioTrack[]; activeId: string; viewId: string; onView: (id: string) => void; enabled: boolean; canActivate?: boolean; send: (c: ClientCommand) => unknown }) {
+  const ask = useAsk();
   const [name, setName] = useState("");
   const [bringParty, setBringParty] = useState(true); // PL 토큰을 새 장면으로 같이 가져갈지
   const viewing = scenes.find((s) => s.id === viewId);
@@ -19,6 +20,7 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
 
   return (
     <div className="scenebar" data-testid="scenebar">
+      {ask.node}
       <div className="scene-row">
         <div className="scene-tabs" role="tablist" aria-label="장면" onKeyDown={onTabListKeyDown}>
           {scenes.map((s) => (
@@ -63,12 +65,12 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
                     ))}
                   </select>
                 )}
-                <button className="btn" disabled={!enabled} onClick={() => {
+                <button className="btn" disabled={!enabled} onClick={async () => {
                   close();
-                  const next = window.prompt("장면 이름", viewing.name);
-                  if (next?.trim()) send({ type: "scene.rename", data: { id: viewing.id, name: next.trim() } });
+                  const next = await ask.prompt({ title: "장면 이름 바꾸기", label: "장면 이름", initial: viewing.name, confirmLabel: "바꾸기" });
+                  if (next) send({ type: "scene.rename", data: { id: viewing.id, name: next } });
                 }}>이름 변경</button>
-                {!isActive && <button className="btn" style={{ color: "var(--danger)" }} disabled={!enabled} onClick={() => { close(); if (window.confirm(`'${viewing.name}'과(와) 안의 오브젝트를 지울까요?`)) send({ type: "scene.remove", data: { id: viewing.id } }); }}>장면 삭제</button>}
+                {!isActive && <button className="btn" style={{ color: "var(--danger)" }} disabled={!enabled} onClick={async () => { close(); if (await ask.confirm({ title: `${josa(`'${viewing.name}'`, "을/를")} 지울까요?`, message: "장면 안의 토큰과 소품도 함께 지워져요.", confirmLabel: "장면 지우기", danger: true })) send({ type: "scene.remove", data: { id: viewing.id } }); }}>장면 삭제</button>}
               </>
             )}
           </Menu>

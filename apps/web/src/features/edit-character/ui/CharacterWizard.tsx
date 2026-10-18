@@ -22,6 +22,8 @@ import {
   type SkillAllocation,
 } from "@coc-vtt/shared";
 
+import { nextBlockReason } from "../model/next-reason";
+
 const STEPS = ["기본 정보", "특성치", "기능", "확인"] as const;
 const num = (v: string) => (v === "" ? 0 : Math.max(0, Math.floor(Number(v)) || 0));
 const FLAT: Record<CharacteristicKey, number> = { STR: 50, CON: 50, SIZ: 50, DEX: 50, APP: 50, INT: 50, POW: 50, EDU: 50 };
@@ -71,7 +73,8 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
   const setPts = (n: string, kind: "occ" | "personal", v: number) =>
     setAlloc((a) => ({ ...a, [n]: { occ: a[n]?.occ ?? 0, personal: a[n]?.personal ?? 0, [kind]: v } }));
 
-  const canNext = step === 0 ? name.trim().length > 0 && ageOk : step === 1 ? baseOk && !cutError && !eduPending : step === 2 ? check.errors.length === 0 : true;
+  const nextWhy = nextBlockReason({ step, name, ageOk, baseOk, cutError, eduPending, pointErrors: check.errors });
+  const canNext = nextWhy === null;
 
   const create = async () => {
     setBusy(true);
@@ -224,11 +227,12 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
         </div>
       )}
 
+      {nextWhy && step < STEPS.length - 1 && <div className="why" id="wizard-next-why" data-testid="wizard-next-why" style={{ textAlign: "right" }}>{nextWhy}</div>}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button className="btn" onClick={onCancel}>취소</button>
         {step > 0 && <button className="btn" onClick={() => setStep(step - 1)}>이전</button>}
         {step < STEPS.length - 1 ? (
-          <button className="btn primary" disabled={!canNext} onClick={() => setStep(step + 1)}>다음</button>
+          <button className="btn primary" disabled={!canNext} aria-describedby={nextWhy ? "wizard-next-why" : undefined} onClick={() => setStep(step + 1)}>다음</button>
         ) : (
           <button className="btn primary" disabled={busy} onClick={create}>캐릭터 만들기</button>
         )}

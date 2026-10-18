@@ -159,4 +159,17 @@ describe("applyServerMessage", () => {
     s = applyServerMessage(s, { seq: 6, event: { type: "handout.shown", data: { id: "h1" } } });
     expect(s.spotlight).toEqual({ id: "h1", n: 2 });
   });
+
+  it("핸드아웃이 지워졌다 다시 생겨도 펼친 번호는 줄지 않는다(닫은 번호와 헷갈리지 않게)", () => {
+    let s = applyServerMessage(initialRoomState(), snap());
+    s = applyServerMessage(s, { seq: 6, event: { type: "handout.shown", data: { id: "h1" } } });
+    s = applyServerMessage(s, { seq: 7, event: { type: "handout.removed", data: { id: "h1" } } });
+    expect(s.spotlight).toBeNull();
+    s = applyServerMessage(s, { seq: 8, event: { type: "handout.shown", data: { id: "h1" } } });
+    expect(s.spotlight).toEqual({ id: "h1", n: 2 });
+    // 다시 접속해 snapshot을 받아도 번호가 처음으로 돌아가지 않는다
+    s = applyServerMessage(s, snap());
+    s = applyServerMessage(s, { seq: 9, event: { type: "handout.shown", data: { id: "h1" } } });
+    expect(s.spotlight).toEqual({ id: "h1", n: 3 });
+  });
 });

@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
-import { BEAT_KIND_LABEL_KO, BGM_STOP, type AudioTrack, type Beat, type Branch, type ClientCommand, type Flow, type Handout, type Scene } from "@coc-vtt/shared";
+import { josa, BEAT_KIND_LABEL_KO, BGM_STOP, type AudioTrack, type Beat, type Branch, type ClientCommand, type Flow, type Handout, type Scene } from "@coc-vtt/shared";
 import { BeatEditor } from "./BeatEditor";
 import { BranchEditor } from "./BranchEditor";
+import { useAsk } from "@/shared/ui";
 
 type Editing = { kind: "beat"; beat?: Beat } | { kind: "branch"; from: string; branch?: Branch } | null;
 
@@ -16,6 +17,7 @@ const conditionText = (b: Branch, handouts: Handout[]) => {
 
 /** GM의 세션 흐름: 비트(진행 단계)와 분기를 미리 짜 두고, 진행 중에는 현재 위치를 옮긴다. 참가자에게는 보이지 않는다. */
 export function FlowPanel({ flow, scenes, handouts, tracks, status, enabled, send }: { flow: Flow; scenes: Scene[]; handouts: Handout[]; tracks: AudioTrack[]; status: string; enabled: boolean; send: (c: ClientCommand) => unknown }) {
+  const ask = useAsk();
   const [editing, setEditing] = useState<Editing>(null);
   const active = status === "ACTIVE";
   const beatName = (id: string) => flow.beats.find((b) => b.id === id)?.name ?? "?";
@@ -59,6 +61,7 @@ export function FlowPanel({ flow, scenes, handouts, tracks, status, enabled, sen
 
   return (
     <div style={{ padding: 16, display: "grid", gap: 12, alignContent: "start", overflow: "auto", flex: 1 }} data-testid="flow">
+      {ask.node}
       {(!hasStart || !hasEnding) && (
         <div className="banner" role="status" data-testid="flow-warning">
           {!hasStart && "시작 비트가 없어요. "}
@@ -129,7 +132,7 @@ export function FlowPanel({ flow, scenes, handouts, tracks, status, enabled, sen
               )}
               {b.kind !== "ending" && <button className="btn" disabled={!enabled || flow.beats.length < 2} onClick={() => setEditing({ kind: "branch", from: b.id })}>분기 추가</button>}
               <button className="btn" disabled={!enabled} onClick={() => setEditing({ kind: "beat", beat: b })}>편집</button>
-              <button className="btn danger" aria-label={`${b.name} 삭제`} disabled={!enabled} onClick={() => window.confirm(`'${b.name}'과(와) 이어진 분기를 지울까요?`) && send({ type: "flow.beat.remove", data: { id: b.id } })}>삭제</button>
+              <button className="btn danger" aria-label={`${b.name} 삭제`} disabled={!enabled} onClick={async () => (await ask.confirm({ title: `${josa(`'${b.name}'`, "을/를")} 지울까요?`, message: "이어진 분기도 함께 지워져요.", confirmLabel: "지우기", danger: true })) && send({ type: "flow.beat.remove", data: { id: b.id } })}>삭제</button>
             </div>
           </article>
         );

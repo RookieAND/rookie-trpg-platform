@@ -22,9 +22,20 @@ export function Menu({ label, title, testId, align = "right", children }: { labe
     };
     document.addEventListener("mousedown", onDown);
     window.addEventListener("keydown", onKey);
+    // 메뉴 항목이 연 대화상자가 닫히면 메뉴도 함께 닫는다(목록만 다시 덩그러니 남지 않게).
+    let hadDialog = false;
+    const watcher = root.current
+      ? new MutationObserver(() => {
+          const has = Boolean(root.current?.querySelector('[role="dialog"]'));
+          if (has) hadDialog = true;
+          else if (hadDialog) setOpen(false);
+        })
+      : null;
+    if (root.current) watcher?.observe(root.current, { childList: true, subtree: true });
     return () => {
       document.removeEventListener("mousedown", onDown);
       window.removeEventListener("keydown", onKey);
+      watcher?.disconnect();
     };
   }, [open]);
 

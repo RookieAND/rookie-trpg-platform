@@ -10,3 +10,4 @@ export { Hint } from "./Hint";
 export { GLOSSARY, type GlossaryKey } from "./glossary";
 export { Dialog } from "./Dialog";
 export { Group } from "./Group";
+export { useAsk, type ConfirmOptions, type PromptOptions } from "./AskDialog";

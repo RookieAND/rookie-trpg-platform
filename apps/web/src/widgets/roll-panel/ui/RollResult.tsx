@@ -1,6 +1,6 @@
 "use client";
 import "./roll-result.css";
-import { describeOutcome, MADNESS_LABEL_KO, type Difficulty, type RollOutcome, type SuccessLevel } from "@coc-vtt/shared";
+import { describeOutcome, josa, luckSpentText, MADNESS_LABEL_KO, type Difficulty, type RollOutcome, type SuccessLevel } from "@coc-vtt/shared";
 import { Hint } from "@/shared/ui";
 
 type Cc = Extract<RollOutcome, { kind: "cc" }>;
@@ -43,7 +43,7 @@ function diceDetail(p: Cc["percent"]): string | null {
   const kind = p.bonus > 0 ? "보너스" : "페널티";
   const tens = p.tens.map((t) => (t === 0 && p.units === 0 ? "00" : `${t}0`)).join(", ");
   const chosen = p.chosenTens === 0 && p.units === 0 ? "00" : `${p.chosenTens}0`;
-  return `${kind} 주사위 ${Math.abs(p.bonus)}개: 10의 자리 ${tens} 중 ${chosen}을 골랐어요 (1의 자리 ${p.units})`;
+  return `${kind} 주사위 ${Math.abs(p.bonus)}개: 10의 자리 ${tens} 중 ${josa(String(chosen), "을/를")} 골랐어요 (1의 자리 ${p.units})`;
 }
 
 function CcResult({ o }: { o: Cc }) {
@@ -74,7 +74,7 @@ function CcResult({ o }: { o: Cc }) {
       </div>
       {gap && <div className="res-sub warn">{LEVEL_NAME[o.level]}이지만 {diff} 기준({limit} 이하)에는 못 미쳐요.</div>}
       {diff && o.success === true && o.level !== "failure" && <div className="res-sub">{diff} 이상이라 통과했어요.</div>}
-      {o.luckSpent ? <div className="res-sub">행운 {o.luckSpent}을 써서 {p.total + o.luckSpent}이 {p.total}이 됐어요.</div> : null}
+      {o.luckSpent ? <div className="res-sub">{luckSpentText(o.luckSpent, p.total)}</div> : null}
       {diceDetail(p) && <div className="res-sub">{diceDetail(p)}</div>}
     </div>
   );

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { rollExpression, type Rng, type RollOutcome } from "./dice";
-import { applyLuck, luckNeeded } from "./luck";
+import { applyLuck, luckNeeded, luckSpentText } from "./luck";
 
 const seq = (...v: number[]): Rng => {
   let i = 0;
@@ -38,5 +38,14 @@ describe("applyLuck", () => {
     const o = roll("CC<=60h", 0.9, 0.5);
     const after = applyLuck(o, luckNeeded(o)!);
     expect(after).toMatchObject({ level: "hard", success: true });
+  });
+});
+
+describe("luckSpentText", () => {
+  it("숫자 뒤 조사를 읽는 소리에 맞춘다", () => {
+    expect(luckSpentText(32, 30)).toBe("행운 32를 써서 62가 30이 됐어요.");
+    expect(luckSpentText(10, 40)).toBe("행운 10을 써서 50이 40이 됐어요.");
+    expect(luckSpentText(1, 5)).toBe("행운 1을 써서 6이 5가 됐어요.");
+    expect(luckSpentText(3, 12)).toBe("행운 3을 써서 15가 12가 됐어요.");
   });
 });

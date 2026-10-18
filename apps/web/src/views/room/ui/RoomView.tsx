@@ -5,7 +5,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameObject, Role } from "@coc-vtt/shared";
 import { SheetCsvImport } from "@/entities/character";
 import { beginDiscordLogin, refreshStoredSession, useIdentity, type Identity } from "@/entities/user";
-import { SUPABASE_URL } from "@/shared/config";
+import { getRoom } from "@/entities/room";
+import { SERVICE_NAME, SUPABASE_URL } from "@/shared/config";
+import { roomTitle, useDocumentTitle } from "@/shared/lib";
 import { ObjectToolbar, uniqueName, useBoardInteractions } from "@/features/board-objects";
 import { FogToolbar } from "@/features/manage-fog";
 import { Hint, ImageLibraryProvider, onTabListKeyDown, roomImageIds, useImageLibraryStore } from "@/shared/ui";
@@ -33,6 +35,9 @@ import { SanEffect } from "@/widgets/san-effect";
 import { RoomHeader } from "@/widgets/room-header";
 import { StartGuide } from "./StartGuide";
 import { PlayerGuide } from "./PlayerGuide";
+import { pauseNotice } from "../model/pause-notice";
+import { rollBlockReason } from "../model/roll-reason";
+import { rollToastText, shouldToastRoll } from "../model/roll-toast";
 import { playerGuideSteps, readGuideClosed, showPlayerGuide, writeGuideClosed } from "../model/player-guide";
 import { SheetPanel, SheetEmpty, type RollOptions } from "@/widgets/sheet-panel";
 
@@ -55,6 +60,7 @@ export function RoomView({ roomId, invite }: { roomId: string; invite?: string }
 
 function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: string }) {
   const { state, connection, closeCode, send, retry, reconnected, sendFailed, authExpired } = useRoom({ roomId, user: me.userId, name: me.name, token: me.token, invite, refresh: me.token && SUPABASE_URL ? refreshStoredSession : undefined });
+  const sheetRollAt = useRef(0); // 시트에서 굴린 시각. 그 결과를 토스트로 보여 준다.
   const notices = useRoomNotices({ lastError: state.lastError, sendFailed, reconnected, lastUndo: state.lastUndo });
   const { undo, sendWithHint } = useUndo({ enabled: (state.members.find((m) => m.userId === me.userId)?.role ?? "pl") === "kp", send, notify: notices.notify });
   const [guideClosed, setGuideClosed] = useState(false);
@@ -75,6 +81,17 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   const [fogPicking, setFogPicking] = useState(false);
   const [fogRadius, setFogRadius] = useState(120);
   const [panelOpen, setPanelOpen] = useState(true); // 좁은 화면에서만 보이는 패널 접기
+  // 탭 제목에 룸 이름을 넣는다. 이름을 못 가져와도 룸은 그대로 쓸 수 있다.
+  const [roomName, setRoomName] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    getRoom(me, roomId, invite).then((r) => alive && setRoomName(r.name)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, invite, me.userId]);
+  useDocumentTitle(roomName ? roomTitle(roomName, SERVICE_NAME) : null);
 
   // 역할은 서버가 확정한 값을 쓴다. 접속 전에는 PL로 임시 표시한다.
   const role: Role = state.members.find((m) => m.userId === me.userId)?.role ?? "pl";
@@ -115,6 +132,13 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   // 페이드 전환: 어두워지는 동안은 이전 장면의 보드를 붙잡고, 다 어두워지면 새 장면으로 바꾼다.
   const liveBoard = useMemo(() => ({ sceneId: shownSceneId, objects, background: shownScene?.background, fog: fogView, name: state.scenes[state.activeSceneId]?.name }), [shownSceneId, objects, shownScene, fogView, state.scenes, state.activeSceneId]);
   const { shown: board, fade } = useSceneFade(liveBoard, state.transition, reconnectedAt.current, fx.enabled);
+  const lastRoll = state.rolls.at(-1);
+  useEffect(() => {
+    if (!lastRoll || !shouldToastRoll(sheetRollAt.current, Date.now(), lastRoll.userId, me.userId)) return;
+    sheetRollAt.current = 0;
+    notices.notify(rollToastText(lastRoll));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastRoll?.id]);
   const audio = useAudioEngine({ bgm: state.bgm, stopFadeMs: state.stopFadeMs, lastSe: state.lastSe, clockOffset: state.clockOffset, lastRollId: state.rolls.at(-1)?.id ?? null, lastRollAt: state.rolls.at(-1)?.at ?? null, ready: state.ready, prefs: sound.prefs });
 
   const handoutIds = useMemo(() => handoutList.map((h) => h.id), [handoutList]);
@@ -196,7 +220,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
       <div className="body">
         <main className="board">
           {kpAway && <div className="banner" role="status" data-testid="kp-away-banner">GM 연결이 끊겼어요. 잠시 기다려요.</div>}
-          {paused && <div className="banner" role="status">세션이 일시정지 중이에요. GM이 돌아오면 이어서 진행해요.</div>}
+          {paused && <div className="banner" role="status" data-testid="pause-banner">{pauseNotice(role, state.pauseReason)}</div>}
           {role === "pl" && <AskBanner asks={state.rollAsks} userId={me.userId} canRoll={active} hasCharacter={characters.some((c) => c.ownerId === me.userId)} onRoll={(name, difficulty) => { const mine = characters.find((c) => c.ownerId === me.userId); if (!mine) return; send({ type: "roll.request", data: { secret: false, skill: { characterId: mine.id, name, bonus: 0, ...(difficulty ? { difficulty } : {}) } } }); setTab("roll"); }} />}
           {myTurn && state.initiative && <MyTurnBadge round={state.initiative.round} lowered={isKp} onOpen={() => setTab("combat")} />}
           {state.sessionStatus === "IDLE" && !isKp && (
@@ -273,6 +297,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               hidden={state.hiddenRolls}
               isKp={isKp}
               disabled={!active || role === "spectator"}
+              disabledReason={rollBlockReason(role, state.sessionStatus)}
               error={null}
               onRoll={(expr, secret) => send({ type: "roll.request", data: { expr, secret } })}
               onPush={(rollId) => send({ type: "roll.push", data: { rollId } })}
@@ -296,24 +321,23 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                   selectedId={sheet?.id ?? null}
                   onSelect={setSheetId}
                   canAct={active && role !== "spectator"}
+                  rollWhy={rollBlockReason(role, state.sessionStatus)}
                   canEdit={role !== "spectator" && (active || isKp)}
                   canEditText={role !== "spectator" && (!paused || isKp)}
                   onPatch={(characterId, ops) => send({ type: "sheet.patch", data: { characterId, ops } })}
                   isKp={isKp}
                   onSanCheck={(characterId, loss) => {
-                    send({ type: "san.check", data: { characterId, loss } });
-                    setTab("roll");
+                    if (send({ type: "san.check", data: { characterId, loss } }) !== false) sheetRollAt.current = Date.now();
                   }}
                   onNewDay={(characterId) => send({ type: "san.newDay", data: { characterId } })}
                   onDamage={(characterId, weaponIndex) => {
-                    send({ type: "damage.roll", data: { characterId, weaponIndex } });
-                    setTab("roll");
+                    if (send({ type: "damage.roll", data: { characterId, weaponIndex } }) !== false) sheetRollAt.current = Date.now();
                   }}
                   onMadnessRoll={(characterId, mode) => send({ type: "madness.roll", data: { characterId, mode } })}
                   onRemove={isKp || (role === "pl" && state.sessionStatus === "IDLE" && state.sessionNumber === 0 && sheet?.ownerId === me.userId) ? (characterId) => send({ type: "character.remove", data: { id: characterId } }) : undefined}
                   onRoll={(characterId, name, o: RollOptions) => {
-                    send({ type: "roll.request", data: { secret: o.secret === true, skill: { characterId, name, bonus: o.bonus, ...(o.difficulty ? { difficulty: o.difficulty } : {}) } } });
-                    setTab("roll");
+                    // 시트를 보던 자리에서 결과를 토스트로 알려 주고, 굴림 탭으로 옮기지 않는다(굴림 기록에는 그대로 쌓인다).
+                    if (send({ type: "roll.request", data: { secret: o.secret === true, skill: { characterId, name, bonus: o.bonus, ...(o.difficulty ? { difficulty: o.difficulty } : {}) } } }) !== false) sheetRollAt.current = Date.now();
                   }}
                 />
               )}
