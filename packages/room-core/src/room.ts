@@ -54,6 +54,7 @@ import {
   type Snapshot,
   type Visibility,
 } from "@coc-vtt/shared";
+import { UndoLog } from "./undo";
 
 /**
  * 룸 엔진. 네트워크를 모르는 순수 로직이다.
@@ -390,8 +391,10 @@ export class Room {
     this.fogBefore = this.fogAreas();
     this.fanned = new Set();
     this.exploredChanged = false;
+    const pending = this.members.get(actor.userId)?.role === "kp" ? this.undoLog.capture(command, this.undoMaps()) : null;
     const first = this.dispatch(actor, command);
     if (first.ok && sceneBefore === this.activeSceneId) this.recordExplored();
+    if (first.ok && pending) this.undoLog.commit(pending, this.undoMaps());
     // 안개 안의 오브젝트는 시야가 바뀌면 다른 오브젝트도 새로 보이거나 사라진다.
     const r = first.ok && sceneBefore === this.activeSceneId ? this.withFogDiff(first) : first;
     if (!r.ok || this.flow.current === null) return r;
@@ -404,6 +407,8 @@ export class Room {
   /** 이번 명령으로 탐험 기록이 늘었는지 */
   private exploredChanged = false;
   private fanned = new Set<string>();
+  /** KP의 최근 변경 기록(되돌리기용). 메모리에만 둔다. */
+  private readonly undoLog = new UndoLog();
 
   private dispatch(actor: Actor, command: ClientCommand): Result {
     const member = this.members.get(actor.userId);
@@ -460,6 +465,8 @@ export class Room {
         return this.sceneRemove(who, command.data.id);
       case "scene.activate":
         return this.sceneActivate(who, command.data);
+      case "undo.last":
+        return this.undoLast(who);
       case "object.add":
         return this.objectAdd(who, command.data);
       case "object.move":
@@ -1357,6 +1364,22 @@ export class Room {
     if (!obj) return fail("not_found", "오브젝트를 찾을 수 없어요.");
     this.objects.delete(id);
     return ok(...this.fanOutObject(obj, null));
+  }
+
+  private undoMaps() {
+    return { objects: this.objects, scenes: this.scenes };
+  }
+
+  /** KP의 가장 최근 변경을 되돌린다. 평소 명령과 같은 이벤트로 모든 화면을 맞춘다. */
+  private undoLast(who: Actor): Result {
+    if (who.role !== "kp") return fail("forbidden", "KP만 되돌릴 수 있어요.");
+    const r = this.undoLog.undo(this.undoMaps(), this.members, MAX_OBJECTS);
+    if (!r.ok) return fail("stale", r.message);
+    const out: Out[] = [];
+    if (r.obj) out.push(...this.fanOutObject(r.obj.before, r.obj.after));
+    if (r.scene) out.push(...this.emitScene(r.scene));
+    out.push(this.emitTo({ type: "undo.done", data: { label: r.label } }, { users: [who.userId] }));
+    return ok(...out);
   }
 
   /**

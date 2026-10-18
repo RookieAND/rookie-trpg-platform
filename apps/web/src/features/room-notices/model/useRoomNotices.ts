@@ -8,10 +8,12 @@ interface Input {
   sendFailed: number;
   /** 다시 연결된 횟수 */
   reconnected: number;
+  /** 마지막으로 되돌린 동작(서버 안내) */
+  lastUndo?: { n: number; label: string } | null;
 }
 
 /** 서버 오류·전송 실패·재연결을 토스트 목록으로 모은다. */
-export function useRoomNotices({ lastError, sendFailed, reconnected }: Input) {
+export function useRoomNotices({ lastError, sendFailed, reconnected, lastUndo }: Input) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
   const push = useCallback((kind: Toast["kind"], text: string) => {
@@ -30,5 +32,10 @@ export function useRoomNotices({ lastError, sendFailed, reconnected }: Input) {
     if (reconnected > 0) push("info", RECONNECTED_TEXT);
   }, [reconnected, push]);
 
-  return { toasts, dismiss };
+  useEffect(() => {
+    if (lastUndo) push("info", `되돌렸어요 · ${lastUndo.label}`);
+  }, [lastUndo, push]);
+  const notify = useCallback((text: string) => push("info", text), [push]);
+
+  return { toasts, dismiss, notify };
 }

@@ -390,6 +390,8 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("fog.clear"), data: z.object({ sceneId: id }) }),
   z.object({ type: z.literal("fog.forget"), data: z.object({ sceneId: id }) }),
   z.object({ type: z.literal("object.remove"), data: z.object({ id }) }),
+  /** KP의 가장 최근 변경(토큰·안개)을 되돌린다. */
+  z.object({ type: z.literal("undo.last"), data: z.object({}) }),
   z.object({
     type: z.literal("roll.request"),
     data: z
@@ -626,6 +628,8 @@ export type ServerEvent =
   | { type: "object.added"; data: GameObject }
   | { type: "object.updated"; data: GameObject }
   | { type: "object.removed"; data: { id: string } }
+  /** 되돌리기 성공. 요청한 KP에게만 간다. */
+  | { type: "undo.done"; data: { label: string } }
   | { type: "settings.effects"; data: { effects: EffectSettings } }
   | { type: "settings.madness"; data: { entries: string[] } }
   | { type: "flow.updated"; data: { flow: Flow } }

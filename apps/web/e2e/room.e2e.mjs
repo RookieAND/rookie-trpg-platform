@@ -490,13 +490,11 @@ try {
   await kp.getByTestId("fog-zones").getByText("밝힌 영역 1").waitFor();
   await plProps.first().waitFor();
   await kp.getByRole("button", { name: "보드를 눌러 밝히는 중…" }).click();
-  kp.once("dialog", (d) => d.accept());
   await kp.getByRole("button", { name: "영역 모두 지우기" }).click();
   await plProps.first().waitFor({ state: "detached" });
   // 탐험 기록: 시야가 지나간 자리는 지금 안 보여도 기록으로 남고, KP가 지울 수 있다
   await pl.getByTestId("fog-explored").waitFor();
   await kp.getByTestId("fog-explored-count").getByText(/탐험 기록 [1-9]/).waitFor();
-  kp.once("dialog", (d) => d.accept());
   await kp.getByRole("button", { name: "탐험 기록 지우기" }).click();
   await kp.getByTestId("fog-explored-count").getByText("탐험 기록 0").waitFor();
   await pl.getByTestId("fog-explored").waitFor({ state: "detached" });
@@ -505,6 +503,27 @@ try {
   await plProps.first().waitFor();
   await pl.getByTestId("fog").waitFor({ state: "detached" });
   step("안개와 시야: 안개 속 오브젝트는 PL 화면에서 사라지고, 시야 반지름·밝힌 영역으로 다시 보이며, 지나간 자리는 탐험 기록으로 남고(KP가 지움), 끄면 모두 보임");
+
+  // 되돌리기(Ctrl+Z): 토큰 삭제 → 복귀, 이동 → 원위치. 확인창 없이 삭제하고 안내 토스트가 뜬다.
+  const undoTok = kp.getByTestId("obj-숨김 소품2");
+  await undoTok.click();
+  await kp.getByRole("button", { name: "삭제", exact: true }).click();
+  await undoTok.waitFor({ state: "detached" });
+  await kp.getByTestId("toast").getByText(/되돌리려면 Ctrl\+Z/).waitFor();
+  await kp.keyboard.press("Control+z");
+  await undoTok.waitFor();
+  await kp.getByTestId("toast").getByText(/되돌렸어요/).waitFor();
+  const x0 = Number(await undoTok.getAttribute("data-x"));
+  const ub = await undoTok.locator("circle").first().boundingBox();
+  await kp.mouse.move(ub.x + ub.width / 2, ub.y + ub.height / 2);
+  await kp.mouse.down();
+  await kp.mouse.move(ub.x + ub.width / 2 + 100, ub.y + ub.height / 2 + 40, { steps: 6 });
+  await kp.mouse.up();
+  await kp.waitForFunction((x) => Math.abs(Number(document.querySelector('[data-testid="obj-숨김 소품2"]')?.getAttribute("data-x")) - x) > 20, x0);
+  await kp.keyboard.press("Control+z");
+  await kp.waitForFunction((x) => Number(document.querySelector('[data-testid="obj-숨김 소품2"]')?.getAttribute("data-x")) === x, x0);
+  // 되돌릴 기록이 더는 없으면(직접 눌러 확인) 오류 토스트. 버튼으로도 되돌릴 수 있다.
+  step("되돌리기: KP 토큰 삭제 뒤 Ctrl+Z 로 복귀하고, 이동도 Ctrl+Z 로 원위치");
 
   // 굴림: 공개
   await pl.getByLabel("굴림 식").fill("CC<=60");

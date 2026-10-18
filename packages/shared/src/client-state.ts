@@ -66,6 +66,8 @@ export interface RoomState {
   lastEnd: EndSummary | null;
   hiddenRolls: Array<{ id: string; userName: string; at: number }>;
   lastError: { code: string; message: string; requestId?: string } | null;
+  /** 마지막으로 되돌린 동작. n이 바뀌면 새 되돌림이다. */
+  lastUndo: { n: number; label: string } | null;
 }
 
 export const initialRoomState = (roomId = ""): RoomState => ({
@@ -99,6 +101,7 @@ export const initialRoomState = (roomId = ""): RoomState => ({
   hiddenRolls: [],
   lastEnd: null,
   lastError: null,
+  lastUndo: null,
 });
 
 const MAX_ROLLS = 200;
@@ -203,6 +206,8 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       const { [ev.data.id]: _gone, ...rest } = state.handouts;
       return { ...next, handouts: rest, spotlight: state.spotlight?.id === ev.data.id ? null : state.spotlight };
     }
+    case "undo.done":
+      return { ...next, lastUndo: { n: (state.lastUndo?.n ?? 0) + 1, label: ev.data.label } };
     case "handout.shown":
       return { ...next, spotlight: { id: ev.data.id, n: (state.spotlight?.n ?? 0) + 1 } };
     case "character.added":

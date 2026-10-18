@@ -95,7 +95,7 @@ export function ObjectToolbar({
           </button>
           <ImageUploadButton me={me} label="이미지" disabled={!enabled} onUploaded={(image) => send({ type: "object.update", data: { id: selected.id, image } })} />
           {selected.image && <button className="btn" disabled={!enabled} onClick={() => send({ type: "object.update", data: { id: selected.id, image: null } })}>이미지 떼기</button>}
-          <button className="btn danger" disabled={!enabled} onClick={() => window.confirm(`'${selected.name}'을(를) 지울까요? 소유자·위치·이미지 설정이 사라져요.`) && (send({ type: "object.remove", data: { id: selected.id } }), onDeselect())}>삭제</button>
+          <button className="btn danger" disabled={!enabled} title="지워도 Ctrl+Z 로 되돌릴 수 있어요" onClick={() => (send({ type: "object.remove", data: { id: selected.id } }), onDeselect())}>삭제</button>
       </div>
     )}
     <div className="dock" style={{ bottom: 12 }}>

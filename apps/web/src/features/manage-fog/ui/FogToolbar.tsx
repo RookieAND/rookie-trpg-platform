@@ -63,7 +63,7 @@ export function FogToolbar({
           <span style={{ color: "var(--muted)", fontSize: 12.5 }} data-testid="fog-zones">밝힌 영역 {zones.length}</span>
           <span style={{ color: "var(--muted)", fontSize: 12.5 }} data-testid="fog-explored-count">탐험 기록 {explored}</span>
           {explored > 0 && (
-            <button className="btn" disabled={!enabled} onClick={() => window.confirm("PL이 지나온 곳의 기억(탐험 기록)을 지울까요?") && send({ type: "fog.forget", data: { sceneId: scene.id } })}>
+            <button className="btn" disabled={!enabled} onClick={() => send({ type: "fog.forget", data: { sceneId: scene.id } })}>
               탐험 기록 지우기
             </button>
           )}
@@ -72,7 +72,7 @@ export function FogToolbar({
               <button className="btn" disabled={!enabled} onClick={() => send({ type: "fog.remove", data: { sceneId: scene.id, zoneId: zones[zones.length - 1]!.id } })}>
                 마지막 영역 되돌리기
               </button>
-              <button className="btn" disabled={!enabled} onClick={() => window.confirm("밝힌 영역을 모두 지울까요?") && send({ type: "fog.clear", data: { sceneId: scene.id } })}>
+              <button className="btn" disabled={!enabled} onClick={() => send({ type: "fog.clear", data: { sceneId: scene.id } })}>
                 영역 모두 지우기
               </button>
             </>

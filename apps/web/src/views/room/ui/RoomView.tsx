@@ -14,6 +14,7 @@ import { useEffectPreference } from "@/features/effect-preference";
 import { SoundControl, useAudioEngine, useAudioPreference } from "@/features/audio-playback";
 import { LoadCharacter } from "@/features/load-character";
 import { useRoom } from "@/features/room-realtime";
+import { UndoButton, useUndo } from "@/features/undo-last";
 import { ConnectionBanner, MyTurnBadge, Toasts, isMyTurn, useRoomNotices, useUnseen } from "@/features/room-notices";
 import { MadnessResultCard } from "@/features/manage-madness";
 import { EndSummaryCard } from "@/features/session-control";
@@ -52,7 +53,8 @@ export function RoomView({ roomId, invite }: { roomId: string; invite?: string }
 
 function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: string }) {
   const { state, connection, closeCode, send, retry, reconnected, sendFailed, authExpired } = useRoom({ roomId, user: me.userId, name: me.name, token: me.token, invite, refresh: me.token && SUPABASE_URL ? refreshStoredSession : undefined });
-  const notices = useRoomNotices({ lastError: state.lastError, sendFailed, reconnected });
+  const notices = useRoomNotices({ lastError: state.lastError, sendFailed, reconnected, lastUndo: state.lastUndo });
+  const { undo, sendWithHint } = useUndo({ enabled: (state.members.find((m) => m.userId === me.userId)?.role ?? "pl") === "kp", send, notify: notices.notify });
   const [guideClosed, setGuideClosed] = useState(false);
   const [plGuideClosed, setPlGuideClosed] = useState(false);
   useEffect(() => setPlGuideClosed(readGuideClosed(roomId)), [roomId]);
@@ -187,8 +189,9 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               <Hint term="fog" label="안개와 시야 설명">안개 켜짐</Hint> · 시야 밖은 어둡게 보여요
             </div>
           )}
+          {isKp && <UndoButton onUndo={undo} />}
           {isKp && shownScene && (
-            <FogToolbar scene={shownScene} selected={selected} partyTokens={objects.filter((o) => o.kind === "token" && o.ownerId)} enabled={canEditBoard} picking={fogPicking} radius={fogRadius} onPicking={setFogPicking} onRadius={setFogRadius} send={send} />
+            <FogToolbar scene={shownScene} selected={selected} partyTokens={objects.filter((o) => o.kind === "token" && o.ownerId)} enabled={canEditBoard} picking={fogPicking} radius={fogRadius} onPicking={setFogPicking} onRadius={setFogRadius} send={sendWithHint} />
           )}
           {isKp && (
             <ObjectToolbar
@@ -198,7 +201,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               objects={objects}
               players={state.members.filter((m) => m.role === "pl")}
               selected={selected}
-              send={send}
+              send={sendWithHint}
               onDeselect={() => setSelectedId(null)}
             />
           )}
