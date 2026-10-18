@@ -20,7 +20,7 @@ describe("판정 효과 설정", () => {
     expect(setup().snapshot(seo).effects).toEqual(DEFAULT_EFFECTS);
   });
 
-  it("KP가 바꾸면 모두에게 알려지고 snapshot에 반영된다", () => {
+  it("GM이 바꾸면 모두에게 알려지고 snapshot에 반영된다", () => {
     const room = setup();
     const r = room.handle(kp, cmd("settings.effects", { level: "hard", enabled: true, intensity: 2 }));
     expect(r.ok && r.out.filter((o) => inAudience(o.audience, seo))).toHaveLength(1);
@@ -36,7 +36,7 @@ describe("판정 효과 설정", () => {
     expect(room.snapshot(kp).effects.critical).toEqual({ enabled: false, intensity: 1 });
   });
 
-  it("KP가 아니면 바꿀 수 없다", () => {
+  it("GM이 아니면 바꿀 수 없다", () => {
     expect(setup().handle(seo, cmd("settings.effects", { level: "fumble", enabled: false }))).toMatchObject({ ok: false, code: "forbidden" });
   });
 

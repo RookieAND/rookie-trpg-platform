@@ -101,7 +101,7 @@ describe("세션 종료 정산", () => {
     expect(room.sessionStatus).toBe("ACTIVE");
   });
 
-  it("바뀐 시트는 주인과 KP에게만 가고, 정산 결과는 모두에게 간다", () => {
+  it("바뀐 시트는 주인과 GM에게만 가고, 정산 결과는 모두에게 간다", () => {
     const { room } = started(fixed(0.7, 0.2, 0.2));
     const outs = must(room.handle(kp, cmd("session.end", { growth: true })));
     const upd = outs.find((o) => o.event.type === "character.updated")!;

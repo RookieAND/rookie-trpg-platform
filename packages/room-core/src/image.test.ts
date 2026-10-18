@@ -33,7 +33,7 @@ describe("이미지 연결", () => {
     expect(room.handle(pl, cmd("object.update", { id: ev.data.id, image: IMG })).ok).toBe(false);
   });
 
-  it("장면 배경은 KP만 바꾸고, 활성 장면이면 PL에게도 알린다", () => {
+  it("장면 배경은 GM만 바꾸고, 활성 장면이면 PL에게도 알린다", () => {
     const room = setup();
     expect(room.handle(pl, cmd("scene.background", { id: "main", image: IMG })).ok).toBe(false);
     const out = must(room.handle(kp, cmd("scene.background", { id: "main", image: IMG })));
@@ -44,7 +44,7 @@ describe("이미지 연결", () => {
     expect(room.handle(kp, cmd("scene.background", { id: "nope", image: IMG })).ok).toBe(false);
   });
 
-  it("비활성 장면의 배경은 KP에게만 알린다", () => {
+  it("비활성 장면의 배경은 GM에게만 알린다", () => {
     const room = setup();
     const ev = must(room.handle(kp, cmd("scene.create", { name: "서재" })))[0]!.event;
     if (ev.type !== "scene.added") throw new Error();

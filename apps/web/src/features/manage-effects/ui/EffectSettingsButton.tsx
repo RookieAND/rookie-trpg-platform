@@ -3,7 +3,7 @@ import { useState } from "react";
 import { EFFECT_LEVELS, LEVEL_LABEL_KO, type ClientCommand, type EffectLevel, type EffectSettings } from "@coc-vtt/shared";
 import { Dialog } from "@/shared/ui";
 
-/** KP가 판정 단계별 효과를 켜고 세기를 정한다. 참가자는 개인 설정으로 끌 수 있다. */
+/** GM이 판정 단계별 효과를 켜고 세기를 정한다. 참가자는 개인 설정으로 끌 수 있다. */
 export function EffectSettingsButton({ effects, send }: { effects: EffectSettings; send: (c: ClientCommand) => unknown }) {
   const [open, setOpen] = useState(false);
   const set = (level: EffectLevel, patch: { enabled?: boolean; intensity?: 1 | 2 | 3 }) => send({ type: "settings.effects", data: { level, ...patch } });

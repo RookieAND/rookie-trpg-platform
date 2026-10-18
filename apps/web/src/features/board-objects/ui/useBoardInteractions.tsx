@@ -13,7 +13,7 @@ const OVERLAY = '[role="dialog"],[role="menu"],[aria-modal="true"],[data-overlay
 
 interface Input {
   me: Caller;
-  /** KP만 오브젝트를 지우고 바꿀 수 있다(서버도 같다). 아니면 Esc·Tab 선택 이동만 쓴다. */
+  /** GM만 오브젝트를 지우고 바꿀 수 있다(서버도 같다). 아니면 Esc·Tab 선택 이동만 쓴다. */
   isKp: boolean;
   /** 지금 보고 있는 장면과 그 장면의 오브젝트 */
   sceneId: string;
@@ -189,7 +189,7 @@ export function useBoardInteractions({ me, isKp, sceneId, objects, selectedId, o
 
   return {
     ui,
-    /** Board 속성으로 넘긴다. KP가 아니면 undefined */
+    /** Board 속성으로 넘긴다. GM이 아니면 undefined */
     boardProps: isKp
       ? {
           onImageFile,

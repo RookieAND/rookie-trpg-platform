@@ -3,7 +3,7 @@ import { useState } from "react";
 import { MAX_MADNESS_ENTRIES, type ClientCommand } from "@coc-vtt/shared";
 import { Dialog } from "@/shared/ui";
 
-/** KP가 광기 증상표를 적는다. 한 줄이 증상 하나이고, 증상표는 KP에게만 보인다. */
+/** GM이 광기 증상표를 적는다. 한 줄이 증상 하나이고, 증상표는 GM에게만 보인다. */
 export function MadnessTableButton({ entries, send }: { entries: string[]; send: (c: ClientCommand) => unknown }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");

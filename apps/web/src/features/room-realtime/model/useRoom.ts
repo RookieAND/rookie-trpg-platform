@@ -21,7 +21,7 @@ interface Params {
   name: string;
   /** 디스코드 로그인 토큰. 있으면 user/name 대신 이것으로 인증한다. */
   token?: string;
-  /** 초대 코드. 이미 멤버이거나 KP면 필요 없다. */
+  /** 초대 코드. 이미 멤버이거나 GM이면 필요 없다. */
   invite?: string;
   /** 만료된 토큰으로 4401을 받았을 때 새 토큰을 받아 오는 함수. */
   refresh?: TokenRefresh;

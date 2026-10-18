@@ -38,7 +38,7 @@ import { SheetPanel, SheetEmpty, type RollOptions } from "@/widgets/sheet-panel"
 
 const REJECTED: Record<number, string> = {
   4401: "로그인 정보가 올바르지 않아요.",
-  4403: "이 룸에 들어갈 수 없어요. 초대 링크가 없거나 만료됐어요. KP에게 새 링크를 받아 주세요.",
+  4403: "이 룸에 들어갈 수 없어요. 초대 링크가 없거나 만료됐어요. GM에게 새 링크를 받아 주세요.",
   4404: "룸을 찾을 수 없어요. 룸을 만든 사람이 지웠을 수 있어요.",
   4409: "룸 인원이 가득 찼어요.",
 };
@@ -80,15 +80,15 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   const role: Role = state.members.find((m) => m.userId === me.userId)?.role ?? "pl";
   const isKp = role === "kp";
   const active = state.sessionStatus === "ACTIVE";
-  // 세션 전(준비 모드)에는 KP도 보드를 만질 수 있다.
-  // 일시정지 중에도 KP는 준비성 편집(토큰·소품·안개·장면·시트·핸드아웃·흐름·음향)을 할 수 있다.
+  // 세션 전(준비 모드)에는 GM도 보드를 만질 수 있다.
+  // 일시정지 중에도 GM은 준비성 편집(토큰·소품·안개·장면·시트·핸드아웃·흐름·음향)을 할 수 있다.
   // 판정·전투·장면 전환처럼 이야기를 앞으로 미는 것만 이어하기 뒤에 한다(서버가 같은 규칙으로 막는다).
   const paused = state.sessionStatus === "PAUSED";
   const canEditBoard = active || isKp;
   const kpAway = active && !isKp && state.kpAwaySince !== null;
   const scenes = useMemo(() => Object.values(state.scenes), [state.scenes]);
-  // KP는 활성이 아닌 장면도 골라 꾸밀 수 있고, 장면이 사라지면 활성 장면으로 돌아온다.
-  // 비트나 단축키로 진행 장면이 바뀌면 KP 화면도 그 장면을 따라간다.
+  // GM은 활성이 아닌 장면도 골라 꾸밀 수 있고, 장면이 사라지면 활성 장면으로 돌아온다.
+  // 비트나 단축키로 진행 장면이 바뀌면 GM 화면도 그 장면을 따라간다.
   useEffect(() => setViewSceneId(null), [state.activeSceneId]);
   const shownSceneId = isKp && viewSceneId && state.scenes[viewSceneId] ? viewSceneId : state.activeSceneId;
   const objects = useMemo(() => Object.values(state.objects).filter((o) => o.sceneId === shownSceneId), [state.objects, shownSceneId]);
@@ -102,7 +102,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   const endBeat = state.flow?.beats.find((b) => b.id === state.flow?.current && b.kind === "ending");
   const endingDefaults = endBeat ? { name: endBeat.name, ...(endBeat.sanReward ? { sanReward: endBeat.sanReward } : {}) } : undefined;
   const selected = selectedId ? state.objects[selectedId] : undefined;
-  // 안개: KP는 설정(밝힌 영역 + 시야 토큰)으로 미리 보고, 나머지는 서버가 알려 준 지금 보이는 원들을 쓴다.
+  // 안개: GM은 설정(밝힌 영역 + 시야 토큰)으로 미리 보고, 나머지는 서버가 알려 준 지금 보이는 원들을 쓴다.
   const shownScene = state.scenes[shownSceneId];
   const fogView = useMemo(() => {
     if (isKp) {
@@ -195,12 +195,12 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
 
       <div className="body">
         <main className="board">
-          {kpAway && <div className="banner" role="status" data-testid="kp-away-banner">KP 연결이 끊겼어요. 잠시 기다려요.</div>}
-          {paused && <div className="banner" role="status">세션이 일시정지 중이에요. KP가 돌아오면 이어서 진행해요.</div>}
+          {kpAway && <div className="banner" role="status" data-testid="kp-away-banner">GM 연결이 끊겼어요. 잠시 기다려요.</div>}
+          {paused && <div className="banner" role="status">세션이 일시정지 중이에요. GM이 돌아오면 이어서 진행해요.</div>}
           {role === "pl" && <AskBanner asks={state.rollAsks} userId={me.userId} canRoll={active} hasCharacter={characters.some((c) => c.ownerId === me.userId)} onRoll={(name, difficulty) => { const mine = characters.find((c) => c.ownerId === me.userId); if (!mine) return; send({ type: "roll.request", data: { secret: false, skill: { characterId: mine.id, name, bonus: 0, ...(difficulty ? { difficulty } : {}) } } }); setTab("roll"); }} />}
           {myTurn && state.initiative && <MyTurnBadge round={state.initiative.round} lowered={isKp} onOpen={() => setTab("combat")} />}
           {state.sessionStatus === "IDLE" && !isKp && (
-            <div className="banner" role="status">KP가 세션을 시작하기를 기다리고 있어요.</div>
+            <div className="banner" role="status">GM이 세션을 시작하기를 기다리고 있어요.</div>
           )}
           {showPlayerGuide({ role, ready: state.ready, sessionStatus: state.sessionStatus, closed: plGuideClosed }) && (
             <PlayerGuide spectator={role === "spectator"} steps={playerGuideSteps({ role, userId: me.userId, characters, rolls: state.rolls, handouts: handoutList, hasToken })} onClose={() => { setPlGuideClosed(true); writeGuideClosed(roomId); }} />
@@ -223,7 +223,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
             <StageCues roomId={roomId} enabled={state.sessionStatus !== "PAUSED"} send={send} source={cueSource} />
           )}
           {role === "pl" && state.ready && !hasToken && state.sessionStatus !== "PAUSED" && (
-            <div className="dock dock-hint" role="status" data-testid="no-token-hint">아직 내 토큰이 없어요. KP에게 요청하거나 기다려요</div>
+            <div className="dock dock-hint" role="status" data-testid="no-token-hint">아직 내 토큰이 없어요. GM에게 요청하거나 기다려요</div>
           )}
           <SceneTransition fade={fade} />
           {!isKp && board.name && <div className="scene-name" data-testid="scene-name">{board.name}</div>}

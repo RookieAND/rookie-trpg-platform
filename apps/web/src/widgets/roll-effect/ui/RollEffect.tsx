@@ -8,7 +8,7 @@ export { isStaleEvent as isStaleRoll } from "@/shared/lib";
 
 /**
  * 새 판정이 들어오면 단계에 맞는 화면 효과를 재생한다. 접속·재접속 때 이미 있던 굴림은 재생하지 않는다.
- * KP 설정(켜기·세기)과 내 설정(enabled)을 모두 통과해야 보인다.
+ * GM 설정(켜기·세기)과 내 설정(enabled)을 모두 통과해야 보인다.
  */
 export function RollEffect({ rolls, ready, effects, enabled }: { rolls: RollLogEntry[]; ready: boolean; effects: EffectSettings; enabled: boolean }) {
   const lastId = useRef<string | null | undefined>(undefined);

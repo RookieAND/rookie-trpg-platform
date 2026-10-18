@@ -22,7 +22,7 @@ export function JoinView({ roomId, invite }: { roomId: string; invite: string })
           e instanceof ApiError && e.status === 404
             ? "룸을 찾을 수 없어요. 링크를 다시 확인해 주세요."
             : e instanceof ApiError && e.status === 403
-              ? "이 초대 링크는 사용할 수 없어요. 만료됐거나 인원이 가득 찼을 수 있어요. KP에게 새 링크를 받아 주세요."
+              ? "이 초대 링크는 사용할 수 없어요. 만료됐거나 인원이 가득 찼을 수 있어요. GM에게 새 링크를 받아 주세요."
               : "서버에 연결하지 못했어요.",
         ),
       );

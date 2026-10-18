@@ -12,7 +12,7 @@ const EXPIRY: Array<{ label: string; minutes: number | null }> = [
 ];
 
 /**
- * KP가 초대 링크를 보고 복사한다. 창을 여는 것만으로는 링크가 바뀌지 않는다.
+ * GM이 초대 링크를 보고 복사한다. 창을 여는 것만으로는 링크가 바뀌지 않는다.
  * 만료·인원을 정해 "새 링크 만들기"를 누를 때만 새 코드가 발급되고, 이전 링크는 못 쓰게 된다.
  */
 export function InviteButton({ me, roomId }: { me: Identity; roomId: string }) {

@@ -26,7 +26,7 @@ describe("굴림 기록 내보내기", () => {
     expect(text.indexOf("먼저")).toBeLessThan(text.indexOf("나중"));
   });
 
-  it("비밀·푸시·행운 표시를 달고, KP가 아니면 안내를 붙인다", () => {
+  it("비밀·푸시·행운 표시를 달고, GM이 아니면 안내를 붙인다", () => {
     const rolls = [entry({ secret: true, pushOf: "x" })];
     expect(formatRollLog(rolls, { isKp: true, timeZone: "UTC" })).toContain("(비밀, 푸시)");
     expect(formatRollLog(rolls, { isKp: true, timeZone: "UTC" })).not.toContain("볼 수 있었던");

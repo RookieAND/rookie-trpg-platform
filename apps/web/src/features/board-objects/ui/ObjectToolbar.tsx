@@ -5,7 +5,7 @@ import type { Caller } from "@/shared/api";
 import { ImageUploadButton } from "@/shared/ui";
 import { uniqueName } from "../model/names";
 
-/** KP가 보드에 토큰·소품을 놓고, 숨기고, 지운다. */
+/** GM이 보드에 토큰·소품을 놓고, 숨기고, 지운다. */
 export function ObjectToolbar({
   me,
   enabled,
@@ -18,7 +18,7 @@ export function ObjectToolbar({
 }: {
   me: Caller;
   enabled: boolean;
-  /** 오브젝트를 놓을 장면(KP가 보고 있는 장면) */
+  /** 오브젝트를 놓을 장면(GM이 보고 있는 장면) */
   sceneId: string;
   /** 지금 장면의 오브젝트(기본 이름이 겹치지 않게 보는 데 쓴다) */
   objects: GameObject[];

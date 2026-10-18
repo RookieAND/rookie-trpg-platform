@@ -48,7 +48,7 @@ describe("토큰 소유자·이름·빈자리", () => {
     expect([b.x, b.y]).toEqual([500, 400]);
   });
 
-  it("KP만 소유자를 바꾸고, 룸의 PL만 소유자가 될 수 있다", () => {
+  it("GM만 소유자를 바꾸고, 룸의 PL만 소유자가 될 수 있다", () => {
     const { room, add } = setup();
     const t = add("토큰", { ownerId: "pl1" });
     expect(room.handle(pl1, cmd("object.update", { id: t.id, ownerId: "pl2" })).ok).toBe(false);
@@ -119,7 +119,7 @@ describe("장면 전환에 PL 토큰이 따라옴", () => {
     expect(mine).toHaveLength(1);
     expect(mine[0]!.sceneId).toBe(sceneId);
     expect(mine[0]!.name).toBe("서하");
-    // PL은 장면 목록으로 받고 KP는 object.added로 받는다
+    // PL은 장면 목록으로 받고 GM은 object.added로 받는다
     expect(toUser(out, "object.added", "kp1")).toHaveLength(1);
     expect(toUser(out, "object.added", "pl1")).toHaveLength(0);
   });

@@ -107,7 +107,7 @@ const api = async (method: string, path: string, user: string, body?: unknown) =
   return { status: res.status, json: text ? JSON.parse(text) : null };
 };
 
-/** KP(하늘)가 룸을 만들고 초대 코드를 돌려준다. */
+/** GM(하늘)가 룸을 만들고 초대 코드를 돌려준다. */
 const makeRoom = async (name = "안개 낀 저택") => {
   const r = await api("POST", "/rooms", "kp1", { name });
   return { id: r.json.id as string, invite: r.json.invite.code as string };
@@ -118,7 +118,7 @@ interface Who {
   name: string;
   role?: string;
 }
-const KP: Who = { user: "kp1", name: "하늘", role: "kp" };
+const GM: Who = { user: "kp1", name: "하늘", role: "kp" };
 const SEO: Who = { user: "pl1", name: "윤서하" };
 const HAN: Who = { user: "pl2", name: "한도윤" };
 
@@ -137,10 +137,10 @@ const connect = async (room: { id: string; invite: string }, who: Who) => {
 
 const isType = (t: string) => (m: ServerMessage) => m.event.type === t;
 
-/** KP가 접속해 세션을 시작한 룸 */
+/** GM이 접속해 세션을 시작한 룸 */
 const startedRoom = async () => {
   const room = await makeRoom();
-  const kp = await connect(room, KP);
+  const kp = await connect(room, GM);
   kp.cmd("session.start", {});
   await kp.waitFor(isType("session.started"));
   return { room, kp };
@@ -149,7 +149,7 @@ const startedRoom = async () => {
 describe("접속 권한", () => {
   it("snapshot을 받고 서로의 접속을 본다", async () => {
     const room = await makeRoom();
-    const kp = await connect(room, KP);
+    const kp = await connect(room, GM);
     const pl = await connect(room, SEO);
     await kp.waitFor((m) => m.event.type === "presence" && m.event.data.members.length === 2);
     const snap = pl.messages.find(isType("snapshot"));
@@ -182,15 +182,15 @@ describe("접속 권한", () => {
     expect(await wrong.closed).toBe(4403);
   });
 
-  it("주인이 아니면 KP를 요청해도 거절한다", async () => {
+  it("주인이 아니면 GM을 요청해도 거절한다", async () => {
     const room = await makeRoom();
     const c = new Client(port, { room: room.id, user: "pl1", name: "윤서하", role: "kp", invite: room.invite });
     expect(await c.closed).toBe(4403);
   });
 
-  it("주인은 어떤 역할을 요청해도 KP다", async () => {
+  it("주인은 어떤 역할을 요청해도 GM이다", async () => {
     const room = await makeRoom();
-    const c = await connect(room, { ...KP, role: "pl" });
+    const c = await connect(room, { ...GM, role: "pl" });
     const snap = c.messages.find(isType("snapshot"));
     expect(snap?.event.type === "snapshot" && snap.event.data.members[0]?.role).toBe("kp");
   });
@@ -217,7 +217,7 @@ describe("접속 권한", () => {
     const room = await makeRoom();
     const r = await api("POST", `/rooms/${room.id}/invite`, "kp1", { maxMembers: 2 });
     const code = r.json.code as string;
-    await connect({ id: room.id, invite: code }, KP);
+    await connect({ id: room.id, invite: code }, GM);
     await connect({ id: room.id, invite: code }, SEO);
     const c = new Client(port, { room: room.id, user: "pl2", name: "한도윤", invite: code });
     expect(await c.closed).toBe(4409);
@@ -242,7 +242,7 @@ describe("실시간 동작", () => {
     }
   });
 
-  it("KP의 비밀 굴림은 PL에게 결과가 전달되지 않는다", async () => {
+  it("GM의 비밀 굴림은 PL에게 결과가 전달되지 않는다", async () => {
     const { room, kp } = await startedRoom();
     const pl = await connect(room, SEO);
     kp.cmd("roll.request", { expr: "1d100", secret: true });
@@ -263,7 +263,7 @@ describe("실시간 동작", () => {
     expect(names).toEqual(["책상"]);
   });
 
-  it("KP가 나가도 유예 동안은 정지하지 않고, 유예가 지나면 PL이 자동 정지를 받는다", async () => {
+  it("GM이 나가도 유예 동안은 정지하지 않고, 유예가 지나면 PL이 자동 정지를 받는다", async () => {
     const { room, kp } = await startedRoom();
     const pl = await connect(room, SEO);
     await kp.close();
@@ -280,12 +280,12 @@ describe("실시간 동작", () => {
     await pl.waitFor((m) => m.event.type === "error" && m.event.data.code === "paused");
   });
 
-  it("유예 안에 KP가 돌아오면 정지 없이 계속된다", async () => {
+  it("유예 안에 GM이 돌아오면 정지 없이 계속된다", async () => {
     const { room, kp } = await startedRoom();
     const pl = await connect(room, SEO);
     await kp.close();
     await pl.waitFor(isType("kp.away"));
-    const kp2 = await open(room, KP);
+    const kp2 = await open(room, GM);
     await kp2.waitFor(isType("snapshot"));
     await pl.waitFor(isType("kp.back"));
     await new Promise((r) => setTimeout(r, 350)); // 유예(150ms)가 지나도
@@ -294,29 +294,29 @@ describe("실시간 동작", () => {
     await pl.waitFor(isType("roll.result"));
   });
 
-  it("자동 정지 뒤 KP가 돌아오면 자동 재개하고, KP가 직접 멈춘 세션은 그대로 둔다", async () => {
+  it("자동 정지 뒤 GM이 돌아오면 자동 재개하고, GM이 직접 멈춘 세션은 그대로 둔다", async () => {
     const { room, kp } = await startedRoom();
     const pl = await connect(room, SEO);
     await kp.close();
     await pl.waitFor(isType("session.paused"));
-    const kp2 = await open(room, KP);
+    const kp2 = await open(room, GM);
     await pl.waitFor(isType("session.resumed"));
     const snap = await kp2.waitFor(isType("snapshot"));
     expect(snap.event.type === "snapshot" && snap.event.data.sessionStatus).toBe("ACTIVE");
     pl.cmd("roll.request", { expr: "1d100" });
     await pl.waitFor(isType("roll.result"));
 
-    // KP가 직접 멈춘 경우
+    // GM이 직접 멈춘 경우
     kp2.cmd("session.pause", {});
     await pl.waitFor((m) => m.event.type === "session.paused" && m.event.data.reason === "kp_request");
     await kp2.close();
     await new Promise((r) => setTimeout(r, 350));
-    const kp3 = await open(room, KP);
+    const kp3 = await open(room, GM);
     const snap3 = await kp3.waitFor(isType("snapshot"));
     expect(snap3.event.type === "snapshot" && snap3.event.data).toMatchObject({ sessionStatus: "PAUSED", pauseReason: "kp_request" });
   });
 
-  it("정지 중에도 KP는 준비성 편집을 할 수 있고, 굴림은 막힌다", async () => {
+  it("정지 중에도 GM은 준비성 편집을 할 수 있고, 굴림은 막힌다", async () => {
     const { room, kp } = await startedRoom();
     kp.cmd("session.pause", {});
     await kp.waitFor(isType("session.paused"));
@@ -327,11 +327,11 @@ describe("실시간 동작", () => {
     expect(room.id).toBeTruthy();
   });
 
-  it("KP 새로고침(연결을 닫고 곧바로 다시 붙임)에는 정지 이벤트가 없다", async () => {
+  it("GM 새로고침(연결을 닫고 곧바로 다시 붙임)에는 정지 이벤트가 없다", async () => {
     const { room, kp } = await startedRoom();
     const pl = await connect(room, SEO);
     await kp.close();
-    const kp2 = await open(room, KP);
+    const kp2 = await open(room, GM);
     await kp2.waitFor(isType("snapshot"));
     await new Promise((r) => setTimeout(r, 350));
     expect(pl.types()).not.toContain("session.paused");
@@ -340,7 +340,7 @@ describe("실시간 동작", () => {
 
   it("세션 시작 전에는 PL의 굴림이 막힌다", async () => {
     const room = await makeRoom();
-    await connect(room, KP);
+    await connect(room, GM);
     const pl = await connect(room, SEO);
     pl.cmd("roll.request", { expr: "1d100" });
     await pl.waitFor((m) => m.event.type === "error" && m.event.data.code === "idle");
@@ -416,14 +416,14 @@ describe("REST", () => {
 });
 
 describe("저장과 복원", () => {
-  it("서버를 다시 켜도 룸 상태가 남고, 진행 중이던 세션은 자동 정지로 돌아와 KP가 들어오면 재개된다", async () => {
+  it("서버를 다시 켜도 룸 상태가 남고, 진행 중이던 세션은 자동 정지로 돌아와 GM이 들어오면 재개된다", async () => {
     await app.close();
     const dir = mkdtempSync(join(tmpdir(), "coc-vtt-"));
     try {
       ({ app, port } = await boot({ store: new FileRoomRepository(dir) }));
       base = `http://127.0.0.1:${port}`;
       const room = await makeRoom("붉은 달의 의식");
-      const kp = await connect(room, KP);
+      const kp = await connect(room, GM);
       const pl = await connect(room, SEO);
       kp.cmd("session.start", {});
       await kp.waitFor(isType("session.started"));
@@ -439,17 +439,17 @@ describe("저장과 복원", () => {
       const mine = await api("GET", "/rooms", "kp1");
       expect(mine.json).toEqual([expect.objectContaining({ id: room.id, name: "붉은 달의 의식", sessionStatus: "PAUSED", sessionNumber: 1 })]);
 
-      // KP보다 먼저 들어온 PL은 자동 정지 상태를 본다
+      // GM보다 먼저 들어온 PL은 자동 정지 상태를 본다
       const pl1 = await connect({ id: room.id, invite: "" }, SEO);
       const plSnap = pl1.messages.find(isType("snapshot"));
       expect(plSnap?.event.type === "snapshot" && plSnap.event.data).toMatchObject({ sessionStatus: "PAUSED", pauseReason: "kp_disconnected" });
 
-      const kp2 = await open(room, KP);
+      const kp2 = await open(room, GM);
       const snap = await kp2.waitFor(isType("snapshot"));
       if (snap.event.type !== "snapshot") throw new Error();
       expect(snap.event.data.objects.map((o) => o.name)).toEqual(["윤서하"]);
       expect(snap.event.data.rolls).toHaveLength(1);
-      // KP가 들어오면 별도 이어하기 없이 자동 재개된다
+      // GM이 들어오면 별도 이어하기 없이 자동 재개된다
       expect(snap.event.data.sessionStatus).toBe("ACTIVE");
       await pl1.waitFor(isType("session.resumed"));
       // 복원된 PL은 초대 코드 없이도 다시 들어올 수 있다
@@ -469,7 +469,7 @@ describe("저장과 복원", () => {
       ({ app, port } = await boot({ store }));
       base = `http://127.0.0.1:${port}`;
       const room = await makeRoom();
-      const kp = await connect(room, KP);
+      const kp = await connect(room, GM);
       kp.cmd("session.start", {});
       kp.cmd("object.add", { kind: "prop", name: "책상", x: 1, y: 1 });
       await kp.waitFor(isType("object.added"));

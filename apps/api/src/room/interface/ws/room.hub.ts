@@ -44,18 +44,18 @@ export interface HubOptions {
   /** 이 간격으로 ping을 보내고, 직전 ping에 응답이 없던 연결은 끊는다. 0이면 끈다. */
   heartbeatMs?: number;
   now?: () => number;
-  /** KP의 마지막 연결이 닫힌 뒤 정지하기까지의 유예(ms). 기본 30초 */
+  /** GM의 마지막 연결이 닫힌 뒤 정지하기까지의 유예(ms). 기본 30초 */
   kpAwayGraceMs?: number;
 }
 
 export const HEARTBEAT_MS = 30_000;
 
-/** KP의 마지막 연결이 닫힌 뒤 정지하기까지 기다리는 시간. 새로고침·잠깐의 끊김을 넘기기 위한 유예다. */
+/** GM의 마지막 연결이 닫힌 뒤 정지하기까지 기다리는 시간. 새로고침·잠깐의 끊김을 넘기기 위한 유예다. */
 export const KP_AWAY_GRACE_MS = 30_000;
 
 export class RoomHub {
   private conns = new Map<string, Set<Conn>>();
-  /** 룸마다 KP 유예 타이머. 시계는 룸 엔진이 아니라 여기서 쥔다. */
+  /** 룸마다 GM 유예 타이머. 시계는 룸 엔진이 아니라 여기서 쥔다. */
   private graceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private closing = false;
   /** 하트비트 대상. 룸에 붙기 전 연결도 포함한다. */
@@ -111,7 +111,7 @@ export class RoomHub {
     this.graceTimers.delete(roomId);
   }
 
-  /** KP 유예를 시작한다. 시간이 다 될 때까지 KP가 안 돌아오면 룸이 자동 정지한다. */
+  /** GM 유예를 시작한다. 시간이 다 될 때까지 GM이 안 돌아오면 룸이 자동 정지한다. */
   private startGrace(entry: LoadedRoom) {
     const roomId = entry.meta.id;
     this.clearGrace(roomId);
@@ -255,7 +255,7 @@ export class RoomHub {
       const seen = new Set(missed?.map((m) => m.seq));
       const fresh = presence.filter((p) => !seen.has(p.seq));
       this.deliver(roomId, fresh);
-      // KP가 유예 안에 돌아왔으면 타이머를 끄고, 자동 정지였다면 재개됐다는 알림도 보낸다.
+      // GM이 유예 안에 돌아왔으면 타이머를 끄고, 자동 정지였다면 재개됐다는 알림도 보낸다.
       if (entry.room.kpAway === null) this.clearGrace(roomId);
       this.notifier?.publish(entry.meta, fresh);
       this.registry.markChanged(entry, fresh.some((p) => p.event.type === "session.resumed"));

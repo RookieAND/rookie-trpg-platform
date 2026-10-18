@@ -5,10 +5,10 @@ const meta = { ownerId: "kp", invite: { code: "abc", expiresAt: 1000, maxMembers
 const members = [{ userId: "pl1", role: "pl" as const }];
 
 describe("decideJoin", () => {
-  it("주인은 늘 KP로 들어온다(초대 불필요)", () => {
+  it("주인은 늘 GM으로 들어온다(초대 불필요)", () => {
     expect(decideJoin(meta, [], "kp", "pl", null, 5000)).toEqual({ ok: true, role: "kp" });
   });
-  it("주인이 아니면 KP로 들어올 수 없다", () => {
+  it("주인이 아니면 GM으로 들어올 수 없다", () => {
     expect(decideJoin(meta, members, "x", "kp", "abc", 0)).toMatchObject({ ok: false, reason: "not_owner" });
   });
   it("이미 멤버인 사람은 코드 없이, 원래 역할로 들어온다", () => {

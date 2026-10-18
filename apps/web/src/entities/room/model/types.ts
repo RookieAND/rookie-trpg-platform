@@ -32,7 +32,7 @@ export const SESSION_STATUS_LABEL: Record<SessionStatus, string> = {
   PAUSED: "일시정지",
 };
 
-export const ROLE_LABEL: Record<RoomRole, string> = { kp: "KP", pl: "PL", spectator: "관전자" };
+export const ROLE_LABEL: Record<RoomRole, string> = { kp: "GM", pl: "PL", spectator: "관전자" };
 
 export interface DiscordSettings {
   connected: boolean;

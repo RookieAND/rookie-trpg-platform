@@ -46,7 +46,7 @@ export interface Character {
   id: string;
   /** 보관함에서 불러왔다면 원본 id */
   vaultId?: string;
-  /** 시트의 주인. NPC는 KP가 만든다. */
+  /** 시트의 주인. NPC는 GM이 만든다. */
   ownerId: string;
   name: string;
   age: number;
@@ -64,7 +64,7 @@ export interface Character {
   weapons?: Weapon[];
   /** 중상·기절·죽어감 표시. 룸 안에서만 쓰고 보관함에는 저장하지 않는다. */
   conditions?: Condition[];
-  /** 광기 상태. KP가 해제한다. 없으면 정상. */
+  /** 광기 상태. GM이 해제한다. 없으면 정상. */
   madness?: Madness;
   sanDay?: SanDay;
   /** 바뀔 때마다 1씩 오른다. */

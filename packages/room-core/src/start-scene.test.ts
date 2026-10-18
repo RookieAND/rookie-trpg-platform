@@ -21,7 +21,7 @@ const setup = () => {
 };
 
 describe("시작 장면", () => {
-  it("KP만 정하고, 지정은 하나만 남는다", () => {
+  it("GM만 정하고, 지정은 하나만 남는다", () => {
     const { room, hall } = setup();
     expect(room.handle(pl, cmd("scene.setStart", { id: hall })).ok).toBe(false);
     must(room.handle(kp, cmd("scene.setStart", { id: "main" })));

@@ -11,7 +11,7 @@ export interface InviteConfig {
 export interface RoomMeta {
   id: string;
   name: string;
-  /** 룸을 만든 사용자. 이 사용자만 KP가 된다. */
+  /** 룸을 만든 사용자. 이 사용자만 GM이 된다. */
   ownerId: string;
   createdAt: number;
   invite: InviteConfig;

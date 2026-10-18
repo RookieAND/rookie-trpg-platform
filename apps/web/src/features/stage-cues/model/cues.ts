@@ -14,7 +14,7 @@ export interface CueSource {
   scenes: Scene[];
   activeSceneId: string;
   handouts: Handout[];
-  /** KP가 지금 보고 있는 장면의 오브젝트 */
+  /** GM이 지금 보고 있는 장면의 오브젝트 */
   objects: GameObject[];
 }
 

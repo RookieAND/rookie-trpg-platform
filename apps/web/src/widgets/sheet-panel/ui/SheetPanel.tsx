@@ -8,7 +8,7 @@ import { CHARACTERISTIC_KEYS, CONDITIONS, CONDITION_LABEL_KO, deriveCharacter, f
 export interface RollOptions {
   bonus: number;
   difficulty?: "regular" | "hard" | "extreme";
-  /** KP만. 결과를 KP에게만 보인다. */
+  /** GM만. 결과를 GM에게만 보인다. */
   secret?: boolean;
 }
 
@@ -18,7 +18,7 @@ interface Props {
   onSelect: (id: string) => void;
   /** 세션이 진행 중이고 관전자가 아닐 때만 true */
   canAct: boolean;
-  /** 수치·상태·메모 편집. 판정(굴림·SAN 체크)은 canAct. KP는 세션 밖·일시정지 중에도 고칠 수 있다. 생략하면 canAct를 따른다. */
+  /** 수치·상태·메모 편집. 판정(굴림·SAN 체크)은 canAct. GM은 세션 밖·일시정지 중에도 고칠 수 있다. 생략하면 canAct를 따른다. */
   canEdit?: boolean;
   /** 소지품·인물 배경·메모. 세션 전에도 고칠 수 있어서 canEdit와 따로 둔다. 생략하면 canEdit를 따른다. */
   canEditText?: boolean;
@@ -29,7 +29,7 @@ interface Props {
   onNewDay: (characterId: string) => void;
   onMadnessRoll: (characterId: string, mode: "realtime" | "summary") => void;
   onDamage: (characterId: string, weaponIndex: number) => void;
-  /** 이 캐릭터를 룸에서 뺄 수 있을 때만 준다(KP는 늘, PL은 첫 세션 전) */
+  /** 이 캐릭터를 룸에서 뺄 수 있을 때만 준다(GM은 늘, PL은 첫 세션 전) */
   onRemove?: (characterId: string) => void;
 }
 
@@ -151,7 +151,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
             <Hint term="difficulty" label="난이도 설명" />
           </div>
           {isKp && (
-            <label className="check" title="결과는 KP에게만 보여요. 한 번만 적용돼요.">
+            <label className="check" title="결과는 GM에게만 보여요. 한 번만 적용돼요.">
               <input type="checkbox" aria-label="비밀 판정" checked={secret} onChange={(e) => setSecret(e.target.checked)} style={{ accentColor: "#7c86f7" }} />
               비밀 판정
             </label>

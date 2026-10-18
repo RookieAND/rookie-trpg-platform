@@ -11,7 +11,7 @@ export interface KeyEventLike {
 }
 
 export interface KeyContext {
-  /** KP만 지우고 복제할 수 있다(서버도 같은 규칙이다) */
+  /** GM만 지우고 복제할 수 있다(서버도 같은 규칙이다) */
   canEdit: boolean;
   hasSelection: boolean;
   /** 대화상자·메뉴·떠 있는 상자가 열려 있다 */

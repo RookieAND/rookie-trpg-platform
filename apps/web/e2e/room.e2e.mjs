@@ -1,4 +1,4 @@
-// 두 브라우저(KP, PL)로 실제 화면을 조작해 실시간 동작을 확인한다.
+// 두 브라우저(GM, PL)로 실제 화면을 조작해 실시간 동작을 확인한다.
 // 사전 조건: pnpm dev:realtime(=api), pnpm dev:web 이 떠 있어야 한다.
 import { chromium } from "playwright-core";
 import assert from "node:assert/strict";
@@ -45,7 +45,7 @@ const login = async (page, name) => {
 };
 
 try {
-  // KP: 로그인 → 새 룸 → 세션 시작 전 상태
+  // GM: 로그인 → 새 룸 → 세션 시작 전 상태
   const kp = await (await ctx()).newPage();
   await login(kp, "하늘");
   await kp.getByLabel("새 룸 이름").fill(ROOM);
@@ -54,7 +54,7 @@ try {
   const roomUrl = kp.url();
   await kp.getByTestId("connection").getByText("연결됨").waitFor();
   await kp.getByText("세션 시작 전이에요").waitFor();
-  step("KP가 룸을 만들고 입장 (세션 시작 전)");
+  step("GM이 룸을 만들고 입장 (세션 시작 전)");
 
   // 초대 링크 받기
   await kp.getByRole("button", { name: "초대", exact: true }).click();
@@ -66,7 +66,7 @@ try {
   await kp.getByRole("button", { name: "초대", exact: true }).click();
   assert.equal(await kp.getByLabel("초대 링크 주소").inputValue(), inviteLink);
   await kp.keyboard.press("Escape");
-  step("KP가 초대 링크를 만듦(다시 열어도 같은 링크)");
+  step("GM이 초대 링크를 만듦(다시 열어도 같은 링크)");
 
   // 디스코드 알림: 잘못된 주소는 거절, 올바른 형식은 저장되고 연결됨으로 보임
   await openSettings(kp);
@@ -80,7 +80,7 @@ try {
   await kp.getByText("채널이 연결돼 있어요").waitFor();
   await kp.keyboard.press("Escape");
   assert.equal(await kp.getByRole("dialog").count(), 0);
-  step("KP가 디스코드 웹훅을 연결함(주소는 다시 보여 주지 않음)");
+  step("GM이 디스코드 웹훅을 연결함(주소는 다시 보여 주지 않음)");
 
   // 초대 없이 들어오려는 사람은 막힘
   const stranger = await (await ctx()).newPage();
@@ -97,15 +97,15 @@ try {
   await pl.getByRole("button", { name: "PL로 입장" }).click();
   await pl.getByTestId("connection").getByText("연결됨").waitFor();
   await kp.getByText("접속 하늘, 서하").waitFor();
-  await pl.getByText("KP가 세션을 시작하기를 기다리고").waitFor();
-  step("PL이 초대 링크로 입장, KP 화면에 보임");
+  await pl.getByText("GM이 세션을 시작하기를 기다리고").waitFor();
+  step("PL이 초대 링크로 입장, GM 화면에 보임");
 
-  // 세션 시작 전에는 PL이 굴릴 수 없고, KP가 시작하면 열림
+  // 세션 시작 전에는 PL이 굴릴 수 없고, GM이 시작하면 열림
   assert.equal(await pl.getByLabel("굴림 식").isDisabled(), true);
   await kp.getByRole("button", { name: "세션 시작" }).click();
   await pl.getByTestId("session-status").getByText("진행 중").waitFor();
   assert.equal(await pl.getByLabel("굴림 식").isDisabled(), false);
-  step("KP가 세션을 시작하면 PL 입력이 열림");
+  step("GM이 세션을 시작하면 PL 입력이 열림");
 
   // 로비 목록에 룸이 보임
   const lobby = await (await ctx()).newPage();
@@ -295,7 +295,7 @@ try {
   await pl.getByTestId("stat-hp").getByText("9/10").waitFor();
   await kp.getByRole("tab", { name: "시트" }).click();
   await kp.getByTestId("stat-hp").getByText("9/10").waitFor();
-  step("PL의 HP 변경이 KP 시트에도 반영됨");
+  step("PL의 HP 변경이 GM 시트에도 반영됨");
 
   await pl.getByRole("button", { name: "도서관 이용 굴리기" }).click();
   await kp.getByRole("tab", { name: "굴림" }).click();
@@ -400,7 +400,7 @@ try {
   assert.ok(combatChecked, "격투 실패가 나오지 않았어요");
   step("전투 판정은 푸시 버튼이 없고 이유가 보임");
 
-  // 광기: KP가 상태를 지정하면 PL 시트에 표시, 증상표에서 굴리면 주인과 KP만 본다
+  // 광기: GM이 상태를 지정하면 PL 시트에 표시, 증상표에서 굴리면 주인과 GM만 본다
   await openSettings(kp);
   await kp.getByRole("button", { name: "광기표", exact: true }).click();
   await kp.getByLabel("증상 목록").fill("공포에 얼어붙는다\n비명을 지르며 달아난다");
@@ -421,9 +421,9 @@ try {
   await pl.getByTestId("madness-badge").waitFor({ state: "detached" });
   await pl.getByRole("tab", { name: "굴림" }).click();
   await kp.getByRole("tab", { name: "굴림" }).click();
-  step("광기 상태 표시, 증상 굴림은 주인과 KP에게만, 해제하면 사라짐");
+  step("광기 상태 표시, 증상 굴림은 주인과 GM에게만, 해제하면 사라짐");
 
-  // 판정 요청: KP가 요청하면 PL 화면에 배너가 뜨고, 누르면 내 캐릭터로 굴려짐
+  // 판정 요청: GM이 요청하면 PL 화면에 배너가 뜨고, 누르면 내 캐릭터로 굴려짐
   await openAsk(kp);
   await kp.getByLabel("요청할 기능").fill("도서관 이용");
   await kp.getByRole("button", { name: "요청 보내기" }).click();
@@ -432,7 +432,7 @@ try {
   await askBanner.getByRole("button", { name: "굴리기" }).click();
   await askBanner.waitFor({ state: "detached" });
   await pl.getByTestId("roll-entry").getByText(`${CHAR} · 도서관 이용`).first().waitFor();
-  step("KP가 판정을 요청하면 PL에게 배너가 뜨고, 굴리기를 누르면 내 캐릭터로 굴림");
+  step("GM이 판정을 요청하면 PL에게 배너가 뜨고, 굴리기를 누르면 내 캐릭터로 굴림");
 
   // 탭 목록은 화살표 키로 옮길 수 있다
   await pl.getByRole("tab", { name: "굴림" }).focus();
@@ -456,7 +456,7 @@ try {
   await kp.getByTestId("conditions").getByRole("button", { name: "중상", pressed: false }).waitFor();
   await pl.getByRole("tab", { name: "굴림" }).click();
   await kp.getByRole("tab", { name: "굴림" }).click();
-  step("무기 피해 굴림이 로그에 남고, 중상 상태와 소지품이 KP 시트에 반영됨");
+  step("무기 피해 굴림이 로그에 남고, 중상 상태와 소지품이 GM 시트에 반영됨");
 
   // 핸드아웃: 초안 → 특정 PL에게 공개 → 다시 초안
   await kp.getByRole("tab", { name: "핸드아웃" }).click();
@@ -473,7 +473,7 @@ try {
   await pl.getByTestId("handout-item").getByText("낡은 편지").waitFor();
   await pl.getByTestId("handout-item").getByText("낡은 편지").click();
   await pl.getByText("자정에 서재로 와 주게.").waitFor();
-  step("KP가 공개한 핸드아웃이 PL에게 나타나고 내용을 읽을 수 있음");
+  step("GM이 공개한 핸드아웃이 PL에게 나타나고 내용을 읽을 수 있음");
 
   await kp.getByRole("button", { name: "펼쳐 보이기" }).click();
   await pl.getByRole("dialog", { name: "핸드아웃" }).getByText("자정에 서재로 와 주게.").waitFor();
@@ -485,7 +485,7 @@ try {
   }
   await pl.getByRole("dialog").getByRole("button", { name: "닫기" }).click();
   assert.equal(await pl.getByRole("dialog").count(), 0);
-  step("KP가 펼쳐 보이면 PL 화면 가운데에 핸드아웃이 뜨고 닫을 수 있음");
+  step("GM이 펼쳐 보이면 PL 화면 가운데에 핸드아웃이 뜨고 닫을 수 있음");
 
   await kp.getByRole("button", { name: "편집" }).click();
   await kp.getByLabel("공개 범위").selectOption("gm");
@@ -496,10 +496,10 @@ try {
   await pl.getByRole("tab", { name: "굴림" }).click();
 
 
-  // KP가 토큰을 만들고 PL이 받음
+  // GM이 토큰을 만들고 PL이 받음
   await kp.getByRole("button", { name: "+ 토큰" }).click();
   await pl.getByTestId("obj-서하").waitFor();
-  step("KP가 만든 토큰이 PL 화면에 나타남");
+  step("GM이 만든 토큰이 PL 화면에 나타남");
 
   // 이미지 업로드: 토큰 이미지, 장면 배경, 핸드아웃 이미지
   const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
@@ -550,9 +550,9 @@ try {
     const el = document.querySelector('[data-testid="obj-서하"]');
     return el && Number(el.getAttribute("data-x")) > 500;
   });
-  step("PL이 끈 토큰이 KP 화면에서 움직임");
+  step("PL이 끈 토큰이 GM 화면에서 움직임");
 
-  // 핑: PL이 Alt+클릭하면 KP 화면에 파동과 이름표가 잠시 뜬다(PL 화면에도 보인다)
+  // 핑: PL이 Alt+클릭하면 GM 화면에 파동과 이름표가 잠시 뜬다(PL 화면에도 보인다)
   {
     const bb = await pl.getByTestId("board").boundingBox();
     await pl.keyboard.down("Alt");
@@ -565,7 +565,7 @@ try {
     await kp.screenshot({ path: `${SHOTS}/ping-kp.png` });
     await kp.getByTestId("ping").waitFor({ state: "detached" });
   }
-  step("PL이 Alt+클릭으로 가리키면 KP 화면에 이름표 달린 핑이 잠시 뜨고 사라짐");
+  step("PL이 Alt+클릭으로 가리키면 GM 화면에 이름표 달린 핑이 잠시 뜨고 사라짐");
 
   // 키보드만으로: 건너뛰기 링크로 보드에 가고, 숨은 토큰 목록에서 토큰을 골라 방향키로 움직임
   {
@@ -588,7 +588,7 @@ try {
   assert.equal(await pl.getByTestId("obj-숨김 소품2").count(), 0);
   step("GM 전용 오브젝트는 PL 화면에 없음");
 
-  // 시트→토큰: KP가 시트 탭에서 "토큰으로 놓기"를 누르면 그 캐릭터 이름·소유자로 토큰이 생긴다
+  // 시트→토큰: GM이 시트 탭에서 "토큰으로 놓기"를 누르면 그 캐릭터 이름·소유자로 토큰이 생긴다
   await kp.getByRole("tab", { name: "시트" }).click();
   await kp.getByRole("button", { name: "토큰으로 놓기" }).click();
   await pl.getByTestId(`obj-${CHAR}`).waitFor();
@@ -620,7 +620,7 @@ try {
   await kp.getByRole("button", { name: "보드를 눌러 밝히는 중…" }).click();
   await kp.getByRole("button", { name: "영역 모두 지우기" }).click();
   await plProps.first().waitFor({ state: "detached" });
-  // 탐험 기록: 시야가 지나간 자리는 지금 안 보여도 기록으로 남고, KP가 지울 수 있다
+  // 탐험 기록: 시야가 지나간 자리는 지금 안 보여도 기록으로 남고, GM이 지울 수 있다
   await pl.getByTestId("fog-explored").waitFor();
   await kp.getByTestId("fog-explored-count").getByText(/탐험 기록 [1-9]/).waitFor();
   await kp.getByRole("button", { name: "탐험 기록 지우기" }).click();
@@ -630,7 +630,7 @@ try {
   await kp.getByRole("button", { name: "안개 끄기" }).click();
   await plProps.first().waitFor();
   await pl.getByTestId("fog").waitFor({ state: "detached" });
-  step("안개와 시야: 안개 속 오브젝트는 PL 화면에서 사라지고, 시야 반지름·밝힌 영역으로 다시 보이며, 지나간 자리는 탐험 기록으로 남고(KP가 지움), 끄면 모두 보임");
+  step("안개와 시야: 안개 속 오브젝트는 PL 화면에서 사라지고, 시야 반지름·밝힌 영역으로 다시 보이며, 지나간 자리는 탐험 기록으로 남고(GM이 지움), 끄면 모두 보임");
 
   // 되돌리기(Ctrl+Z): 토큰 삭제 → 복귀, 이동 → 원위치. 확인창 없이 삭제하고 안내 토스트가 뜬다.
   const undoTok = kp.getByTestId("obj-숨김 소품2");
@@ -651,7 +651,7 @@ try {
   await kp.keyboard.press("Control+z");
   await kp.waitForFunction((x) => Number(document.querySelector('[data-testid="obj-숨김 소품2"]')?.getAttribute("data-x")) === x, x0);
   // 되돌릴 기록이 더는 없으면(직접 눌러 확인) 오류 토스트. 버튼으로도 되돌릴 수 있다.
-  step("되돌리기: KP 토큰 삭제 뒤 Ctrl+Z 로 복귀하고, 이동도 Ctrl+Z 로 원위치");
+  step("되돌리기: GM 토큰 삭제 뒤 Ctrl+Z 로 복귀하고, 이동도 Ctrl+Z 로 원위치");
 
   // 보드 단축키·오른쪽 클릭 메뉴: Backspace 삭제 + Ctrl+Z, Ctrl+D 복제, Esc 선택 해제, Tab 이동, 메뉴 항목
   {
@@ -911,28 +911,28 @@ try {
   await pl.getByRole("button", { name: "굴리기" }).click();
   await kp.getByTestId("roll-entry").first().waitFor();
   assert.match(await kp.getByTestId("roll-entry").first().innerText(), /서하/);
-  step("PL의 굴림이 KP 로그에 보임");
+  step("PL의 굴림이 GM 로그에 보임");
 
-  // 굴림: KP 비밀 굴림
+  // 굴림: GM 비밀 굴림
   await kp.getByLabel(/비밀 굴림/).check();
   await kp.getByLabel("굴림 식").fill("1d100");
   await kp.getByRole("button", { name: "굴리기" }).click();
   await pl.getByTestId("roll-hidden").waitFor();
   assert.ok((await pl.getByTestId("roll-entry").count()) >= 3); // 시트 굴림 + SAN 체크 + CC 굴림(+ 푸시·행운 시도)
   assert.ok((await kp.getByTestId("roll-entry").count()) >= 4);
-  step("KP 비밀 굴림: PL은 '했다'는 사실만 봄");
+  step("GM 비밀 굴림: PL은 '했다'는 사실만 봄");
 
-  // KP 접속 끊김 → 유예(배너, 입력은 계속 열림) → 유예 뒤 자동 정지 → KP가 돌아오면 자동 재개
+  // GM 접속 끊김 → 유예(배너, 입력은 계속 열림) → 유예 뒤 자동 정지 → GM이 돌아오면 자동 재개
   // (API는 KP_AWAY_GRACE_MS로 유예를 줄여 띄운다. 기본은 30초.)
   await kp.context().close();
-  await pl.getByTestId("kp-away-banner").getByText("KP 연결이 끊겼어요. 잠시 기다려요.").waitFor();
+  await pl.getByTestId("kp-away-banner").getByText("GM 연결이 끊겼어요. 잠시 기다려요.").waitFor();
   assert.equal(await pl.getByLabel("굴림 식").isDisabled(), false);
   assert.equal(await pl.getByTestId("session-status").getByText("진행 중").count(), 1);
-  step("KP 연결이 끊기면 PL 화면에 '잠시 기다려요' 배너가 뜨고 아직 정지는 아님");
+  step("GM 연결이 끊기면 PL 화면에 '잠시 기다려요' 배너가 뜨고 아직 정지는 아님");
   await pl.getByText("세션이 일시정지 중이에요").first().waitFor();
   assert.equal(await pl.getByLabel("굴림 식").isDisabled(), true);
   assert.equal(await pl.getByTestId("kp-away-banner").count(), 0);
-  step("유예가 지나도 KP가 안 오면 PL 화면이 일시정지로 바뀌고 입력이 막힘");
+  step("유예가 지나도 GM이 안 오면 PL 화면이 일시정지로 바뀌고 입력이 막힘");
 
   const kp2 = await (await ctx()).newPage();
   await login(kp2, "하늘");
@@ -940,9 +940,9 @@ try {
   await pl.getByTestId("session-status").getByText("진행 중").waitFor();
   assert.equal(await pl.getByLabel("굴림 식").isDisabled(), false);
   assert.equal(await kp2.getByRole("button", { name: "이어하기" }).count(), 0);
-  step("KP가 돌아오면 이어하기 없이 자동 재개되어 PL 입력이 다시 열림");
+  step("GM이 돌아오면 이어하기 없이 자동 재개되어 PL 입력이 다시 열림");
 
-  // KP가 직접 누른 일시정지: 정지 중에도 KP는 토큰을 놓을 수 있고(굴림은 막힘), 새로고침해도 자동 재개되지 않음
+  // GM이 직접 누른 일시정지: 정지 중에도 GM은 토큰을 놓을 수 있고(굴림은 막힘), 새로고침해도 자동 재개되지 않음
   await kp2.getByTestId("connection").getByText("연결됨").waitFor();
   await kp2.getByRole("button", { name: "일시정지", exact: true }).click();
   await pl.getByText("세션이 일시정지 중이에요").first().waitFor();
@@ -959,7 +959,7 @@ try {
   assert.equal(await pl.getByTestId("session-status").getByText("일시정지").count(), 1);
   await kp2.getByRole("button", { name: "이어하기" }).click();
   await pl.getByTestId("session-status").getByText("진행 중").waitFor();
-  step("KP가 직접 멈추면 정지 중에도 토큰 편집은 되고 굴림은 막히며, 새로고침해도 자동 재개되지 않고 이어하기로 풀림");
+  step("GM이 직접 멈추면 정지 중에도 토큰 편집은 되고 굴림은 막히며, 새로고침해도 자동 재개되지 않고 이어하기로 풀림");
 
   // 새로고침(유예 안의 재접속): PL은 정지를 보지 않는다
   await kp2.reload();
@@ -967,9 +967,9 @@ try {
   await kp2.waitForTimeout(500);
   assert.equal(await pl.getByText("세션이 일시정지 중이에요").count(), 0);
   assert.equal(await pl.getByTestId("session-status").getByText("진행 중").count(), 1);
-  step("KP가 새로고침해도 유예 안에 돌아오면 PL 화면은 정지되지 않음");
+  step("GM이 새로고침해도 유예 안에 돌아오면 PL 화면은 정지되지 않음");
 
-  // 판정 효과: KP가 "어려운 성공"까지 켜면 PL 화면에 효과가 재생되고, PL이 개인 설정으로 끌 수 있음
+  // 판정 효과: GM이 "어려운 성공"까지 켜면 PL 화면에 효과가 재생되고, PL이 개인 설정으로 끌 수 있음
   await openSettings(kp2);
   await kp2.getByRole("button", { name: "판정 효과" }).click();
   const hardBox = kp2.getByLabel("어려운 성공", { exact: true });
@@ -999,7 +999,7 @@ try {
   }
   step("PL이 효과를 끄면 더는 재생되지 않음");
 
-  // 장면: KP가 다른 장면을 미리 꾸미면 PL에게는 안 보이고, 페이드 전환하면 PL 화면이 통째로 바뀜
+  // 장면: GM이 다른 장면을 미리 꾸미면 PL에게는 안 보이고, 페이드 전환하면 PL 화면이 통째로 바뀜
   await kp2.getByLabel("새 장면 이름").fill("서재");
   await kp2.getByRole("button", { name: "추가", exact: true }).click();
   await kp2.getByRole("tab", { name: "서재" }).click();
@@ -1007,7 +1007,7 @@ try {
   await kp2.getByTestId("obj-소품1").waitFor();
   await pl.waitForTimeout(400);
   assert.equal(await pl.getByTestId("obj-소품1").count(), 0);
-  step("KP가 준비 중인 다른 장면의 오브젝트는 PL에게 보이지 않음");
+  step("GM이 준비 중인 다른 장면의 오브젝트는 PL에게 보이지 않음");
 
   await kp2.getByRole("button", { name: "페이드 전환" }).click();
   await pl.getByTestId("scene-name").getByText("서재").waitFor();
@@ -1057,7 +1057,7 @@ try {
   await pl.getByTestId("scene-name").getByText("서재").waitFor();
   step("슬롯 1에 등록한 장면 전환이 숫자 키 1로 실행됨");
 
-  // 전투 순서: KP가 시작하고 NPC를 넣고 넘기면 PL 화면에 같은 순서와 차례가 보임
+  // 전투 순서: GM이 시작하고 NPC를 넣고 넘기면 PL 화면에 같은 순서와 차례가 보임
   // 활성 장면(서재)에 서하 소유 토큰을 놓아 둔다: 차례 링과 이동 안내를 보려는 것
   await kp2.getByLabel("새 토큰 이름").fill("전투서하");
   await kp2.getByRole("button", { name: "+ 토큰" }).click();
@@ -1102,16 +1102,16 @@ try {
   await pl.getByTestId("obj-전투서하").and(pl.locator('[data-locked="true"]')).waitFor();
   await kp2.getByRole("button", { name: "이동 풀기" }).click();
   await pl.getByTestId("obj-전투서하").and(pl.locator(":not([data-locked])")).waitFor();
-  step("KP의 '이동 잠금/이동 풀기'로 PL 토큰이 한꺼번에 잠기고 풀림");
+  step("GM의 '이동 잠금/이동 풀기'로 PL 토큰이 한꺼번에 잠기고 풀림");
   await kp2.getByRole("tab", { name: "굴림" }).click();
   await pl.getByRole("tab", { name: "굴림" }).click();
 
-  // 세션 흐름: 비트와 분기를 짜 두면 조건이 맞을 때 KP에게만 제안하고, 엔딩을 확정하면 종료 창이 채워짐
+  // 세션 흐름: 비트와 분기를 짜 두면 조건이 맞을 때 GM에게만 제안하고, 엔딩을 확정하면 종료 창이 채워짐
   await kp2.getByRole("tab", { name: /^흐름/ }).click();
   assert.equal(await pl.getByRole("tab", { name: /^흐름/ }).count(), 0);
   await kp2.getByRole("button", { name: "비트 추가" }).click();
   await kp2.getByLabel("비트 이름").fill("단서 발견");
-  await kp2.getByLabel("KP 메모").fill("비밀 메모 " + run);
+  await kp2.getByLabel("GM 메모").fill("비밀 메모 " + run);
   await kp2.getByRole("button", { name: "저장", exact: true }).click();
   await kp2.getByRole("button", { name: "비트 추가" }).click();
   await kp2.getByLabel("비트 이름").fill("새벽의 생존자");
@@ -1134,7 +1134,7 @@ try {
   await kp2.getByRole("button", { name: "세션 종료" }).click();
   assert.equal(await kp2.getByLabel("엔딩 이름 (선택)").inputValue(), "새벽의 생존자");
   await kp2.keyboard.press("Escape");
-  step("세션 흐름: 비트·분기를 짜면 조건이 맞을 때 KP에게만 제안하고, 엔딩 확정 뒤 종료 창이 엔딩 이름으로 채워짐");
+  step("세션 흐름: 비트·분기를 짜면 조건이 맞을 때 GM에게만 제안하고, 엔딩 확정 뒤 종료 창이 엔딩 이름으로 채워짐");
   await kp2.getByRole("tab", { name: "굴림" }).click();
 
   // 세션 종료 → 보관함에 반영
@@ -1223,7 +1223,7 @@ try {
   assert.ok(saved.includes("## 세션"));
   step("굴림 기록을 마크다운 파일로 저장함(PL에게는 비밀 굴림이 빠졌다는 안내가 붙음)");
 
-  // 음향: KP가 올린 배경음이 모두에게 흐르고(DOM 상태만 확인), 비트 큐에 묶으면 비트에 들어갈 때 바뀜
+  // 음향: GM이 올린 배경음이 모두에게 흐르고(DOM 상태만 확인), 비트 큐에 묶으면 비트에 들어갈 때 바뀜
   const wav = Buffer.alloc(44 + 4000);
   wav.write("RIFF", 0);
   wav.writeUInt32LE(36 + 4000, 4);
@@ -1283,7 +1283,7 @@ try {
   await pl.keyboard.press("Escape");
   await kp2.getByRole("button", { name: "정지", exact: true }).click();
   await track.getByTestId("audio-playing").waitFor({ state: "detached" });
-  step("음향: KP가 올린 배경음을 재생·정지하고, PL은 음향 탭 없이 내 소리 설정만 만짐");
+  step("음향: GM이 올린 배경음을 재생·정지하고, PL은 음향 탭 없이 내 소리 설정만 만짐");
 
   await kp2.getByRole("tab", { name: /^흐름/ }).click();
   await kp2.getByRole("button", { name: "비트 추가" }).click();
@@ -1309,7 +1309,7 @@ try {
   await track.waitFor({ state: "detached" });
   step("음향: 비트 큐에 묶은 배경음이 비트에 들어가면 흐르고, 음원을 지우면 목록에서 사라짐");
 
-  // KP 전용 노트: PL에게 안 보이고, 펼쳐 보이기 버튼도 없다
+  // GM 전용 노트: PL에게 안 보이고, 펼쳐 보이기 버튼도 없다
   await kp2.getByRole("tab", { name: "핸드아웃" }).click();
   await kp2.getByRole("button", { name: "새 핸드아웃" }).click();
   await kp2.getByLabel("핸드아웃 제목").fill("진상 " + run);
@@ -1317,14 +1317,14 @@ try {
   await kp2.getByLabel("공개 범위").selectOption("note");
   await kp2.getByRole("button", { name: "저장", exact: true }).click();
   const note = kp2.getByTestId("handout-item").filter({ hasText: "진상 " + run });
-  await note.getByText("KP 노트").waitFor();
+  await note.getByText("GM 노트").waitFor();
   assert.equal(await note.getByRole("button", { name: "펼쳐 보이기" }).count(), 0);
   await pl.getByRole("tab", { name: "핸드아웃" }).click();
   await pl.waitForTimeout(400);
   assert.equal(await pl.getByText("진상 " + run).count(), 0);
-  step("KP 전용 노트는 PL에게 보이지 않고 펼쳐 보일 수도 없음");
+  step("GM 전용 노트는 PL에게 보이지 않고 펼쳐 보일 수도 없음");
 
-  // 토큰 소유자: PL 3명이 각자 자기 토큰만 움직이고, KP가 이름·소유자를 바꾼다
+  // 토큰 소유자: PL 3명이 각자 자기 토큰만 움직이고, GM이 이름·소유자를 바꾼다
   {
     const SHOT = "/tmp/shots-token";
     const kpT = await (await ctx()).newPage();
@@ -1385,7 +1385,7 @@ try {
     assert.deepEqual(dAfter, dBefore);
     step("PL 3명이 각자 자기 토큰만 움직이고 남의 토큰은 움직이지 않음");
 
-    // KP가 이름·소유자를 바꾼다: 도윤 토큰을 NPC로 풀고 이름 변경 → 도윤은 못 움직임
+    // GM이 이름·소유자를 바꾼다: 도윤 토큰을 NPC로 풀고 이름 변경 → 도윤은 못 움직임
     await kpT.getByTestId(`obj-${names[1]}`).click();
     await kpT.getByLabel("선택한 오브젝트 이름").fill("문지기 " + run);
     await kpT.getByRole("button", { name: "이름 바꾸기" }).click();
@@ -1408,9 +1408,9 @@ try {
     await dragBy(pls[2], "문지기 " + run, -60, -60);
     await pls[2].waitForTimeout(500);
     assert.deepEqual(await posOf(kpT, "문지기 " + run), g1);
-    step("KP가 토큰 이름을 바꾸고 소유자를 NPC로 풀거나 다른 PL에게 넘기고, 잠그면 소유자도 못 움직임");
+    step("GM이 토큰 이름을 바꾸고 소유자를 NPC로 풀거나 다른 PL에게 넘기고, 잠그면 소유자도 못 움직임");
 
-    // 시트→토큰: KP가 시트 패널에서 토큰으로 놓기
+    // 시트→토큰: GM이 시트 패널에서 토큰으로 놓기
     await pls[0].getByRole("tab", { name: "시트" }).click();
     await pls[0].screenshot({ path: `${SHOT}/pl-board.png` });
     await kpT.screenshot({ path: `${SHOT}/kp-board.png` });
@@ -1434,10 +1434,10 @@ try {
     await pl.getByTestId("focus-mine").click();
     await pl.getByRole("button", { name: "전체" }).click();
     assert.equal((await vb(pl))[2], 1000);
-    step("보드: 방향키로 내 토큰이 움직여 KP에게도 보이고, 확대·내 토큰 보기·전체 보기가 동작함");
+    step("보드: 방향키로 내 토큰이 움직여 GM에게도 보이고, 확대·내 토큰 보기·전체 보기가 동작함");
   }
 
-  // 룸 시트: CSV로 내보내기, 수정한 기능만 보기, 묶음 접기. KP는 CSV로 NPC를 룸에 등록한다
+  // 룸 시트: CSV로 내보내기, 수정한 기능만 보기, 묶음 접기. GM은 CSV로 NPC를 룸에 등록한다
   {
     const fs = await import("node:fs/promises");
     await pl.getByRole("tab", { name: "시트" }).click();
@@ -1470,9 +1470,9 @@ try {
     await kp2.getByLabel("캐릭터 선택").selectOption({ label: NPC });
     assert.equal(await kp2.getByLabel("캐릭터 선택").locator("option:checked").innerText(), NPC);
     await kp2.getByTestId("stat-hp").getByText("9/10").waitFor();
-    assert.equal(await pl.getByLabel("캐릭터 선택").count(), 0, "PL은 KP가 등록한 NPC 시트를 받지 않음");
+    assert.equal(await pl.getByLabel("캐릭터 선택").count(), 0, "PL은 GM이 등록한 NPC 시트를 받지 않음");
   }
-  step("룸 시트: CSV 내보내기, 수정한 기능만 보기·묶음 접기가 동작하고, KP는 CSV로 시트를 룸에 등록함(PL은 이미 있으면 가져오기 버튼이 없음)");
+  step("룸 시트: CSV 내보내기, 수정한 기능만 보기·묶음 접기가 동작하고, GM은 CSV로 시트를 룸에 등록함(PL은 이미 있으면 가져오기 버튼이 없음)");
 
   // 룸 삭제: 로비 카드에서 두 번 눌러 지우면 목록에서 사라지고, 열려 있던 룸은 끊긴다
   await kp2.goto(WEB);

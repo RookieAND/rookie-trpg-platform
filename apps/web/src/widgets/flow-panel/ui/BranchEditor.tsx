@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { Beat, Branch, BranchCondition, Handout } from "@coc-vtt/shared";
 
 type Kind = BranchCondition["type"];
-const KIND_LABEL: Record<Kind, string> = { manual: "수동 (KP가 누름)", roll: "판정 결과", stat: "수치 임계", handout: "핸드아웃 공개" };
+const KIND_LABEL: Record<Kind, string> = { manual: "수동 (GM이 누름)", roll: "판정 결과", stat: "수치 임계", handout: "핸드아웃 공개" };
 
 export interface BranchDraft {
   id?: string;
@@ -13,7 +13,7 @@ export interface BranchDraft {
   condition: BranchCondition;
 }
 
-/** 비트 사이의 분기 하나를 쓴다. 판정·수치·핸드아웃 조건이 맞으면 서버가 KP에게 제안한다. */
+/** 비트 사이의 분기 하나를 쓴다. 판정·수치·핸드아웃 조건이 맞으면 서버가 GM에게 제안한다. */
 export function BranchEditor({ initial, fromId, beats, handouts, onSave, onCancel }: { initial?: Branch; fromId: string; beats: Beat[]; handouts: Handout[]; onSave: (d: BranchDraft) => void; onCancel: () => void }) {
   const others = beats.filter((b) => b.id !== fromId);
   const c0 = initial?.condition;

@@ -45,7 +45,7 @@ export interface AppOptions {
   sheetImport?: { fetch?: SheetFetch; options?: SheetImportOptions };
   /** 프록시 겹 수. 0이면 X-Forwarded-For를 믿지 않는다. */
   trustProxyHops?: number;
-  /** KP 연결이 끊긴 뒤 자동 정지까지의 유예(ms). 기본 30초 */
+  /** GM 연결이 끊긴 뒤 자동 정지까지의 유예(ms). 기본 30초 */
   kpAwayGraceMs?: number;
 }
 

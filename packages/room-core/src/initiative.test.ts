@@ -58,7 +58,7 @@ describe("전투 순서", () => {
     expect(room.snapshot(spec).initiative?.entries).toHaveLength(2);
   });
 
-  it("KP만 다룰 수 있다", () => {
+  it("GM만 다룰 수 있다", () => {
     const room = setup();
     for (const c of [cmd("initiative.start", {}), cmd("initiative.next", {}), cmd("initiative.end", {}), cmd("initiative.add", { name: "x", dex: 1 })]) {
       expect(room.handle(seo, c).ok).toBe(false);

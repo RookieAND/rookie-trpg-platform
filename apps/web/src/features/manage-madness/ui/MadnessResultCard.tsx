@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { MadnessResult } from "@coc-vtt/shared";
 import { Dialog } from "@/shared/ui";
 
-/** 광기 증상 굴림 결과. 시트 주인과 KP만 받는다. */
+/** 광기 증상 굴림 결과. 시트 주인과 GM만 받는다. */
 export function MadnessResultCard({ last }: { last: { result: MadnessResult; n: number } | null }) {
   const [closedN, setClosedN] = useState(0);
   const open = last !== null && last.n !== closedN;

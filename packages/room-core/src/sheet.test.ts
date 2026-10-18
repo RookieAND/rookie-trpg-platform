@@ -50,7 +50,7 @@ const fixed = (...values: number[]): Rng => {
 };
 
 describe("캐릭터 등록", () => {
-  it("주인과 KP만 시트를 받고, 다른 PL과 관전자는 못 받는다", () => {
+  it("주인과 GM만 시트를 받고, 다른 PL과 관전자는 못 받는다", () => {
     const room = room0();
     const { outs } = add(room, seo);
     expect(outs.filter((o) => inAudience(o.audience, seo))).toHaveLength(1);
@@ -82,7 +82,7 @@ describe("캐릭터 등록", () => {
     expect(room.handle(spec, cmd("character.add", sheet()))).toMatchObject({ ok: false, code: "forbidden" });
   });
 
-  it("KP는 다른 사람 몫(NPC 포함)을 만들 수 있고 PL은 못 한다", () => {
+  it("GM은 다른 사람 몫(NPC 포함)을 만들 수 있고 PL은 못 한다", () => {
     const room = room0();
     expect(add(room, kp, sheet({ ownerId: "pl2" })).c.ownerId).toBe("pl2");
     expect(room.handle(seo, cmd("character.add", sheet({ ownerId: "pl2" })))).toMatchObject({ ok: false, code: "forbidden" });
@@ -106,7 +106,7 @@ describe("캐릭터 등록", () => {
     expect(room.handle(seo, cmd("character.remove", { id: c.id }))).toMatchObject({ ok: false, code: "forbidden" });
   });
 
-  it("지우기는 KP만 한다", () => {
+  it("지우기는 GM만 한다", () => {
     const room = room0();
     const { c } = add(room, seo);
     expect(room.handle(seo, cmd("character.remove", { id: c.id }))).toMatchObject({ ok: false, code: "forbidden" });
@@ -159,14 +159,14 @@ describe("sheet.patch", () => {
     expect(room.snapshot(seo).characters[0]).toMatchObject({ hp: 12, rev: 0 });
   });
 
-  it("남의 시트는 못 바꾸고 존재 여부도 숨긴다. KP는 바꿀 수 있다", () => {
+  it("남의 시트는 못 바꾸고 존재 여부도 숨긴다. GM은 바꿀 수 있다", () => {
     const room = room0();
     const { c } = add(room, seo);
     expect(patch(room, han, c.id, [{ path: "hp", delta: -1 }])).toMatchObject({ ok: false, code: "not_found" });
     expect(patch(room, kp, c.id, [{ path: "hp", delta: -1 }]).ok).toBe(true);
   });
 
-  it("변경은 주인과 KP에게만 간다", () => {
+  it("변경은 주인과 GM에게만 간다", () => {
     const room = room0();
     const { c } = add(room, seo);
     const out = must(patch(room, kp, c.id, [{ path: "hp", delta: -1 }]));
@@ -183,7 +183,7 @@ describe("sheet.patch", () => {
     t = 1500;
     room.leave("kp1");
     room.expireKpAway(); // 유예가 지나면 자동 정지
-    room.join(spec); // KP가 아닌 접속으로는 풀리지 않는다
+    room.join(spec); // GM이 아닌 접속으로는 풀리지 않는다
     expect(patch(room, seo, c.id, [{ path: "notes", value: "y" }])).toMatchObject({ ok: false, code: "paused" });
   });
 });
@@ -223,7 +223,7 @@ describe("시트로 굴리기", () => {
     expect(rollSkill(room, han, c.id, "STR")).toMatchObject({ ok: false, code: "not_found" });
   });
 
-  it("KP의 비밀 굴림도 시트로 굴릴 수 있다", () => {
+  it("GM의 비밀 굴림도 시트로 굴릴 수 있다", () => {
     const room = room0();
     const { c } = add(room, kp, sheet());
     const out = must(room.handle(kp, cmd("roll.request", { secret: true, skill: { characterId: c.id, name: "STR", bonus: 0 } })));

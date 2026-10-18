@@ -1,7 +1,7 @@
 import { MAX_FOG_EXPLORED, type ClientCommand, FogArea, FogZone, GameObject, Member, Scene } from "@coc-vtt/shared";
 
 /**
- * KP의 '되돌리기'. 되돌릴 수 있는 동작(토큰·오브젝트 추가/이동/수정/삭제, 안개 영역·탐험 기록)만
+ * GM의 '되돌리기'. 되돌릴 수 있는 동작(토큰·오브젝트 추가/이동/수정/삭제, 안개 영역·탐험 기록)만
  * 이전 값을 기록해 둔다. 메모리에만 있고 저장 데이터에는 넣지 않는다.
  * 이 파일은 상태를 직접 바꾸지 않는 부분(기록·판정)과, 오브젝트·장면 맵만 고치는 되돌림을 맡고,
  * 이벤트 만들기는 Room이 기존 경로(fanOutObject·emitScene)로 한다.

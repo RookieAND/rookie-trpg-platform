@@ -86,7 +86,7 @@ describe("푸시 굴림", () => {
     expect(room.handle(seo, cmd("roll.push", { rollId: manual.id })).ok).toBe(false);
   });
 
-  it("KP는 대신 푸시할 수 있다", () => {
+  it("GM은 대신 푸시할 수 있다", () => {
     const { room, id } = setup(seq(...FAIL));
     const first = skillRoll(room, seo, id);
     expect(room.handle(kp, cmd("roll.push", { rollId: first.id })).ok).toBe(true);

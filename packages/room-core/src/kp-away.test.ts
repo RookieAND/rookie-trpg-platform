@@ -32,8 +32,8 @@ const sheetData = {
   skills: [{ name: "심리학", value: 40, grown: false }],
 };
 
-describe("KP 연결 유예", () => {
-  it("KP가 나가면 끊긴 시각을 알리고 정지하지 않는다", () => {
+describe("GM 연결 유예", () => {
+  it("GM이 나가면 끊긴 시각을 알리고 정지하지 않는다", () => {
     const room = started({ now: () => 777 });
     const outs = room.leave("kp1");
     expect(types(outs)).toEqual(["presence", "kp.away"]);
@@ -45,7 +45,7 @@ describe("KP 연결 유예", () => {
     expect(room.handle(seo, cmd("roll.request", { expr: "1d100", secret: false })).ok).toBe(true);
   });
 
-  it("유예 안에 KP가 돌아오면 정지 없이 계속된다", () => {
+  it("유예 안에 GM이 돌아오면 정지 없이 계속된다", () => {
     const room = started();
     room.leave("kp1");
     const back = room.join(kp);
@@ -64,13 +64,13 @@ describe("KP 연결 유예", () => {
     expect(room.kpAway).toBeNull();
   });
 
-  it("세션이 진행 중이 아니면 KP가 나가도 유예하지 않는다", () => {
+  it("세션이 진행 중이 아니면 GM이 나가도 유예하지 않는다", () => {
     const room = new Room("r", { newId: () => `id-${++n}` });
     room.join(kp);
     expect(types(room.leave("kp1"))).toEqual(["presence"]);
   });
 
-  it("유예가 끝나면 자동 정지(kp_disconnected)하고, KP가 돌아오면 자동 재개한다", () => {
+  it("유예가 끝나면 자동 정지(kp_disconnected)하고, GM이 돌아오면 자동 재개한다", () => {
     const room = started();
     room.leave("kp1");
     const paused = room.expireKpAway();
@@ -82,7 +82,7 @@ describe("KP 연결 유예", () => {
     expect(room.snapshot(seo).pauseReason).toBeNull();
   });
 
-  it("KP가 직접 누른 정지는 돌아와도 자동 재개하지 않는다", () => {
+  it("GM이 직접 누른 정지는 돌아와도 자동 재개하지 않는다", () => {
     const room = started();
     must(room.handle(kp, cmd("session.pause", {})));
     room.leave("kp1");
@@ -101,7 +101,7 @@ describe("KP 연결 유예", () => {
 });
 
 describe("저장과 복원", () => {
-  it("자동 정지 사유를 저장하고, 옛 데이터(사유 없음)의 정지는 KP가 누른 정지로 본다", () => {
+  it("자동 정지 사유를 저장하고, 옛 데이터(사유 없음)의 정지는 GM이 누른 정지로 본다", () => {
     const room = started();
     room.leave("kp1");
     room.expireKpAway();
@@ -118,7 +118,7 @@ describe("저장과 복원", () => {
     expect(legacy.sessionStatus).toBe("PAUSED");
   });
 
-  it("유예 중에 저장돼 다시 켜지면 자동 정지로 복원되고 KP가 오면 재개된다", () => {
+  it("유예 중에 저장돼 다시 켜지면 자동 정지로 복원되고 GM이 오면 재개된다", () => {
     const room = started();
     room.leave("kp1"); // 유예 중(ACTIVE)
     const restored = Room.fromData(JSON.parse(JSON.stringify(room.toData())));
@@ -127,7 +127,7 @@ describe("저장과 복원", () => {
     expect(restored.sessionStatus).toBe("ACTIVE");
   });
 
-  it("KP가 직접 멈춘 세션은 다시 켜도 직접 정지로 남는다", () => {
+  it("GM이 직접 멈춘 세션은 다시 켜도 직접 정지로 남는다", () => {
     const room = started();
     must(room.handle(kp, cmd("session.pause", {})));
     const restored = Room.fromData(JSON.parse(JSON.stringify(room.toData())));
@@ -158,7 +158,7 @@ describe("일시정지 중 허용 명령", () => {
     }
   });
 
-  it("KP는 장면·토큰·시트·핸드아웃·흐름·안개·음향을 고칠 수 있다", () => {
+  it("GM은 장면·토큰·시트·핸드아웃·흐름·안개·음향을 고칠 수 있다", () => {
     const room = paused();
     const sceneId = must(room.handle(kp, cmd("scene.create", { name: "지하실" }))).map((o) => o.event).find((e) => e.type === "scene.added");
     expect(sceneId).toBeTruthy();
@@ -172,7 +172,7 @@ describe("일시정지 중 허용 명령", () => {
     expect(room.sessionStatus).toBe("PAUSED");
   });
 
-  it("KP도 판정·전투·장면 전환·핸드아웃 펼치기는 막힌다", () => {
+  it("GM도 판정·전투·장면 전환·핸드아웃 펼치기는 막힌다", () => {
     const room = paused();
     const sceneId = room.snapshot(kp).activeSceneId;
     const blocked: ClientCommand[] = [

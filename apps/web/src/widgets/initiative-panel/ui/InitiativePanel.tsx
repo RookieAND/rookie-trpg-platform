@@ -2,7 +2,7 @@
 import { useState } from "react";
 import type { ClientCommand, Initiative } from "@coc-vtt/shared";
 
-/** 전투 순서. 모두가 보고, KP만 시작·넘기기·NPC 추가·DEX 수정을 한다. */
+/** 전투 순서. 모두가 보고, GM만 시작·넘기기·NPC 추가·DEX 수정을 한다. */
 export function InitiativePanel({ initiative, isKp, enabled, send }: { initiative: Initiative | null; isKp: boolean; enabled: boolean; send: (c: ClientCommand) => unknown }) {
   const [name, setName] = useState("");
   const [dex, setDex] = useState("50");

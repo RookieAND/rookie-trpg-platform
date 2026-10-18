@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ROLE_LABEL, SESSION_STATUS_LABEL, type RoomListItem } from "../model/types";
 
-/** 로비의 룸 카드. 룸을 만든 사람(KP)은 두 번 눌러 룸을 지울 수 있다. */
+/** 로비의 룸 카드. 룸을 만든 사람(GM)은 두 번 눌러 룸을 지울 수 있다. */
 export function RoomCard({ room, onRemove }: { room: RoomListItem; onRemove?: (id: string) => Promise<void> | void }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);

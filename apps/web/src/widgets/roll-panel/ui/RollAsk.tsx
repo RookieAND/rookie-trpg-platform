@@ -4,7 +4,7 @@ import type { RollAsk } from "@coc-vtt/shared";
 
 const LEVEL: Record<string, string> = { regular: "보통", hard: "어려움", extreme: "극단적" };
 
-/** KP가 판정을 요청하는 줄. 평소엔 한 줄로 접혀 있다. 기능 이름과 받는 사람, 난이도를 정해 보낸다. */
+/** GM이 판정을 요청하는 줄. 평소엔 한 줄로 접혀 있다. 기능 이름과 받는 사람, 난이도를 정해 보낸다. */
 export function AskForm({ players, disabled, onAsk }: { players: Array<{ userId: string; name: string }>; disabled: boolean; onAsk: (name: string, difficulty: RollAsk["difficulty"], targetUserId?: string) => unknown }) {
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
@@ -49,7 +49,7 @@ export function AskBanner({ asks, userId, canRoll, hasCharacter, onRoll }: { ask
   const close = () => setDone(new Set([...done, ask.id]));
   return (
     <div className="banner" role="status" data-testid="roll-ask-banner" style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
-      <span>KP가 <strong>{ask.name}</strong> 판정을 요청했어요{ask.difficulty ? ` (${LEVEL[ask.difficulty]})` : ""}.{!hasCharacter && " 먼저 캐릭터를 불러와요."}</span>
+      <span>GM이 <strong>{ask.name}</strong> 판정을 요청했어요{ask.difficulty ? ` (${LEVEL[ask.difficulty]})` : ""}.{!hasCharacter && " 먼저 캐릭터를 불러와요."}</span>
       <span style={{ display: "flex", gap: 6 }}>
         <button className="btn sm primary" disabled={!canRoll || !hasCharacter} onClick={() => { onRoll(ask.name, ask.difficulty); close(); }}>굴리기</button>
         <button className="btn sm ghost" onClick={close} aria-label="요청 닫기">닫기</button>

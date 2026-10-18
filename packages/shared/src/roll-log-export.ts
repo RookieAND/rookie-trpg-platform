@@ -4,7 +4,7 @@ import type { RollLogEntry } from "./protocol";
 export interface RollLogExportOptions {
   /** 본문 첫 줄에 쓸 제목(룸 이름 등) */
   title?: string;
-  /** 보는 사람이 KP인지. KP가 아니면 받지 못한 비밀 굴림이 빠졌다는 안내를 붙인다. */
+  /** 보는 사람이 GM인지. GM이 아니면 받지 못한 비밀 굴림이 빠졌다는 안내를 붙인다. */
   isKp: boolean;
   /** 시각 표시에 쓸 시간대(기본은 실행 환경의 시간대) */
   timeZone?: string;
@@ -31,7 +31,7 @@ const clock = (at: number, timeZone?: string) => {
  */
 export function formatRollLog(rolls: readonly RollLogEntry[], opts: RollLogExportOptions): string {
   const lines: string[] = [`# ${opts.title?.trim() || "굴림 기록"}`, ""];
-  if (!opts.isKp) lines.push("> 이 화면에서 볼 수 있었던 굴림만 담겨 있어요. KP의 비밀 굴림은 들어 있지 않아요.", "");
+  if (!opts.isKp) lines.push("> 이 화면에서 볼 수 있었던 굴림만 담겨 있어요. GM의 비밀 굴림은 들어 있지 않아요.", "");
   if (rolls.length === 0) {
     lines.push("굴림이 없어요.");
     return lines.join("\n") + "\n";

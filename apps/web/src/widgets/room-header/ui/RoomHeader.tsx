@@ -38,7 +38,7 @@ export function RoomHeader({
   roomId: string;
   role: Role;
   status: SessionStatus;
-  /** KP 연결이 끊겨 유예 중(PL에게만 의미가 있다) */
+  /** GM 연결이 끊겨 유예 중(PL에게만 의미가 있다) */
   kpAway?: boolean;
   sessionNumber: number;
   connection: Connection;
@@ -61,7 +61,7 @@ export function RoomHeader({
       <Link href="/" className="brand" aria-label="로비로 가기">{SERVICE_NAME}</Link>
       <Link href="/" className="crumb">← 로비</Link>
       <span className={`badge ${isKp ? "kp" : ""}`}>{ROLE_LABEL[role]}</span>
-      {kpAway && <span className="badge paused" role="status" data-testid="kp-away-badge">KP 끊김</span>}
+      {kpAway && <span className="badge paused" role="status" data-testid="kp-away-badge">GM 끊김</span>}
       <span className={`badge status ${status === "ACTIVE" ? "live" : ""} ${status === "PAUSED" ? "paused" : ""}`} data-testid="session-status">
         {sessionNumber > 0 ? `세션 ${sessionNumber} · ` : "세션 시작 전 · "}
         {SESSION_STATUS_LABEL[status]}
@@ -76,7 +76,7 @@ export function RoomHeader({
         <MenuLabel>내 화면</MenuLabel>
         <EffectToggle enabled={effectsEnabled} onToggle={onToggleEffects} />
         {soundControl}
-        {isKp && <MenuLabel>룸 설정 (KP)</MenuLabel>}
+        {isKp && <MenuLabel>룸 설정 (GM)</MenuLabel>}
         {isKp && <EffectSettingsButton effects={effects} send={send} />}
         {isKp && <MadnessTableButton entries={madnessTable} send={send} />}
         {isKp && <DiscordButton me={me} roomId={roomId} />}

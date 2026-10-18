@@ -12,7 +12,7 @@ export interface Macro {
   id: string;
   name: string;
   expr: string;
-  /** 비밀 굴림으로 굴린다(KP만 쓴다) */
+  /** 비밀 굴림으로 굴린다(GM만 쓴다) */
   secret: boolean;
 }
 

@@ -3,28 +3,28 @@ import { MAX_SUM_EXPR_LENGTH, parseCommand, type Difficulty, type RollOutcome } 
 import { CHARACTERISTIC_KEYS, CONDITIONS, MADNESS_KINDS, MAX_WEAPONS, STAT_PATHS, type Character } from "./sheet";
 
 export type Role = "kp" | "pl" | "spectator";
-/** IDLE: 진행 중인 세션이 없음(첫 시작 전, 또는 세션 종료 뒤). KP는 이때 장면을 준비할 수 있다. */
+/** IDLE: 진행 중인 세션이 없음(첫 시작 전, 또는 세션 종료 뒤). GM은 이때 장면을 준비할 수 있다. */
 export type SessionStatus = "IDLE" | "ACTIVE" | "PAUSED";
-/** kp_disconnected는 자동 정지(KP가 돌아오면 자동 재개), kp_request는 KP가 직접 누른 정지 */
+/** kp_disconnected는 자동 정지(GM이 돌아오면 자동 재개), kp_request는 GM이 직접 누른 정지 */
 export type PauseReason = "kp_disconnected" | "kp_request";
 export type Layer = "background" | "object" | "gm";
 export type Visibility = "all" | "gm" | string[]; // string[] = 보이는 사용자 id 목록
 
-/** 맵 한 장. PL에게는 활성 장면만 알려 주고, 나머지는 KP가 준비한다. */
+/** 맵 한 장. PL에게는 활성 장면만 알려 주고, 나머지는 GM이 준비한다. */
 export interface Scene {
   id: string;
   name: string;
   /** 배경 이미지 id (업로드한 이미지) */
   background?: string;
-  /** 세션을 시작하면 처음 보이는 장면. KP만 안다. */
+  /** 세션을 시작하면 처음 보이는 장면. GM만 안다. */
   start?: boolean;
-  /** 이 장면으로 바뀔 때 틀 배경음(음원 라이브러리의 트랙 id). KP만 안다. */
+  /** 이 장면으로 바뀔 때 틀 배경음(음원 라이브러리의 트랙 id). GM만 안다. */
   bgmTrackId?: string;
-  /** 안개. KP만 설정과 밝힌 영역을 안다. */
+  /** 안개. GM만 설정과 밝힌 영역을 안다. */
   fog?: SceneFog;
-  /** 안개가 켜진 활성 장면에서 지금 보이는 원들(밝힌 영역 + 시야 토큰). KP가 아닌 사람에게만 온다. */
+  /** 안개가 켜진 활성 장면에서 지금 보이는 원들(밝힌 영역 + 시야 토큰). GM이 아닌 사람에게만 온다. */
   fogAreas?: FogArea[];
-  /** 한 번이라도 시야에 들어왔던 곳(탐험 기록). 안개가 켜진 활성 장면에서 KP가 아닌 사람에게만 온다. */
+  /** 한 번이라도 시야에 들어왔던 곳(탐험 기록). 안개가 켜진 활성 장면에서 GM이 아닌 사람에게만 온다. */
   fogExplored?: FogArea[];
 }
 
@@ -88,7 +88,7 @@ export interface GameObject {
   visibleTo: Visibility;
   /** 시야 반지름. 안개가 켜진 장면에서 이 둘레가 모두에게 보인다. */
   vision?: number;
-  /** 이 오브젝트를 움직일 수 있는 사용자(토큰의 주인). KP는 항상 가능. */
+  /** 이 오브젝트를 움직일 수 있는 사용자(토큰의 주인). GM은 항상 가능. */
   ownerId?: string;
   locked: boolean;
   /** 변경될 때마다 1씩 오른다. 오래된 명령을 거절하는 데 쓴다. */
@@ -111,12 +111,12 @@ export interface RollLogEntry {
   luckOf?: string;
   /** 굴린 세션 번호 */
   session: number;
-  /** KP가 비밀로 굴린 결과. KP 외에는 받지 못한다. */
+  /** GM이 비밀로 굴린 결과. GM 외에는 받지 못한다. */
   secret: boolean;
   at: number;
 }
 
-/** KP가 PL에게 보여 주는 자료(편지, 메모, 단서). gm이면 초안으로 KP만 본다. */
+/** GM이 PL에게 보여 주는 자료(편지, 메모, 단서). gm이면 초안으로 GM만 본다. */
 export interface Handout {
   id: string;
   title: string;
@@ -124,7 +124,7 @@ export interface Handout {
   /** 핸드아웃에 붙인 이미지 id */
   image?: string;
   visibleTo: Visibility;
-  /** KP 전용 노트. 공개 범위를 바꾸거나 비트·분기에 붙일 수 없어서 실수로 새어 나가지 않는다. */
+  /** GM 전용 노트. 공개 범위를 바꾸거나 비트·분기에 붙일 수 없어서 실수로 새어 나가지 않는다. */
   kpOnly?: boolean;
   rev: number;
 }
@@ -162,7 +162,7 @@ export type AudioKind = (typeof AUDIO_KINDS)[number];
 export const AUDIO_KIND_LABEL_KO: Record<AudioKind, string> = { bgm: "배경음", se: "효과음" };
 export const MAX_AUDIO_TRACKS = 30;
 
-/** KP의 음원 라이브러리 한 줄. 이름은 KP에게만 보인다(참가자에게는 파일 id만 간다). */
+/** GM의 음원 라이브러리 한 줄. 이름은 GM에게만 보인다(참가자에게는 파일 id만 간다). */
 export interface AudioTrack {
   id: string;
   label: string;
@@ -181,7 +181,7 @@ export interface BgmState {
   fadeMs: number;
 }
 
-// ── 세션 흐름(KP 전용) ────────────────────────────────────
+// ── 세션 흐름(GM 전용) ────────────────────────────────────
 
 export const BEAT_KINDS = ["start", "progress", "ending"] as const;
 export type BeatKind = (typeof BEAT_KINDS)[number];
@@ -195,7 +195,7 @@ export interface Beat {
   id: string;
   name: string;
   kind: BeatKind;
-  /** KP 메모. 참가자에게는 가지 않는다. */
+  /** GM 메모. 참가자에게는 가지 않는다. */
   memo: string;
   sceneId?: string;
   handoutIds: string[];
@@ -238,25 +238,25 @@ export interface Snapshot {
   sessionStatus: SessionStatus;
   /** 일시정지 사유. 옛 서버가 보낸 snapshot에는 없을 수 있다. */
   pauseReason?: PauseReason | null;
-  /** KP 연결이 끊겨 유예 중이면 끊긴 시각(서버 시계). 아니면 null */
+  /** GM 연결이 끊겨 유예 중이면 끊긴 시각(서버 시계). 아니면 null */
   kpAwaySince?: number | null;
   sessionNumber: number;
   objects: GameObject[];
   members: Member[];
   rolls: RollLogEntry[];
-  /** 내가 볼 수 있는 시트(내 것, KP는 전부) */
+  /** 내가 볼 수 있는 시트(내 것, GM은 전부) */
   characters: Character[];
   scenes: Scene[];
   activeSceneId: string;
   effects: EffectSettings;
   handouts: Handout[];
-  /** 광기 증상표. KP에게만 담아 보낸다(다른 사람은 빈 배열). */
+  /** 광기 증상표. GM에게만 담아 보낸다(다른 사람은 빈 배열). */
   madnessTable: string[];
   /** 진행 중인 전투 순서. 없으면 null. 모두에게 보인다. */
   initiative: Initiative | null;
-  /** 세션 흐름. KP에게만 담아 보낸다(다른 사람은 null). */
+  /** 세션 흐름. GM에게만 담아 보낸다(다른 사람은 null). */
   flow: Flow | null;
-  /** 음원 라이브러리. KP에게만 담아 보낸다. */
+  /** 음원 라이브러리. GM에게만 담아 보낸다. */
   audioLibrary: AudioTrack[];
   /** 지금 흐르는 배경음. 없으면 null. */
   bgm: BgmState | null;
@@ -394,7 +394,7 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("fog.clear"), data: z.object({ sceneId: id }) }),
   z.object({ type: z.literal("fog.forget"), data: z.object({ sceneId: id }) }),
   z.object({ type: z.literal("object.remove"), data: z.object({ id }) }),
-  /** KP의 가장 최근 변경(토큰·안개)을 되돌린다. */
+  /** GM의 가장 최근 변경(토큰·안개)을 되돌린다. */
   z.object({ type: z.literal("undo.last"), data: z.object({}) }),
   z.object({
     type: z.literal("roll.request"),
@@ -414,7 +414,7 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
       })
       .refine((d) => d.expr !== undefined || d.skill !== undefined, { message: "expr 또는 skill이 필요해요." }),
   }),
-  /** KP가 PL에게 판정을 요청한다. 굴림은 PL이 직접 한다. targetUserId가 없으면 PL 전원에게 간다. */
+  /** GM이 PL에게 판정을 요청한다. 굴림은 PL이 직접 한다. targetUserId가 없으면 PL 전원에게 간다. */
   z.object({
     type: z.literal("roll.ask"),
     data: z.object({
@@ -426,7 +426,7 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("character.add"),
     data: characterInputSchema.extend({
-      /** NPC처럼 다른 사람 몫으로 만들 때. KP만 쓸 수 있다. */
+      /** NPC처럼 다른 사람 몫으로 만들 때. GM만 쓸 수 있다. */
       ownerId: id.optional(),
       /** 보관함에서 불러온 시트면 원본 id. 세션이 끝난 뒤 되돌려 쓸 때 쓴다. */
       vaultId: id.optional(),
@@ -454,7 +454,7 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
     }),
   }),
   z.object({ type: z.literal("handout.remove"), data: z.object({ id }) }),
-  /** KP가 핸드아웃을 보는 사람 모두의 화면에 바로 펼친다. */
+  /** GM이 핸드아웃을 보는 사람 모두의 화면에 바로 펼친다. */
   z.object({ type: z.literal("handout.show"), data: z.object({ id }) }),
   z.object({ type: z.literal("character.remove"), data: z.object({ id }) }),
   z.object({
@@ -464,7 +464,7 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
       ops: z.array(sheetOp).min(1).max(20),
     }),
   }),
-  /** KP가 판정 단계별 효과를 켜고 끄고 세기를 정한다. */
+  /** GM이 판정 단계별 효과를 켜고 끄고 세기를 정한다. */
   z.object({
     type: z.literal("settings.effects"),
     data: z
@@ -492,13 +492,13 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
   }),
   /** 무기의 피해를 굴린다(피해 보너스 포함). */
   z.object({ type: z.literal("damage.roll"), data: z.object({ characterId: id, weaponIndex: z.number().int().min(0).max(MAX_WEAPONS - 1) }) }),
-  /** 실패한 시트 판정을 한 번 더 굴린다(푸시). 굴린 사람이나 KP가 할 수 있다. */
+  /** 실패한 시트 판정을 한 번 더 굴린다(푸시). 굴린 사람이나 GM이 할 수 있다. */
   z.object({ type: z.literal("roll.push"), data: z.object({ rollId: id }) }),
   /** 실패한 시트 판정을 성공으로 바꿀 만큼 행운을 쓴다. */
   z.object({ type: z.literal("luck.spend"), data: z.object({ rollId: id }) }),
-  /** SAN 체크. loss는 "성공 시/실패 시" 형식(예: 0/1d6). 시트 주인이나 KP가 할 수 있다. */
+  /** SAN 체크. loss는 "성공 시/실패 시" 형식(예: 0/1d6). 시트 주인이나 GM이 할 수 있다. */
   z.object({ type: z.literal("san.check"), data: z.object({ characterId: id, loss: z.string().trim().min(1).max(30) }) }),
-  /** 광기 증상표를 통째로 바꾼다(KP 전용). 한 줄이 증상 하나다. */
+  /** 광기 증상표를 통째로 바꾼다(GM 전용). 한 줄이 증상 하나다. */
   z.object({
     type: z.literal("flow.beat.upsert"),
     data: z.object({
@@ -550,9 +550,9 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("initiative.next"), data: z.object({}) }),
   z.object({ type: z.literal("initiative.end"), data: z.object({}) }),
   z.object({ type: z.literal("settings.madness"), data: z.object({ entries: z.array(z.string().trim().min(1).max(120)).max(MAX_MADNESS_ENTRIES) }) }),
-  /** 증상표에서 증상을 하나 굴린다(KP 전용). 결과는 시트 주인과 KP만 본다. */
+  /** 증상표에서 증상을 하나 굴린다(GM 전용). 결과는 시트 주인과 GM만 본다. */
   z.object({ type: z.literal("madness.roll"), data: z.object({ characterId: id, mode: z.enum(["realtime", "summary"]).default("realtime") }) }),
-  /** 하루가 지났다고 기록한다(KP 전용). characterId를 생략하면 모두. */
+  /** 하루가 지났다고 기록한다(GM 전용). characterId를 생략하면 모두. */
   z.object({ type: z.literal("san.newDay"), data: z.object({ characterId: id.optional() }).default({}) }),
   z.object({ type: z.literal("session.start"), data: z.object({}).default({}) }),
   z.object({ type: z.literal("session.pause"), data: z.object({}).default({}) }),
@@ -618,7 +618,7 @@ export type ErrorCode =
   | "bad_sheet"
   | "rate_limited";
 
-/** KP가 PL에게 요청한 판정. */
+/** GM이 PL에게 요청한 판정. */
 export interface RollAsk {
   id: string;
   name: string;
@@ -642,7 +642,7 @@ export type ServerEvent =
   | { type: "object.added"; data: GameObject }
   | { type: "object.updated"; data: GameObject }
   | { type: "object.removed"; data: { id: string } }
-  /** 되돌리기 성공. 요청한 KP에게만 간다. */
+  /** 되돌리기 성공. 요청한 GM에게만 간다. */
   | { type: "undo.done"; data: { label: string } }
   /** 누가 보드의 한 곳을 가리켰다. 저장·기록에 남지 않고, 그 자리가 보이는 사람에게만 간다. */
   | { type: "board.pinged"; data: BoardPing }
@@ -658,7 +658,7 @@ export type ServerEvent =
   | { type: "scene.added"; data: Scene }
   | { type: "scene.updated"; data: Scene }
   | { type: "scene.removed"; data: { id: string } }
-  /** 활성 장면이 바뀜. KP가 아닌 사람에게는 새 장면에서 보이는 오브젝트 전체가 함께 간다. */
+  /** 활성 장면이 바뀜. GM이 아닌 사람에게는 새 장면에서 보이는 오브젝트 전체가 함께 간다. */
   | { type: "scene.activated"; data: { scene: Scene; transition: Transition; objects?: GameObject[] } }
   | { type: "handout.added"; data: Handout }
   | { type: "handout.updated"; data: Handout }
@@ -668,16 +668,16 @@ export type ServerEvent =
   | { type: "character.updated"; data: Character }
   | { type: "character.removed"; data: { id: string } }
   | { type: "roll.result"; data: RollLogEntry }
-  /** KP의 판정 요청. 화면은 targetUserId가 내가 아니면 무시한다. */
+  /** GM의 판정 요청. 화면은 targetUserId가 내가 아니면 무시한다. */
   | { type: "roll.asked"; data: RollAsk }
   /** 다른 사람의 비밀 굴림. 결과는 담지 않는다. */
   | { type: "roll.hidden"; data: { id: string; userId: string; userName: string; at: number } }
   | { type: "presence"; data: { members: Member[] } }
   | { type: "session.started"; data: { number: number } }
   | { type: "session.paused"; data: { reason: PauseReason } }
-  /** KP의 마지막 연결이 닫혀 유예가 시작됨. 아직 정지는 아니다. */
+  /** GM의 마지막 연결이 닫혀 유예가 시작됨. 아직 정지는 아니다. */
   | { type: "kp.away"; data: { since: number } }
-  /** 유예 안에 KP가 돌아옴 */
+  /** 유예 안에 GM이 돌아옴 */
   | { type: "kp.back"; data: Record<string, never> }
   | { type: "session.resumed"; data: Record<string, never> }
   | { type: "session.ended"; data: EndSummary };

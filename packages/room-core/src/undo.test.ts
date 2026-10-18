@@ -75,7 +75,7 @@ describe("되돌리기", () => {
     expect(to(out, "object.added", "pl1")).toHaveLength(1);
   });
 
-  it("KP만 보는 오브젝트의 삭제를 되돌려도 PL에게는 아무것도 가지 않는다", () => {
+  it("GM만 보는 오브젝트의 삭제를 되돌려도 PL에게는 아무것도 가지 않는다", () => {
     const { room, add } = setup();
     const a = add("비밀", 50, 50, { visibleTo: "gm" });
     must(room.handle(kp, cmd("object.remove", { id: a.id })));
@@ -170,7 +170,7 @@ describe("되돌리기", () => {
     expect(names(room, kp)).toEqual(["B"]);
   });
 
-  it("KP 외에는 거부하고, 일시정지 중에도 KP는 되돌릴 수 있다", () => {
+  it("GM 외에는 거부하고, 일시정지 중에도 GM은 되돌릴 수 있다", () => {
     const { room, add } = setup();
     add("A");
     const r = undo(room, pl);
@@ -182,7 +182,7 @@ describe("되돌리기", () => {
     expect(names(room, kp)).toEqual([]);
   });
 
-  it("세션 전(IDLE)에도 KP는 되돌릴 수 있다", () => {
+  it("세션 전(IDLE)에도 GM은 되돌릴 수 있다", () => {
     const room = new Room("r2", { newId: () => `id-${++n}` });
     room.join(kp);
     must(room.handle(kp, cmd("object.add", { kind: "token", name: "A", x: 1, y: 1, layer: "object", visibleTo: "all" })));

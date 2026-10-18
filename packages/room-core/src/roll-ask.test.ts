@@ -15,7 +15,7 @@ const setup = () => {
 };
 
 describe("판정 요청", () => {
-  it("KP가 요청하면 모두에게 알림이 가고 이름은 다듬어진다", () => {
+  it("GM이 요청하면 모두에게 알림이 가고 이름은 다듬어진다", () => {
     const r = setup().handle(kp, cmd("roll.ask", { name: " 관찰력 ", difficulty: "hard" }));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -29,7 +29,7 @@ describe("판정 요청", () => {
     const bad = room.handle(kp, cmd("roll.ask", { name: "듣기", targetUserId: "sp1" }));
     expect(bad.ok).toBe(false);
   });
-  it("KP가 아니면 요청할 수 없다", () => {
+  it("GM이 아니면 요청할 수 없다", () => {
     const room = setup();
     expect(room.handle(pl, cmd("roll.ask", { name: "듣기" })).ok).toBe(false);
     expect(room.handle(spec, cmd("roll.ask", { name: "듣기" })).ok).toBe(false);

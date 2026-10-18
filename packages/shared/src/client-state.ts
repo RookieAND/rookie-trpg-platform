@@ -28,20 +28,20 @@ export interface RoomState {
   lastSeq: number;
   sessionStatus: SessionStatus;
   pauseReason: PauseReason | null;
-  /** KP 연결이 끊겨 유예 중인 동안의 끊긴 시각. 아니면 null */
+  /** GM 연결이 끊겨 유예 중인 동안의 끊긴 시각. 아니면 null */
   kpAwaySince: number | null;
   sessionNumber: number;
   objects: Record<string, GameObject>;
-  /** KP는 모든 장면, 나머지는 활성 장면만 안다. */
+  /** GM은 모든 장면, 나머지는 활성 장면만 안다. */
   scenes: Record<string, Scene>;
   activeSceneId: string;
   effects: EffectSettings;
-  /** KP만 채워진다. */
+  /** GM만 채워진다. */
   madnessTable: string[];
   initiative: Initiative | null;
-  /** KP만 받는다. */
+  /** GM만 받는다. */
   flow: Flow | null;
-  /** KP만 받는다. */
+  /** GM만 받는다. */
   audioLibrary: AudioTrack[];
   bgm: BgmState | null;
   /** 마지막 배경음 정지의 페이드(ms). 엔진이 이 길이로 줄인다. */
@@ -50,19 +50,19 @@ export interface RoomState {
   clockOffset: number;
   /** 방금 울릴 효과음. n이 바뀌면 새로 울린다. */
   lastSe: { assetId: string; volume: number; n: number; startedAt: number } | null;
-  /** 가장 최근 광기 증상 굴림(시트 주인과 KP만 받는다). n은 같은 결과가 또 와도 새로 보이게 하는 번호다. */
+  /** 가장 최근 광기 증상 굴림(시트 주인과 GM만 받는다). n은 같은 결과가 또 와도 새로 보이게 하는 번호다. */
   lastMadness: { result: MadnessResult; n: number } | null;
   /** 장면이 바뀔 때마다 n이 오른다. 화면 효과를 다시 재생하는 신호로 쓴다. */
   transition: { kind: Transition; n: number } | null;
   members: Member[];
   rolls: RollLogEntry[];
-  /** KP가 요청한 판정(최근 것부터 5개). 화면에서 내게 온 것만 골라 쓴다. */
+  /** GM이 요청한 판정(최근 것부터 5개). 화면에서 내게 온 것만 골라 쓴다. */
   rollAsks: RollAsk[];
   characters: Record<string, Character>;
   handouts: Record<string, Handout>;
-  /** KP가 "바로 펼치기"를 눌렀을 때 화면에 띄울 핸드아웃. n이 바뀌면 같은 핸드아웃도 다시 띄운다. */
+  /** GM이 "바로 펼치기"를 눌렀을 때 화면에 띄울 핸드아웃. n이 바뀌면 같은 핸드아웃도 다시 띄운다. */
   spotlight: { id: string; n: number } | null;
-  /** 다른 사람의 비밀 굴림 알림("KP가 비밀 굴림을 했어요") */
+  /** 다른 사람의 비밀 굴림 알림("GM이 비밀 굴림을 했어요") */
   /** 마지막 세션 종료 정산. 다음 세션이 시작되면 지운다. */
   lastEnd: EndSummary | null;
   hiddenRolls: Array<{ id: string; userName: string; at: number }>;
@@ -201,7 +201,7 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
     case "scene.activated": {
       const { scene, transition, objects } = ev.data;
       const base = { ...next, activeSceneId: scene.id, transition: { kind: transition, n: (state.transition?.n ?? 0) + 1 } };
-      // 오브젝트 목록이 같이 오면(KP 외) 통째로 바꾸고, 알려진 장면도 이것 하나로 맞춘다.
+      // 오브젝트 목록이 같이 오면(GM 외) 통째로 바꾸고, 알려진 장면도 이것 하나로 맞춘다.
       if (objects) return { ...base, objects: Object.fromEntries(objects.map((o) => [o.id, o])), scenes: { [scene.id]: scene } };
       return { ...base, scenes: { ...state.scenes, [scene.id]: scene } };
     }

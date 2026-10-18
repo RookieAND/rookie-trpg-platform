@@ -63,7 +63,7 @@ describe("SAN 체크", () => {
     expect(sheetOf(outs)).toMatchObject({ san: 56, sanDay: { start: 60, lost: 4 } });
   });
 
-  it("남의 시트는 못 굴리고 관전자도 못 굴린다. KP는 가능하다", () => {
+  it("남의 시트는 못 굴리고 관전자도 못 굴린다. GM은 가능하다", () => {
     const { room, id } = setup(seq(0.3, 0.2));
     expect(room.handle(han, cmd("san.check", { characterId: id, loss: "0/1d6" })).ok).toBe(false);
     expect(room.handle(spec, cmd("san.check", { characterId: id, loss: "0/1d6" })).ok).toBe(false);
@@ -94,7 +94,7 @@ describe("SAN 체크", () => {
 });
 
 describe("광기 상태 관리", () => {
-  it("KP만 광기를 해제할 수 있다", () => {
+  it("GM만 광기를 해제할 수 있다", () => {
     const { room, id } = setup(seq(0.9, 0.8, 0.6, 0.1, 0.1));
     must(room.handle(seo, cmd("san.check", { characterId: id, loss: "0/1d10" })));
     const mine = room.handle(seo, cmd("sheet.patch", { characterId: id, ops: [{ path: "madness", value: "none" }] }));
@@ -103,7 +103,7 @@ describe("광기 상태 관리", () => {
     expect(sheetOf(outs).madness).toBeUndefined();
   });
 
-  it("하루가 지나면 하루 손실이 초기화된다(KP만)", () => {
+  it("하루가 지나면 하루 손실이 초기화된다(GM만)", () => {
     const { room, id } = setup(seq(0.9, 0.8, 0.5));
     must(room.handle(seo, cmd("san.check", { characterId: id, loss: "0/1d6" })));
     expect(room.handle(seo, cmd("san.newDay", {})).ok).toBe(false);
@@ -127,7 +127,7 @@ describe("광기 상태 관리", () => {
 describe("광기 증상표", () => {
   const table = ["공포에 얼어붙는다", "비명을 지르며 달아난다", "누군가를 공격한다"];
 
-  it("KP만 증상표를 바꾸고, 증상표는 KP에게만 보인다", () => {
+  it("GM만 증상표를 바꾸고, 증상표는 GM에게만 보인다", () => {
     const { room } = setup(seq(0.5));
     expect(room.handle(seo, cmd("settings.madness", { entries: table })).ok).toBe(false);
     const outs = must(room.handle(kp, cmd("settings.madness", { entries: table })));
@@ -136,7 +136,7 @@ describe("광기 증상표", () => {
     expect(room.snapshot(seo).madnessTable).toEqual([]);
   });
 
-  it("증상 하나와 지속 시간을 굴리고, 시트 주인과 KP에게만 알린다", () => {
+  it("증상 하나와 지속 시간을 굴리고, 시트 주인과 GM에게만 알린다", () => {
     // 인덱스 0.5 → 3개 중 2번째(1), 지속 0.2 → 3
     const { room, id } = setup(seq(0.5, 0.2));
     must(room.handle(kp, cmd("settings.madness", { entries: table })));
@@ -147,7 +147,7 @@ describe("광기 증상표", () => {
     expect(outs[0]!.audience).toEqual({ roles: ["kp"], users: ["pl1"] });
   });
 
-  it("증상표가 비었거나 KP가 아니면 굴릴 수 없다", () => {
+  it("증상표가 비었거나 GM이 아니면 굴릴 수 없다", () => {
     const { room, id } = setup(seq(0.5));
     expect(room.handle(kp, cmd("madness.roll", { characterId: id, mode: "realtime" })).ok).toBe(false);
     must(room.handle(kp, cmd("settings.madness", { entries: table })));

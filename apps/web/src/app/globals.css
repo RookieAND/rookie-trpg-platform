@@ -219,7 +219,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .cuebar { align-items: center; }
 .cuebar .dock-label { width: 40px; }
 
-/* 데스크톱 KP: 도구는 지도 아래 줄로 쌓아 지도를 가리지 않는다. 안개와 놓기는 한 줄에 나란히 둔다. */
+/* 데스크톱 GM: 도구는 지도 아래 줄로 쌓아 지도를 가리지 않는다. 안개와 놓기는 한 줄에 나란히 둔다. */
 @media (min-width: 769px) {
   .board:has(> .dock:not(.dock-hint)) { display: grid; grid-template-columns: minmax(0, 1fr) max-content; grid-template-rows: minmax(0, 1fr) auto auto auto; overflow: hidden; }
   .board:has(> .dock:not(.dock-hint)) > svg { grid-row: 1; grid-column: 1 / -1; min-height: 0; height: 100%; width: 100%; }
@@ -235,7 +235,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   .board:has(> .dock:not(.dock-hint)) .zoom-ctl { bottom: auto; top: 56px; }
 }
 
-/* PL 시작 가이드: ‘KP가 세션을 시작하기를 기다리고 있어요’ 배너(top 108px) 아래에 놓는다 */
+/* PL 시작 가이드: ‘GM이 세션을 시작하기를 기다리고 있어요’ 배너(top 108px) 아래에 놓는다 */
 .guide-pl { top: 104px; }
 
 /* ───────────────────────── 좁은 화면(휴대폰·태블릿) ─────────────────────────

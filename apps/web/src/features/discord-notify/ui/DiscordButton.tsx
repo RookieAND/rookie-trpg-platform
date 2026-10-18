@@ -5,7 +5,7 @@ import type { Identity } from "@/entities/user";
 import { ApiError } from "@/shared/api";
 import { Dialog } from "@/shared/ui";
 
-/** KP가 디스코드 채널 웹훅을 연결하고 알림 종류를 고른다. */
+/** GM이 디스코드 채널 웹훅을 연결하고 알림 종류를 고른다. */
 export function DiscordButton({ me, roomId }: { me: Identity; roomId: string }) {
   const [open, setOpen] = useState(false);
   const [cfg, setCfg] = useState<DiscordSettings | null>(null);

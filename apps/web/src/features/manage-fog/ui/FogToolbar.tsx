@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { FOG_MAX_RADIUS, MAX_FOG_ZONES, type ClientCommand, type GameObject, type Scene } from "@coc-vtt/shared";
 
-/** KP의 안개 도구: 장면의 안개를 켜고, 밝은 영역을 찍고, 토큰에 시야를 준다. */
+/** GM의 안개 도구: 장면의 안개를 켜고, 밝은 영역을 찍고, 토큰에 시야를 준다. */
 export function FogToolbar({
   scene,
   selected,

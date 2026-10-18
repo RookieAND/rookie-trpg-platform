@@ -62,7 +62,7 @@ const addChar = (room: Room, who: Actor, san = 50) =>
   );
 
 describe("세션 흐름: 편집", () => {
-  it("KP만 편집하고, 참가자 snapshot에는 흐름이 없다", () => {
+  it("GM만 편집하고, 참가자 snapshot에는 흐름이 없다", () => {
     const { room } = setup();
     expect(room.handle(seo, cmd("flow.beat.upsert", { name: "x", kind: "progress", memo: "", handoutIds: [] })).ok).toBe(false);
     beat(room, { name: "오프닝", kind: "start" });
@@ -167,7 +167,7 @@ describe("세션 흐름: 진행", () => {
     expect(ended.data.sanRewards?.[0]).toMatchObject({ before: 40, after: 44 });
   });
 
-  it("KP가 직접 적은 엔딩 이름이 비트보다 우선한다", () => {
+  it("GM이 직접 적은 엔딩 이름이 비트보다 우선한다", () => {
     const { room } = setup();
     beat(room, { name: "시작", kind: "start" });
     const e = beat(room, { name: "비트 엔딩", kind: "ending" });
@@ -203,7 +203,7 @@ describe("세션 흐름: 분기 제안", () => {
     expect(f.current).toBe(a.id);
   });
 
-  it("단계가 모자라거나 다른 기능이거나 KP의 비밀 굴림이면 제안하지 않는다", () => {
+  it("단계가 모자라거나 다른 기능이거나 GM의 비밀 굴림이면 제안하지 않는다", () => {
     const { room, a, b } = started(seq(0.3, 0.2));
     addChar(room, seo);
     branch(room, a.id, b.id, { type: "roll", skill: "도서관 이용", atLeast: "extreme" });
@@ -247,7 +247,7 @@ describe("세션 흐름: 분기 제안", () => {
     expect(room.snapshot(kp).flow!.suggestions).toHaveLength(0);
   });
 
-  it("제안은 KP에게만 간다", () => {
+  it("제안은 GM에게만 간다", () => {
     const { room, a, b, letter } = started(() => 0.5);
     branch(room, a.id, b.id, { type: "handout", handoutId: letter });
     must(room.handle(kp, cmd("session.start", {})));

@@ -41,7 +41,7 @@ interface Props {
   onMove: (obj: GameObject, x: number, y: number) => void;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  /** 안개. areas는 지금 보이는 원들이고, preview면 KP용으로 가려진 곳을 반투명하게 보여 준다. */
+  /** 안개. areas는 지금 보이는 원들이고, preview면 GM용으로 가려진 곳을 반투명하게 보여 준다. */
   fog?: { areas: FogArea[]; preview: boolean; /** 한 번이라도 보였던 곳: 지금 안 보여도 배경은 어둡게 보인다 */ explored?: FogArea[] };
   /** 켜 두면 빈 곳을 눌렀을 때 선택 대신 그 좌표를 알린다(영역 밝히기). */
   onPick?: (x: number, y: number) => void;

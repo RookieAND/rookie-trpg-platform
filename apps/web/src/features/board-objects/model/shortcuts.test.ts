@@ -10,7 +10,7 @@ describe("boardKeyAction: 지우기", () => {
     expect(boardKeyAction(ev("Delete"), ctx())).toEqual({ type: "delete" });
     expect(boardKeyAction(ev("Backspace"), ctx())).toEqual({ type: "delete" });
   });
-  it("선택이 없거나 KP가 아니면 무시", () => {
+  it("선택이 없거나 GM이 아니면 무시", () => {
     expect(boardKeyAction(ev("Delete"), ctx({ hasSelection: false }))).toBeNull();
     expect(boardKeyAction(ev("Delete"), ctx({ canEdit: false }))).toBeNull();
   });

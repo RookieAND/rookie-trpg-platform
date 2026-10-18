@@ -3,7 +3,7 @@ import { describeOutcome, type ServerEvent } from "@coc-vtt/shared";
 export interface DiscordEvents {
   /** 세션 시작·일시정지·재개·종료 */
   session: boolean;
-  /** 공개 굴림 결과(KP의 비밀 굴림은 어떤 경우에도 보내지 않는다) */
+  /** 공개 굴림 결과(GM의 비밀 굴림은 어떤 경우에도 보내지 않는다) */
   rolls: boolean;
 }
 
@@ -36,7 +36,7 @@ export function formatNotification(event: ServerEvent, ctx: { roomName: string }
     case "session.started":
       return events.session ? `🎲 ${room} · 세션 ${event.data.number}을(를) 시작했어요.` : null;
     case "session.paused":
-      return events.session ? `⏸️ ${room} · 세션이 일시정지됐어요${event.data.reason === "kp_disconnected" ? " (KP 연결이 끊겼어요)" : ""}.` : null;
+      return events.session ? `⏸️ ${room} · 세션이 일시정지됐어요${event.data.reason === "kp_disconnected" ? " (GM 연결이 끊겼어요)" : ""}.` : null;
     case "session.resumed":
       return events.session ? `▶️ ${room} · 세션을 이어가요.` : null;
     case "session.ended":

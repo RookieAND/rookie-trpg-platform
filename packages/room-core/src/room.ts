@@ -110,14 +110,14 @@ export function canSeeHandout(h: Pick<Handout, "visibleTo" | "kpOnly">, viewer: 
   return v.includes(viewer.userId);
 }
 
-/** 시트는 주인과 KP만 본다. */
+/** 시트는 주인과 GM만 본다. */
 export function canSeeCharacter(c: Pick<Character, "ownerId">, viewer: Pick<Member, "userId" | "role">): boolean {
   return viewer.role === "kp" || c.ownerId === viewer.userId;
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
-/** activeSceneId를 주면 KP가 아닌 사람은 그 장면의 오브젝트만 본다. */
+/** activeSceneId를 주면 GM이 아닌 사람은 그 장면의 오브젝트만 본다. */
 export function canSee(obj: GameObject, member: Pick<Member, "userId" | "role">, activeSceneId?: string): boolean {
   if (member.role === "kp") return true;
   if (activeSceneId !== undefined && obj.sceneId !== activeSceneId) return false;
@@ -137,7 +137,7 @@ export interface RoomData {
   roomId: string;
   seq: number;
   status: SessionStatus;
-  /** 일시정지 사유. 이전 버전에서 저장한 데이터에는 없을 수 있다(없으면 KP가 직접 누른 정지로 본다). */
+  /** 일시정지 사유. 이전 버전에서 저장한 데이터에는 없을 수 있다(없으면 GM이 직접 누른 정지로 본다). */
   pauseReason?: PauseReason;
   sessionNumber: number;
   objects: GameObject[];
@@ -158,9 +158,9 @@ export interface RoomData {
 }
 
 /**
- * 일시정지 중에 KP에게도 막는 명령. 판정(굴림·밀어붙이기·행운·SAN·광기·피해)과 전투 진행,
+ * 일시정지 중에 GM에게도 막는 명령. 판정(굴림·밀어붙이기·행운·SAN·광기·피해)과 전투 진행,
  * PL에게 바로 드러나는 진행(장면 전환·핸드아웃 펼치기·비트 이동)이다.
- * 그 밖의 장면·시트·핸드아웃·흐름·안개·음향·토큰 편집은 KP가 준비할 수 있다.
+ * 그 밖의 장면·시트·핸드아웃·흐름·안개·음향·토큰 편집은 GM이 준비할 수 있다.
  */
 export const KP_BLOCKED_WHILE_PAUSED: ReadonlySet<ClientCommand["type"]> = new Set<ClientCommand["type"]>([
   "roll.request",
@@ -186,9 +186,9 @@ export class Room {
   readonly roomId: string;
   private seq = 0;
   private status: SessionStatus = "IDLE";
-  /** PAUSED일 때만 의미가 있다. kp_disconnected면 KP가 돌아올 때 자동 재개한다. */
+  /** PAUSED일 때만 의미가 있다. kp_disconnected면 GM이 돌아올 때 자동 재개한다. */
   private pauseReason: PauseReason | null = null;
-  /** KP 연결이 끊겨 유예 중이면 끊긴 시각. 유예 시간은 모르며, 시간이 다 되면 호출자가 expireKpAway()를 부른다. */
+  /** GM 연결이 끊겨 유예 중이면 끊긴 시각. 유예 시간은 모르며, 시간이 다 되면 호출자가 expireKpAway()를 부른다. */
   private kpAwaySince: number | null = null;
   private sessionNumber: number;
   private objects = new Map<string, GameObject>();
@@ -200,7 +200,7 @@ export class Room {
   private audio: AudioTrack[] = [];
   private bgm: BgmState | null = null;
   private flow: Flow = { beats: [], branches: [], current: null, suggestions: [] };
-  /** 이 비트에서 KP가 넘긴 제안. 같은 비트에 머무는 동안 다시 제안하지 않는다. */
+  /** 이 비트에서 GM이 넘긴 제안. 같은 비트에 머무는 동안 다시 제안하지 않는다. */
   private dismissed = new Set<string>();
   private members = new Map<string, Member>();
   private rolls: RollLogEntry[] = [];
@@ -249,9 +249,9 @@ export class Room {
   }
 
   /**
-   * 저장된 상태에서 룸을 되살린다. 서버가 내려갔다 올라온 경우 KP가 없으므로
-   * 진행 중이던 세션은 자동 정지(kp_disconnected)로 두고, KP가 들어오면 자동 재개한다.
-   * 저장 때 이미 정지였다면 사유를 그대로 따른다(옛 데이터는 KP가 누른 정지로 본다).
+   * 저장된 상태에서 룸을 되살린다. 서버가 내려갔다 올라온 경우 GM이 없으므로
+   * 진행 중이던 세션은 자동 정지(kp_disconnected)로 두고, GM이 들어오면 자동 재개한다.
+   * 저장 때 이미 정지였다면 사유를 그대로 따른다(옛 데이터는 GM이 누른 정지로 본다).
    */
   static fromData(data: RoomData, opts: RoomOptions = {}): Room {
     const room = new Room(data.roomId, { ...opts, sessionNumber: data.sessionNumber });
@@ -289,7 +289,7 @@ export class Room {
 
   /**
    * 접속. 처음이면 멤버를 만들고, 다시 접속이면 온라인으로 바꾼다.
-   * KP가 돌아오면 유예를 끝내고, 자동 정지(kp_disconnected) 상태였다면 자동으로 재개한다.
+   * GM이 돌아오면 유예를 끝내고, 자동 정지(kp_disconnected) 상태였다면 자동으로 재개한다.
    */
   join(actor: Actor): Out[] {
     const prev = this.members.get(actor.userId);
@@ -313,7 +313,7 @@ export class Room {
   }
 
   /**
-   * 한 사용자의 마지막 연결이 닫혔을 때 부른다. KP였고 진행 중이면 바로 멈추지 않고 유예를 시작한다
+   * 한 사용자의 마지막 연결이 닫혔을 때 부른다. GM이었고 진행 중이면 바로 멈추지 않고 유예를 시작한다
    * (kp.away). 유예가 지나도 안 돌아오면 호출자가 expireKpAway()를 부른다. 시계는 호출자의 몫이다.
    */
   leave(userId: string): Out[] {
@@ -328,7 +328,7 @@ export class Room {
     return out;
   }
 
-  /** 유예가 끝났을 때 부른다. 아직 KP가 없고 진행 중이면 자동 정지(kp_disconnected)한다. */
+  /** 유예가 끝났을 때 부른다. 아직 GM이 없고 진행 중이면 자동 정지(kp_disconnected)한다. */
   expireKpAway(): Out[] {
     if (this.kpAwaySince === null) return [];
     this.kpAwaySince = null;
@@ -408,7 +408,7 @@ export class Room {
   /** 이번 명령으로 탐험 기록이 늘었는지 */
   private exploredChanged = false;
   private fanned = new Set<string>();
-  /** KP의 최근 변경 기록(되돌리기용). 메모리에만 둔다. */
+  /** GM의 최근 변경 기록(되돌리기용). 메모리에만 둔다. */
   private readonly undoLog = new UndoLog();
 
   private dispatch(actor: Actor, command: ClientCommand): Result {
@@ -429,11 +429,11 @@ export class Room {
     }
 
     if (this.status === "PAUSED") {
-      if (who.role !== "kp") return fail("paused", "세션이 일시정지 중이에요. KP가 돌아오면 이어서 진행해요.");
-      // KP는 준비성 명령(편집)만 할 수 있다. 판정과 전투, 이야기를 앞으로 미는 명령은 이어하기 뒤에 한다.
+      if (who.role !== "kp") return fail("paused", "세션이 일시정지 중이에요. GM이 돌아오면 이어서 진행해요.");
+      // GM은 준비성 명령(편집)만 할 수 있다. 판정과 전투, 이야기를 앞으로 미는 명령은 이어하기 뒤에 한다.
       if (KP_BLOCKED_WHILE_PAUSED.has(command.type)) return fail("paused", "일시정지 중에는 판정·전투·장면 전환을 할 수 없어요. 이어하기를 눌러 주세요.");
     }
-    // 세션이 없을 때는 KP만 장면을 준비할 수 있다(준비 모드).
+    // 세션이 없을 때는 GM만 장면을 준비할 수 있다(준비 모드).
     // 캐릭터 등록은 세션 전에도 할 수 있다(미리 불러오기).
     // 시트의 글(소지품·인물 배경·메모)은 세션 전에도 PL이 미리 채울 수 있다. 수치·판정은 세션이 열려야 한다.
     const textOnlyPatch = command.type === "sheet.patch" && command.data.ops.every((o) => o.path === "notes" || o.path === "possessions" || o.path === "backstory");
@@ -552,7 +552,7 @@ export class Room {
   // ── 세션 ───────────────────────────────────────────────
 
   private sessionStart(who: Actor): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 세션을 시작할 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 세션을 시작할 수 있어요.");
     if (this.status !== "IDLE") return fail("bad_message", "이미 세션이 진행 중이에요.");
     this.sessionNumber += 1;
     this.status = "ACTIVE";
@@ -571,7 +571,7 @@ export class Room {
   }
 
   private sessionPause(who: Actor): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 세션을 멈출 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 세션을 멈출 수 있어요.");
     if (this.status !== "ACTIVE") return fail("bad_message", "진행 중인 세션이 아니에요.");
     this.status = "PAUSED";
     this.pauseReason = "kp_request";
@@ -579,7 +579,7 @@ export class Room {
   }
 
   private sessionResume(who: Actor): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 세션을 이어갈 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 세션을 이어갈 수 있어요.");
     if (this.status !== "PAUSED") return fail("bad_message", "일시정지 중인 세션이 없어요.");
     this.status = "ACTIVE";
     this.pauseReason = null;
@@ -587,7 +587,7 @@ export class Room {
   }
 
   private sessionEnd(who: Actor, d: { ending?: string; sanReward?: string; growth?: boolean }): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 세션을 끝낼 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 세션을 끝낼 수 있어요.");
     if (this.status === "IDLE") return fail("bad_message", "진행 중인 세션이 없어요.");
     // 보상 식은 상태를 바꾸기 전에 확인한다. 틀린 식 때문에 세션이 반쯤 끝나면 안 된다.
     if (d.sanReward) {
@@ -649,7 +649,7 @@ export class Room {
   // ── 판정 효과 ───────────────────────────────────────────
 
   private setEffect(who: Actor, d: { level: keyof EffectSettings; enabled?: boolean; intensity?: 1 | 2 | 3 }): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 판정 효과를 바꿀 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 판정 효과를 바꿀 수 있어요.");
     const cur = this.effects[d.level];
     this.effects[d.level] = { enabled: d.enabled ?? cur.enabled, intensity: d.intensity ?? cur.intensity };
     return ok(this.emit({ type: "settings.effects", data: { effects: cloneEffects(this.effects) } }, { roles: ALL_ROLES }));
@@ -658,7 +658,7 @@ export class Room {
   // ── 음향 ──────────────────────────────────────────────
 
   private audioGuard(who: Actor): Result | null {
-    return who.role === "kp" ? null : fail("forbidden", "KP만 음향을 다룰 수 있어요.");
+    return who.role === "kp" ? null : fail("forbidden", "GM만 음향을 다룰 수 있어요.");
   }
 
   private libraryOut(): Out {
@@ -746,7 +746,7 @@ export class Room {
   }
 
   private flowGuard(who: Actor): Result | null {
-    return who.role === "kp" ? null : fail("forbidden", "KP만 세션 흐름을 다룰 수 있어요.");
+    return who.role === "kp" ? null : fail("forbidden", "GM만 세션 흐름을 다룰 수 있어요.");
   }
 
   /** 비트에 들어간다: 현재 위치를 옮기고 제안을 비운다. */
@@ -780,7 +780,7 @@ export class Room {
       if (!probe.ok) return fail("bad_message", `SAN 보상은 1d6+1d4처럼 주사위 식으로 적어 주세요. ${probe.error}`);
     }
     if (d.bgmTrackId && d.bgmTrackId !== BGM_STOP && this.audio.find((t) => t.id === d.bgmTrackId)?.kind !== "bgm") return fail("not_found", "배경음을 찾을 수 없어요.");
-    if (d.handoutIds.some((hid) => this.handouts.get(hid)?.kpOnly)) return fail("bad_message", "KP 전용 노트는 비트에 붙일 수 없어요.");
+    if (d.handoutIds.some((hid) => this.handouts.get(hid)?.kpOnly)) return fail("bad_message", "GM 전용 노트는 비트에 붙일 수 없어요.");
     const existing = d.id ? this.flow.beats.find((b) => b.id === d.id) : undefined;
     if (d.id && !existing) return fail("not_found", "비트를 찾을 수 없어요.");
     if (!existing && this.flow.beats.length >= MAX_BEATS) return fail("bad_message", `비트는 ${MAX_BEATS}개까지 둘 수 있어요.`);
@@ -818,7 +818,7 @@ export class Room {
     if (!this.flow.beats.some((b) => b.id === d.from) || !this.flow.beats.some((b) => b.id === d.to)) return fail("not_found", "비트를 찾을 수 없어요.");
     if (d.from === d.to) return fail("bad_message", "같은 비트로 되돌아가는 분기는 만들 수 없어요.");
     if (d.condition.type === "handout" && !this.handouts.has(d.condition.handoutId)) return fail("not_found", "핸드아웃을 찾을 수 없어요.");
-    if (d.condition.type === "handout" && this.handouts.get(d.condition.handoutId)?.kpOnly) return fail("bad_message", "KP 전용 노트는 분기 조건으로 쓸 수 없어요.");
+    if (d.condition.type === "handout" && this.handouts.get(d.condition.handoutId)?.kpOnly) return fail("bad_message", "GM 전용 노트는 분기 조건으로 쓸 수 없어요.");
     const existing = d.id ? this.flow.branches.find((b) => b.id === d.id) : undefined;
     if (d.id && !existing) return fail("not_found", "분기를 찾을 수 없어요.");
     if (!existing && this.flow.branches.length >= MAX_BRANCHES) return fail("bad_message", `분기는 ${MAX_BRANCHES}개까지 둘 수 있어요.`);
@@ -865,7 +865,7 @@ export class Room {
     this.flow.suggestions = this.flow.suggestions.filter((s) => live.has(s.branchId));
   }
 
-  /** 방금 일어난 일을 보고, 현재 비트에서 나가는 분기 중 조건이 맞은 것을 KP에게 제안한다. 스스로 옮기지는 않는다. */
+  /** 방금 일어난 일을 보고, 현재 비트에서 나가는 분기 중 조건이 맞은 것을 GM에게 제안한다. 스스로 옮기지는 않는다. */
   private flowSuggest(out: Out[]): Out[] {
     const flow = this.flow;
     let changed = false;
@@ -885,7 +885,7 @@ export class Room {
     if (c.type === "roll") {
       for (const o of out) {
         const ev = o.event;
-        // KP의 비밀 굴림은 제안에 쓰지 않는다.
+        // GM의 비밀 굴림은 제안에 쓰지 않는다.
         if (ev.type !== "roll.result" || ev.data.secret || ev.data.check?.name !== c.skill) continue;
         const outcome = ev.data.outcome;
         if (outcome.kind === "cc" && outcome.level && meetsDifficulty(outcome.level, c.atLeast)) return `${ev.data.label ?? c.skill} 판정이 ${DIFFICULTY_KO[c.atLeast]} 이상`;
@@ -911,7 +911,7 @@ export class Room {
   }
 
   private initiativeGuard(who: Actor): Result | null {
-    if (who.role !== "kp") return fail("forbidden", "KP만 전투 순서를 다룰 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 전투 순서를 다룰 수 있어요.");
     return null;
   }
 
@@ -998,7 +998,7 @@ export class Room {
   // ── 장면 ───────────────────────────────────────────────
 
   private sceneCreate(who: Actor, name: string): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 장면을 만들 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 장면을 만들 수 있어요.");
     if (this.scenes.size >= MAX_SCENES) return fail("bad_message", `장면은 ${MAX_SCENES}개까지 둘 수 있어요.`);
     const scene: Scene = { id: this.newId(), name };
     this.scenes.set(scene.id, scene);
@@ -1006,7 +1006,7 @@ export class Room {
   }
 
   private sceneRename(who: Actor, d: { id: string; name: string }): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 장면 이름을 바꿀 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 장면 이름을 바꿀 수 있어요.");
     const scene = this.scenes.get(d.id);
     if (!scene) return fail("not_found", "장면을 찾을 수 없어요.");
     scene.name = d.name;
@@ -1015,7 +1015,7 @@ export class Room {
   }
 
   private sceneBackground(who: Actor, d: { id: string; image: string | null }): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 장면 배경을 바꿀 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 장면 배경을 바꿀 수 있어요.");
     const scene = this.scenes.get(d.id);
     if (!scene) return fail("not_found", "장면을 찾을 수 없어요.");
     if (d.image) scene.background = d.image;
@@ -1034,11 +1034,11 @@ export class Room {
     return areas;
   }
 
-  /** 안개 때문에 보이는지. KP와 자기 토큰은 늘 보이고, 나머지는 원 안에 있어야 한다. */
+  /** 안개 때문에 보이는지. GM과 자기 토큰은 늘 보이고, 나머지는 원 안에 있어야 한다. */
   private passesFog(obj: GameObject, m: Pick<Member, "userId" | "role">, areas: FogArea[] | undefined): boolean {
     if (m.role === "kp" || !areas) return true;
     if (obj.ownerId === m.userId) return true;
-    // 파티원(PL 소유 토큰)은 안개와 상관없이 다른 PL에게도 보인다. 숨기려면 KP가 토큰을 숨긴다.
+    // 파티원(PL 소유 토큰)은 안개와 상관없이 다른 PL에게도 보인다. 숨기려면 GM이 토큰을 숨긴다.
     if (obj.kind === "token" && obj.ownerId && m.role === "pl") return true;
     return areas.some((a) => (a.x - obj.x) ** 2 + (a.y - obj.y) ** 2 <= a.r ** 2);
   }
@@ -1071,12 +1071,12 @@ export class Room {
     const told = out.some((o) => o.event.type === "scene.updated" && o.audience.roles?.includes("pl"));
     const scene = this.scenes.get(this.activeSceneId);
     if (scene && ((changed && !told) || this.exploredChanged)) out.push(this.emit({ type: "scene.updated", data: this.sceneFor(scene, false) }, { roles: ["pl", "spectator"] }));
-    // 탐험 기록은 KP 화면에도 보여 준다.
+    // 탐험 기록은 GM 화면에도 보여 준다.
     if (scene && this.exploredChanged) out.push(this.emit({ type: "scene.updated", data: this.sceneFor(scene, true) }, { roles: ["kp"] }));
     return ok(...out);
   }
 
-  /** 장면을 내보낼 모양으로 만든다. KP는 안개 설정 전체를, 나머지는 지금 보이는 원들만 받는다. */
+  /** 장면을 내보낼 모양으로 만든다. GM은 안개 설정 전체를, 나머지는 지금 보이는 원들만 받는다. */
   private sceneFor(scene: Scene, forKp: boolean): Scene {
     if (forKp) {
       const { fog, ...rest } = scene;
@@ -1118,7 +1118,7 @@ export class Room {
   }
 
   private fogGuard(who: Actor, sceneId: string): { error: Result } | { scene: Scene } {
-    if (who.role !== "kp") return { error: fail("forbidden", "KP만 안개를 다룰 수 있어요.") };
+    if (who.role !== "kp") return { error: fail("forbidden", "GM만 안개를 다룰 수 있어요.") };
     const scene = this.scenes.get(sceneId);
     if (!scene) return { error: fail("not_found", "장면을 찾을 수 없어요.") };
     return { scene };
@@ -1159,7 +1159,7 @@ export class Room {
 
   /** 장면에 배경음을 묶는다(장면 묶음). null이면 푼다. */
   private sceneSetBgm(who: Actor, d: { id: string; trackId: string | null }): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 장면 배경음을 정할 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 장면 배경음을 정할 수 있어요.");
     const scene = this.scenes.get(d.id);
     if (!scene) return fail("not_found", "장면을 찾을 수 없어요.");
     if (d.trackId === BGM_STOP) scene.bgmTrackId = BGM_STOP;
@@ -1170,7 +1170,7 @@ export class Room {
     return ok(...this.emitScene(scene));
   }
 
-  /** KP에게는 전체를, 지금 장면이면 나머지에게는 KP 전용 표시를 뺀 값을 알린다. */
+  /** GM에게는 전체를, 지금 장면이면 나머지에게는 GM 전용 표시를 뺀 값을 알린다. */
   private emitScene(scene: Scene): Out[] {
     const out = [this.emit({ type: "scene.updated", data: this.sceneFor(scene, true) }, { roles: ["kp"] })];
     if (scene.id === this.activeSceneId) out.push(this.emit({ type: "scene.updated", data: this.sceneFor(scene, false) }, { roles: ["pl", "spectator"] }));
@@ -1179,7 +1179,7 @@ export class Room {
 
   /** 세션을 시작할 때 처음 보일 장면을 하나 정한다. null이면 지정을 푼다. */
   private sceneSetStart(who: Actor, id: string | null): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 시작 장면을 정할 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 시작 장면을 정할 수 있어요.");
     if (id !== null && !this.scenes.has(id)) return fail("not_found", "장면을 찾을 수 없어요.");
     const out: Out[] = [];
     for (const s of this.scenes.values()) {
@@ -1193,18 +1193,18 @@ export class Room {
   }
 
   private sceneRemove(who: Actor, id: string): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 장면을 지울 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 장면을 지울 수 있어요.");
     if (!this.scenes.has(id)) return fail("not_found", "장면을 찾을 수 없어요.");
     if (id === this.activeSceneId) return fail("bad_message", "지금 진행 중인 장면은 지울 수 없어요. 다른 장면으로 바꾼 뒤 지워 주세요.");
     this.scenes.delete(id);
     for (const [oid, o] of this.objects) if (o.sceneId === id) this.objects.delete(oid);
-    // 지우는 장면은 PL이 볼 수 없는 장면이라 KP에게만 알린다. 오브젝트는 클라이언트가 장면과 함께 정리한다.
+    // 지우는 장면은 PL이 볼 수 없는 장면이라 GM에게만 알린다. 오브젝트는 클라이언트가 장면과 함께 정리한다.
     return ok(this.emit({ type: "scene.removed", data: { id } }, { roles: ["kp"] }));
   }
 
   /** 활성 장면을 바꾼다. PL에게는 새 장면에서 보이는 오브젝트 전체를 사람마다 따로 보낸다. */
   private sceneActivate(who: Actor, d: { id: string; transition: Transition; bringParty?: boolean }): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 장면을 바꿀 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 장면을 바꿀 수 있어요.");
     const scene = this.scenes.get(d.id);
     if (!scene) return fail("not_found", "장면을 찾을 수 없어요.");
     if (d.id === this.activeSceneId) return fail("bad_message", "이미 진행 중인 장면이에요.");
@@ -1213,7 +1213,7 @@ export class Room {
 
   /**
    * 새 장면에 토큰이 없는 PL에게는 이전 장면의 토큰을 빈자리에 복사해 둔다(이름·이미지·시야를 이어받는다).
-   * 장면이 활성이 되기 전에 만들어서, 이 추가는 KP에게만 알림이 가고 PL에게는 scene.activated의 목록으로 간다.
+   * 장면이 활성이 되기 전에 만들어서, 이 추가는 GM에게만 알림이 가고 PL에게는 scene.activated의 목록으로 간다.
    */
   private bringPartyTokens(scene: Scene): Out[] {
     const out: Out[] = [];
@@ -1268,7 +1268,7 @@ export class Room {
   // ── 오브젝트 ────────────────────────────────────────────
 
   private objectAdd(who: Actor, d: Extract<ClientCommand, { type: "object.add" }>["data"]): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 오브젝트를 추가할 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 오브젝트를 추가할 수 있어요.");
     if (this.objects.size >= MAX_OBJECTS) return fail("bad_message", `오브젝트는 ${MAX_OBJECTS}개까지 둘 수 있어요.`);
     const sceneId = d.sceneId ?? this.activeSceneId;
     if (!this.scenes.has(sceneId)) return fail("not_found", "장면을 찾을 수 없어요.");
@@ -1345,7 +1345,7 @@ export class Room {
     who: Actor,
     d: Extract<ClientCommand, { type: "object.update" }>["data"],
   ): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 오브젝트를 바꿀 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 오브젝트를 바꿀 수 있어요.");
     const obj = this.objects.get(d.id);
     if (!obj) return fail("not_found", "오브젝트를 찾을 수 없어요.");
     if (d.ownerId) {
@@ -1373,7 +1373,7 @@ export class Room {
   }
 
   private objectRemove(who: Actor, id: string): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 오브젝트를 지울 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 오브젝트를 지울 수 있어요.");
     const obj = this.objects.get(id);
     if (!obj) return fail("not_found", "오브젝트를 찾을 수 없어요.");
     this.objects.delete(id);
@@ -1384,9 +1384,9 @@ export class Room {
     return { objects: this.objects, scenes: this.scenes };
   }
 
-  /** KP의 가장 최근 변경을 되돌린다. 평소 명령과 같은 이벤트로 모든 화면을 맞춘다. */
+  /** GM의 가장 최근 변경을 되돌린다. 평소 명령과 같은 이벤트로 모든 화면을 맞춘다. */
   private undoLast(who: Actor): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 되돌릴 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 되돌릴 수 있어요.");
     const r = this.undoLog.undo(this.undoMaps(), this.members, MAX_OBJECTS);
     if (!r.ok) return fail("stale", r.message);
     const out: Out[] = [];
@@ -1423,9 +1423,9 @@ export class Room {
 
   // ── 굴림 ───────────────────────────────────────────────
 
-  /** KP가 판정을 요청한다. 상태는 만들지 않고 알리기만 한다. 굴림은 PL이 roll.request로 직접 한다. */
+  /** GM이 판정을 요청한다. 상태는 만들지 않고 알리기만 한다. 굴림은 PL이 roll.request로 직접 한다. */
   private rollAsk(who: Actor, d: Extract<ClientCommand, { type: "roll.ask" }>["data"]): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 판정을 요청할 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 판정을 요청할 수 있어요.");
     if (d.targetUserId !== undefined && this.members.get(d.targetUserId)?.role !== "pl") {
       return fail("not_found", "그 참가자는 이 룸의 PL이 아니에요.");
     }
@@ -1435,7 +1435,7 @@ export class Room {
 
   private rollRequest(who: Actor, d: Extract<ClientCommand, { type: "roll.request" }>["data"]): Result {
     if (who.role === "spectator") return fail("forbidden", "관전자는 굴릴 수 없어요.");
-    if (d.secret && who.role !== "kp") return fail("forbidden", "비밀 굴림은 KP만 쓸 수 있어요.");
+    if (d.secret && who.role !== "kp") return fail("forbidden", "비밀 굴림은 GM만 쓸 수 있어요.");
     if (this.tooMany(`roll:${who.userId}`, this.rollsPerSecond)) return fail("rate_limited", "너무 빨리 굴리고 있어요. 잠시 뒤에 다시 해 주세요.");
 
     let expr = d.expr ?? "";
@@ -1457,7 +1457,7 @@ export class Room {
     return this.logRoll(who, expr.trim(), label, rolled.outcome, d.secret, check ? { check } : {});
   }
 
-  /** 굴림을 로그에 남기고 알린다. 비밀 굴림은 KP에게만 결과를 보낸다. */
+  /** 굴림을 로그에 남기고 알린다. 비밀 굴림은 GM에게만 결과를 보낸다. */
   private logRoll(who: Actor, expr: string, label: string | undefined, outcome: RollLogEntry["outcome"], secret: boolean, meta: Partial<Pick<RollLogEntry, "check" | "pushOf" | "luckOf">>, ...extra: Out[]): Result {
     const entry: RollLogEntry = {
       id: this.newId(),
@@ -1588,7 +1588,7 @@ export class Room {
     const next = cloneCharacter(c);
     next.san = o.after;
     next.sanDay = { start: day.start, lost: o.dailyLoss };
-    // 광기는 무거운 쪽으로만 올라가고, 낮추는 것은 KP가 직접 한다.
+    // 광기는 무거운 쪽으로만 올라가고, 낮추는 것은 GM이 직접 한다.
     const rank = { none: 0, temporary: 1, indefinite: 2, permanent: 3 } as const;
     if (o.madness && rank[o.madness] > rank[c.madness ?? "none"]) next.madness = o.madness;
     next.rev = c.rev + 1;
@@ -1598,14 +1598,14 @@ export class Room {
   }
 
   private setMadnessTable(who: Actor, entries: string[]): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 광기 증상표를 바꿀 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 광기 증상표를 바꿀 수 있어요.");
     this.madnessTable = entries.slice(0, MAX_MADNESS_ENTRIES);
     return ok(this.emit({ type: "settings.madness", data: { entries: [...this.madnessTable] } }, { roles: ["kp"] }));
   }
 
-  /** 증상표에서 하나 고르고 지속 시간(1d10)을 굴린다. 증상표 내용은 KP가 채운 것만 쓴다. */
+  /** 증상표에서 하나 고르고 지속 시간(1d10)을 굴린다. 증상표 내용은 GM이 채운 것만 쓴다. */
   private madnessRoll(who: Actor, d: { characterId: string; mode: "realtime" | "summary" }): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 광기 증상을 굴릴 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 광기 증상을 굴릴 수 있어요.");
     const c = this.characters.get(d.characterId);
     if (!c) return fail("not_found", "캐릭터를 찾을 수 없어요.");
     if (this.madnessTable.length === 0) return fail("bad_message", "광기 증상표가 비어 있어요. 먼저 증상을 적어 주세요.");
@@ -1620,7 +1620,7 @@ export class Room {
   }
 
   private sanNewDay(who: Actor, characterId?: string): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 하루가 지났다고 기록할 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 하루가 지났다고 기록할 수 있어요.");
     const targets = characterId ? [this.characters.get(characterId)] : [...this.characters.values()];
     if (characterId && !targets[0]) return fail("not_found", "캐릭터를 찾을 수 없어요.");
     const outs: Out[] = [];
@@ -1651,7 +1651,7 @@ export class Room {
   // ── 핸드아웃 ───────────────────────────────────────────
 
   private handoutCreate(who: Actor, d: Extract<ClientCommand, { type: "handout.create" }>["data"]): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 핸드아웃을 만들 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 핸드아웃을 만들 수 있어요.");
     if (this.handouts.size >= MAX_HANDOUTS) return fail("bad_message", `핸드아웃은 ${MAX_HANDOUTS}개까지 둘 수 있어요.`);
     const h: Handout = { id: this.newId(), title: d.title, body: d.body, visibleTo: d.kpOnly ? "gm" : d.visibleTo, rev: 0, ...(d.image ? { image: d.image } : {}), ...(d.kpOnly ? { kpOnly: true } : {}) };
     this.handouts.set(h.id, h);
@@ -1659,12 +1659,12 @@ export class Room {
   }
 
   private handoutUpdate(who: Actor, d: Extract<ClientCommand, { type: "handout.update" }>["data"]): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 핸드아웃을 바꿀 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 핸드아웃을 바꿀 수 있어요.");
     const h = this.handouts.get(d.id);
     if (!h) return fail("not_found", "핸드아웃을 찾을 수 없어요.");
     const before = cloneHandout(h);
     const locked = d.kpOnly ?? h.kpOnly ?? false;
-    if (locked && d.visibleTo !== undefined && d.visibleTo !== "gm") return fail("bad_message", "KP 전용 노트는 공개할 수 없어요. 먼저 KP 전용을 풀어 주세요.");
+    if (locked && d.visibleTo !== undefined && d.visibleTo !== "gm") return fail("bad_message", "GM 전용 노트는 공개할 수 없어요. 먼저 GM 전용을 풀어 주세요.");
     if (d.kpOnly !== undefined) {
       if (d.kpOnly) {
         h.kpOnly = true;
@@ -1683,7 +1683,7 @@ export class Room {
   }
 
   private handoutRemove(who: Actor, id: string): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 핸드아웃을 지울 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 핸드아웃을 지울 수 있어요.");
     const h = this.handouts.get(id);
     if (!h) return fail("not_found", "핸드아웃을 찾을 수 없어요.");
     this.handouts.delete(id);
@@ -1691,13 +1691,13 @@ export class Room {
   }
 
   private handoutShow(who: Actor, id: string): Result {
-    if (who.role !== "kp") return fail("forbidden", "KP만 핸드아웃을 펼쳐 보일 수 있어요.");
+    if (who.role !== "kp") return fail("forbidden", "GM만 핸드아웃을 펼쳐 보일 수 있어요.");
     const h = this.handouts.get(id);
     if (!h) return fail("not_found", "핸드아웃을 찾을 수 없어요.");
-    if (h.kpOnly) return fail("bad_message", "KP 전용 노트는 펼쳐 보일 수 없어요.");
+    if (h.kpOnly) return fail("bad_message", "GM 전용 노트는 펼쳐 보일 수 없어요.");
     if (h.visibleTo === "gm") return fail("bad_message", "초안은 펼쳐 보일 수 없어요. 먼저 공개 범위를 정해 주세요.");
     // 한 번 쓰고 사라지는 연출이라 버퍼에는 남기지 않는다(늦게 들어온 사람에게 다시 띄우지 않는다).
-    // 누른 KP 화면은 가리지 않는다.
+    // 누른 GM 화면은 가리지 않는다.
     const users = [...this.members.values()].filter((m) => m.role !== "kp" && canSeeHandout(h, m)).map((m) => m.userId);
     return ok(this.emitTo({ type: "handout.shown", data: { id } }, { users }));
   }
@@ -1726,11 +1726,11 @@ export class Room {
 
   private characterAdd(who: Actor, d: Extract<ClientCommand, { type: "character.add" }>["data"]): Result {
     if (who.role === "spectator") return fail("forbidden", "관전자는 캐릭터를 등록할 수 없어요.");
-    if (d.ownerId && who.role !== "kp") return fail("forbidden", "다른 사람 몫의 캐릭터는 KP만 만들 수 있어요.");
+    if (d.ownerId && who.role !== "kp") return fail("forbidden", "다른 사람 몫의 캐릭터는 GM만 만들 수 있어요.");
     if (this.characters.size >= MAX_CHARACTERS) return fail("bad_sheet", `캐릭터는 ${MAX_CHARACTERS}명까지 둘 수 있어요.`);
     const ownerId = d.ownerId ?? who.userId;
     if (who.role === "pl") {
-      // PL은 한 명만 등록할 수 있다. 바꾸고 싶으면 KP에게 부탁해 지운다.
+      // PL은 한 명만 등록할 수 있다. 바꾸고 싶으면 GM에게 부탁해 지운다.
       if ([...this.characters.values()].some((c) => c.ownerId === ownerId)) {
         return fail("bad_sheet", "이미 캐릭터를 등록했어요. 세션 시작 전에는 시트 아래 ‘이 캐릭터 빼기’로 바꿀 수 있어요.");
       }
@@ -1767,15 +1767,15 @@ export class Room {
     const c = this.characters.get(id);
     if (who.role !== "kp") {
       // PL은 자기 캐릭터를 첫 세션이 시작되기 전까지만 뺄 수 있다(잘못 불러온 캐릭터를 바꾸기 위해).
-      if (!c || who.role !== "pl" || c.ownerId !== who.userId) return fail("forbidden", "KP만 다른 사람의 캐릭터를 지울 수 있어요.");
-      if (this.status !== "IDLE" || this.sessionNumber > 0) return fail("forbidden", "세션이 시작된 뒤에는 KP만 캐릭터를 지울 수 있어요.");
+      if (!c || who.role !== "pl" || c.ownerId !== who.userId) return fail("forbidden", "GM만 다른 사람의 캐릭터를 지울 수 있어요.");
+      if (this.status !== "IDLE" || this.sessionNumber > 0) return fail("forbidden", "세션이 시작된 뒤에는 GM만 캐릭터를 지울 수 있어요.");
     }
     if (!c) return fail("not_found", "캐릭터를 찾을 수 없어요.");
     this.characters.delete(id);
     return ok(this.emit({ type: "character.removed", data: { id } }, this.characterAudience(c)));
   }
 
-  /** 주인과 KP에게만 보낸다. */
+  /** 주인과 GM에게만 보낸다. */
   private characterAudience(c: Character): Audience {
     return { roles: ["kp"], users: [c.ownerId] };
   }
@@ -1832,7 +1832,7 @@ export class Room {
           break;
         }
         case "madness":
-          if (who.role !== "kp") return fail("forbidden", "광기 상태는 KP만 바꿀 수 있어요.");
+          if (who.role !== "kp") return fail("forbidden", "광기 상태는 GM만 바꿀 수 있어요.");
           if (op.value === "none") delete next.madness;
           else next.madness = op.value;
           break;
@@ -1845,7 +1845,7 @@ export class Room {
   }
 
   /**
-   * 시트에서 SAN을 직접 바꿔도 오늘 손실과 광기 판정에 반영한다(KP가 "SAN 2 잃어요"라고 말한 경우).
+   * 시트에서 SAN을 직접 바꿔도 오늘 손실과 광기 판정에 반영한다(GM이 "SAN 2 잃어요"라고 말한 경우).
    * 줄이면 오늘 손실이 늘고, 올리면 그만큼 줄어든다(잘못 누른 것을 바로잡는 경우). 0 아래로는 내려가지 않는다.
    * 하루 손실이 하루 시작 SAN의 1/5 이상이면 장기 광기, SAN 0이면 영구 광기로 올린다. INT 판정이 필요한
    * 일시적 광기는 굴림 없이 정할 수 없어서 자동으로 만들지 않는다.

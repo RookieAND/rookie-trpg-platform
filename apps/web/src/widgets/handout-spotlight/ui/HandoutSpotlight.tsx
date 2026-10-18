@@ -3,7 +3,7 @@ import type { Handout } from "@coc-vtt/shared";
 import { imageUrl } from "@/shared/api";
 import { Dialog } from "@/shared/ui";
 
-/** KP가 "펼쳐 보이기"를 눌렀을 때 모두의 화면 가운데에 뜨는 핸드아웃 */
+/** GM이 "펼쳐 보이기"를 눌렀을 때 모두의 화면 가운데에 뜨는 핸드아웃 */
 export function HandoutSpotlight({ handout, onClose }: { handout: Handout; onClose: () => void }) {
   return (
     <Dialog label="핸드아웃" onClose={onClose} onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 20, background: "rgba(0,0,0,.6)", display: "grid", placeItems: "center", padding: 24 }}>

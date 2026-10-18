@@ -100,7 +100,7 @@ describe("applyServerMessage", () => {
     expect(s.sessionStatus).toBe("IDLE");
   });
 
-  it("KP 유예(kp.away)는 정지 없이 끊긴 시각만 기록하고, 돌아오거나 정지되면 사라진다", () => {
+  it("GM 유예(kp.away)는 정지 없이 끊긴 시각만 기록하고, 돌아오거나 정지되면 사라진다", () => {
     let s = applyServerMessage(initialRoomState(), snap());
     s = applyServerMessage(s, { seq: 6, event: { type: "session.started", data: { number: 1 } } });
     s = applyServerMessage(s, { seq: 7, event: { type: "kp.away", data: { since: 1234 } } });
@@ -143,7 +143,7 @@ describe("applyServerMessage", () => {
     expect(s.transition?.n).toBe(2);
   });
 
-  it("KP는 목록 없이 활성 장면만 바뀌고, 장면을 지우면 그 오브젝트도 정리한다", () => {
+  it("GM은 목록 없이 활성 장면만 바뀌고, 장면을 지우면 그 오브젝트도 정리한다", () => {
     let s = applyServerMessage(initialRoomState(), snap());
     s = applyServerMessage(s, { seq: 6, event: { type: "scene.added", data: { id: "s2", name: "서재" } } });
     s = applyServerMessage(s, { seq: 7, event: { type: "object.added", data: obj({ id: "o2", sceneId: "s2" }) } });

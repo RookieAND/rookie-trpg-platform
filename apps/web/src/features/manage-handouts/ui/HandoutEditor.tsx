@@ -10,13 +10,13 @@ export interface HandoutDraft {
   /** null이면 이미지를 뗀다 */
   image: string | null;
   visibleTo: Visibility;
-  /** KP 전용 노트면 공개 범위를 바꿀 수 없다 */
+  /** GM 전용 노트면 공개 범위를 바꿀 수 없다 */
   kpOnly: boolean;
 }
 
 type Mode = "note" | "gm" | "all" | "pick";
 
-/** KP가 핸드아웃을 쓰고 보여 줄 대상을 정한다. 초안(KP만)으로 두면 아무에게도 안 보인다. */
+/** GM이 핸드아웃을 쓰고 보여 줄 대상을 정한다. 초안(GM만)으로 두면 아무에게도 안 보인다. */
 export function HandoutEditor({ me, initial, players, onSave, onCancel }: { me: Caller; initial?: Partial<HandoutDraft>; players: Member[]; onSave: (d: HandoutDraft) => void; onCancel: () => void }) {
   const [title, setTitle] = useState(initial?.title ?? "");
   const [body, setBody] = useState(initial?.body ?? "");
@@ -44,7 +44,7 @@ export function HandoutEditor({ me, initial, players, onSave, onCancel }: { me: 
         {drop.error && <span role="alert" style={{ color: "var(--danger)", fontSize: 12 }}>{drop.error}</span>}
       </div>
       <select className="input" aria-label="공개 범위" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-        <option value="note">KP 전용 노트 (공개할 수 없어요)</option>
+        <option value="note">GM 전용 노트 (공개할 수 없어요)</option>
         <option value="gm">초안 (나중에 공개할 수 있어요)</option>
         <option value="all">전원에게 공개</option>
         <option value="pick">선택한 PL에게만</option>

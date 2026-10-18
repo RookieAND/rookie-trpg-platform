@@ -1,6 +1,6 @@
 "use client";
 
-/** KP가 처음 룸에 들어왔을 때 무엇을 어디서 하는지 알려 주는 체크리스트. 끝낸 단계는 자동으로 체크된다. */
+/** GM이 처음 룸에 들어왔을 때 무엇을 어디서 하는지 알려 주는 체크리스트. 끝낸 단계는 자동으로 체크된다. */
 export function StartGuide({ steps, onClose }: { steps: Array<{ done: boolean; title: string; hint: string }>; onClose: () => void }) {
   return (
     <section className="guide" role="status" aria-label="시작 가이드">

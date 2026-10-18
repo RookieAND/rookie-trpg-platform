@@ -27,7 +27,7 @@ const setup = () => {
 };
 
 describe("board.ping", () => {
-  it("PL과 KP는 가리킬 수 있고 모두에게 전달된다(저장·버퍼에는 남지 않는다)", () => {
+  it("PL과 GM은 가리킬 수 있고 모두에게 전달된다(저장·버퍼에는 남지 않는다)", () => {
     const { room } = setup();
     const out = must(room.handle(pl, cmd("board.ping", { sceneId: "main", x: 300, y: 200 })));
     expect(ping(out)).toHaveLength(1);
@@ -79,7 +79,7 @@ describe("board.ping", () => {
     expect(p(pl).ok).toBe(true);
   });
 
-  it("안개가 있으면 안개 속 좌표의 핑은 다른 PL에게 가지 않고 KP와 핑한 사람에게만 간다", () => {
+  it("안개가 있으면 안개 속 좌표의 핑은 다른 PL에게 가지 않고 GM과 핑한 사람에게만 간다", () => {
     const { room } = setup();
     must(room.handle(kp, cmd("scene.fog", { id: "main", enabled: true })));
     must(room.handle(kp, cmd("fog.reveal", { sceneId: "main", x: 200, y: 200, r: 100 })));
@@ -91,7 +91,7 @@ describe("board.ping", () => {
     // 보이는 원 안이면 모두에게 간다.
     const seen = must(room.handle(pl, cmd("board.ping", { sceneId: "main", x: 230, y: 210 })));
     for (const u of ["kp1", "pl1", "pl2", "sp1"]) expect(ping_to(seen, u)).toBe(true);
-    // KP는 안개 속에 찍어도 다른 사람에게 새지 않는다.
+    // GM은 안개 속에 찍어도 다른 사람에게 새지 않는다.
     expect(ping_to(must(room.handle(kp, cmd("board.ping", { sceneId: "main", x: 900, y: 700 }))), "pl2")).toBe(false);
   });
 

@@ -39,7 +39,7 @@ describe("장면", () => {
     expect(snap.scenes.map((s) => s.name)).toEqual(["장면 1"]);
   });
 
-  it("새 장면은 KP에게만 알려지고, PL의 snapshot에는 활성 장면만 담긴다", () => {
+  it("새 장면은 GM에게만 알려지고, PL의 snapshot에는 활성 장면만 담긴다", () => {
     const room = setup();
     const outs = must(room.handle(kp, cmd("scene.create", { name: "비밀 지하실" })));
     expect(to(outs, seo)).toEqual([]);
@@ -47,7 +47,7 @@ describe("장면", () => {
     expect(room.snapshot(seo).scenes.map((s) => s.name)).toEqual(["장면 1"]);
   });
 
-  it("다른 장면에 놓은 오브젝트는 PL에게 보이지 않고, KP에게는 보인다", () => {
+  it("다른 장면에 놓은 오브젝트는 PL에게 보이지 않고, GM에게는 보인다", () => {
     const room = setup();
     const sc = newScene(room);
     const outs = must(room.handle(kp, cmd("object.add", { kind: "prop", name: "책장", x: 0, y: 0, layer: "object", visibleTo: "all", sceneId: sc })));
@@ -80,7 +80,7 @@ describe("장면", () => {
     for (const a of [kp, seo, han]) expect(to(outs, a)).toHaveLength(1);
   });
 
-  it("KP는 활성이 아닌 장면의 오브젝트를 준비하고 움직여도 PL에게는 아무 일도 없다", () => {
+  it("GM은 활성이 아닌 장면의 오브젝트를 준비하고 움직여도 PL에게는 아무 일도 없다", () => {
     const room = setup();
     const sc = newScene(room);
     const id = addObj(room, "책장", sc);
@@ -112,14 +112,14 @@ describe("장면", () => {
     expect(setup().handle(kp, cmd("scene.activate", { id: "main", transition: "cut" }))).toMatchObject({ ok: false, code: "bad_message" });
   });
 
-  it("활성 장면 이름을 바꾸면 모두에게, 다른 장면이면 KP에게만 알린다", () => {
+  it("활성 장면 이름을 바꾸면 모두에게, 다른 장면이면 GM에게만 알린다", () => {
     const room = setup();
     const sc = newScene(room);
     expect(to(must(room.handle(kp, cmd("scene.rename", { id: "main", name: "현관" }))), seo)).toHaveLength(1);
     expect(to(must(room.handle(kp, cmd("scene.rename", { id: sc, name: "다락방" }))), seo)).toEqual([]);
   });
 
-  it("KP가 아니면 장면을 다룰 수 없다", () => {
+  it("GM이 아니면 장면을 다룰 수 없다", () => {
     const room = setup();
     const sc = newScene(room);
     for (const c of [cmd("scene.create", { name: "x" }), cmd("scene.rename", { id: sc, name: "x" }), cmd("scene.remove", { id: sc }), cmd("scene.activate", { id: sc, transition: "cut" })]) {

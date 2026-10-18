@@ -6,7 +6,7 @@ import { uploadAudio, type Caller } from "@/shared/api";
 const KIND_LABEL: Record<AudioKind, string> = { bgm: "배경음", se: "효과음" };
 const FADES = [0, 1000, 3000];
 
-/** KP가 음원을 올리고 틀고 멈추는 곳. */
+/** GM이 음원을 올리고 틀고 멈추는 곳. */
 export function AudioPanel({ me, library, bgm, enabled, send }: { me: Caller; library: AudioTrack[]; bgm: BgmState | null; enabled: boolean; send: (c: ClientCommand) => unknown }) {
   const input = useRef<HTMLInputElement>(null);
   const [label, setLabel] = useState("");

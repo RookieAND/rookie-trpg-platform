@@ -7,7 +7,7 @@ export interface PlayerGuideInput {
   rolls: ReadonlyArray<{ userId: string }>;
   /** 서버가 이 사람에게 보내 준(볼 수 있는) 핸드아웃 */
   handouts: ReadonlyArray<{ kpOnly?: boolean }>;
-  /** 내 소유 토큰이 이 화면에 있는지(없으면 KP가 놓아 줄 때까지 기다려야 한다) */
+  /** 내 소유 토큰이 이 화면에 있는지(없으면 GM이 놓아 줄 때까지 기다려야 한다) */
   hasToken?: boolean;
 }
 
@@ -23,7 +23,7 @@ export function playerGuideSteps(i: PlayerGuideInput): GuideStep[] {
     key: "handout",
     done: i.handouts.some((h) => !h.kpOnly),
     title: "핸드아웃 받기",
-    hint: "KP가 공개한 핸드아웃은 ‘핸드아웃’ 탭에 쌓여요.",
+    hint: "GM이 공개한 핸드아웃은 ‘핸드아웃’ 탭에 쌓여요.",
   };
   if (i.role === "spectator") {
     return [{ key: "watch", done: false, title: "관전 중이에요", hint: "보드와 핸드아웃을 볼 수 있어요." }, handout];
@@ -46,7 +46,7 @@ export function playerGuideSteps(i: PlayerGuideInput): GuideStep[] {
       key: "move",
       done: false,
       title: "토큰 움직이기",
-      hint: i.hasToken === false ? "아직 내 토큰이 없어요. KP에게 요청하거나 기다려요. 세션이 시작되면 끌어서 옮길 수 있어요." : "세션이 시작되면 내 토큰을 끌어서 옮길 수 있어요.",
+      hint: i.hasToken === false ? "아직 내 토큰이 없어요. GM에게 요청하거나 기다려요. 세션이 시작되면 끌어서 옮길 수 있어요." : "세션이 시작되면 내 토큰을 끌어서 옮길 수 있어요.",
     },
   ];
 }

@@ -30,7 +30,7 @@ const names = (room: Room, who: Actor) => room.snapshot(who).objects.map((o) => 
 const toUser = (out: Out[], type: string, user: string) => out.filter((o) => o.event.type === type && (o.audience.users?.includes(user) || false));
 
 describe("안개", () => {
-  it("KP만 다루고, 꺼져 있으면 아무것도 가리지 않는다", () => {
+  it("GM만 다루고, 꺼져 있으면 아무것도 가리지 않는다", () => {
     const { room, obj } = setup();
     obj("멀리", 900, 700);
     expect(room.handle(pl, cmd("scene.fog", { id: "main", enabled: true })).ok).toBe(false);
@@ -40,7 +40,7 @@ describe("안개", () => {
     expect(names(room, pl)).toEqual(["멀리"]);
   });
 
-  it("켜면 원 밖 오브젝트가 PL·관전자에게서 사라지고(KP는 그대로), 원을 지우면 다시 사라진다", () => {
+  it("켜면 원 밖 오브젝트가 PL·관전자에게서 사라지고(GM은 그대로), 원을 지우면 다시 사라진다", () => {
     const { room, obj } = setup();
     obj("가까이", 100, 100);
     obj("멀리", 900, 700);
@@ -96,7 +96,7 @@ describe("안개", () => {
     expect(room.snapshot(pl).scenes[0]!.fogAreas).toEqual([]);
   });
 
-  it("PL이 받는 장면에는 안개 설정 대신 지금 보이는 원만 있고, KP는 설정 전체를 받는다", () => {
+  it("PL이 받는 장면에는 안개 설정 대신 지금 보이는 원만 있고, GM은 설정 전체를 받는다", () => {
     const { room } = setup();
     must(room.handle(kp, cmd("scene.fog", { id: "main", enabled: true })));
     must(room.handle(kp, cmd("fog.reveal", { sceneId: "main", x: 10, y: 20, r: 30 })));
@@ -182,7 +182,7 @@ describe("안개", () => {
       expect(explored(room, pl)![0]!.r).toBeGreaterThanOrEqual(300);
     });
 
-    it("밝힌 영역을 지워도 기록은 남고, KP가 지울 수 있으며 PL은 못 지운다", () => {
+    it("밝힌 영역을 지워도 기록은 남고, GM이 지울 수 있으며 PL은 못 지운다", () => {
       const { room } = setup();
       must(room.handle(kp, cmd("scene.fog", { id: "main", enabled: true })));
       must(room.handle(kp, cmd("fog.reveal", { sceneId: "main", x: 500, y: 500, r: 80 })));

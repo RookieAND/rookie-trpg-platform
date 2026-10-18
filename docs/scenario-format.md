@@ -1,6 +1,6 @@
 # 시나리오 파일 형식
 
-`pnpm import:scenario <시나리오.json>`이 읽는 파일이에요. 가져오면 룸 하나가 만들어지고, 가져온 사람이 그 룸의 KP가 돼요. 실제 시나리오 파일은 저장소에 넣지 않아요.
+`pnpm import:scenario <시나리오.json>`이 읽는 파일이에요. 가져오면 룸 하나가 만들어지고, 가져온 사람이 그 룸의 GM이 돼요. 실제 시나리오 파일은 저장소에 넣지 않아요.
 
 ```
 pnpm import:scenario ./my-scenario/scenario.json [--user 이름] [--api http://localhost:8787] [--room 룸이름]
@@ -46,7 +46,7 @@ pnpm import:scenario ./my-scenario/scenario.json [--user 이름] [--api http://l
 
 ## handouts
 
-`key`, `title`, `body`, `visibleTo`(`"all"` 또는 `"gm"`). 제목이 `[KP]`로 시작하면 "KP 전용 노트"로 만들어져요. 노트는 PL에게 공개하거나 비트·분기 조건에 붙일 수 없어요.
+`key`, `title`, `body`, `visibleTo`(`"all"` 또는 `"gm"`). 제목이 `[KP]`로 시작하면 "GM 전용 노트"로 만들어져요. 노트는 PL에게 공개하거나 비트·분기 조건에 붙일 수 없어요.
 
 ## beats
 
@@ -57,13 +57,13 @@ pnpm import:scenario ./my-scenario/scenario.json [--user 이름] [--api http://l
 | `kind` | `"start"`, `"progress"`, `"ending"` |
 | `scene` | 연결할 장면 key (선택) |
 | `handouts` | 연결할 핸드아웃 key 목록(최대 10개, 비어도 돼요) |
-| `memo` | KP 메모(1000자까지) |
+| `memo` | GM 메모(1000자까지) |
 | `sanReward` | 정신력 보상 식, 예: `"1d3"` (선택) |
 | `bgm` | 비트로 넘어갈 때 틀 배경음의 `audio` key (선택) |
 
 ## branches
 
-`from`, `to`(비트 key), `label`. 가져온 분기는 모두 KP가 직접 고르는 분기예요.
+`from`, `to`(비트 key), `label`. 가져온 분기는 모두 GM이 직접 고르는 분기예요.
 
 ## madnessTable
 

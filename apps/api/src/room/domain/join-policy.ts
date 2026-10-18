@@ -6,7 +6,7 @@ export type JoinDecision =
   | { ok: false; reason: "no_access" | "not_owner" | "invite_expired" | "room_full" };
 
 /**
- * 룸 입장 규칙. 주인은 항상 KP, 이미 멤버였던 사람은 원래 역할로,
+ * 룸 입장 규칙. 주인은 항상 GM, 이미 멤버였던 사람은 원래 역할로,
  * 처음 오는 사람은 유효한 초대 코드와 남은 자리가 있어야 한다.
  */
 export function decideJoin(

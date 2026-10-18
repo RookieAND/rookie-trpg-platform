@@ -4,7 +4,7 @@ import type { ClientCommand } from "@coc-vtt/shared";
 import type { SessionStatus } from "@/entities/room";
 import { Dialog } from "@/shared/ui";
 
-/** KP의 세션 버튼. 상태에 따라 시작/일시정지/이어하기/종료가 바뀐다. 종료는 정산 창을 거친다. */
+/** GM의 세션 버튼. 상태에 따라 시작/일시정지/이어하기/종료가 바뀐다. 종료는 정산 창을 거친다. */
 export interface EndingDefaults {
   name?: string;
   sanReward?: string;

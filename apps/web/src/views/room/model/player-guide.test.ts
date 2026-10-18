@@ -15,7 +15,7 @@ describe("PL 시작 가이드 단계", () => {
     const t = playerGuideSteps({ ...base, characters: [{ ownerId: "u1" }], rolls: [{ userId: "u1" }], handouts: [{}] });
     expect(done(t)).toMatchObject({ character: true, roll: true, handout: true });
   });
-  it("KP 전용 노트는 받은 핸드아웃으로 세지 않는다", () => {
+  it("GM 전용 노트는 받은 핸드아웃으로 세지 않는다", () => {
     expect(done(playerGuideSteps({ ...base, handouts: [{ kpOnly: true }] })).handout).toBe(false);
   });
   it("관전자에게는 캐릭터·굴림 단계가 없다", () => {
@@ -55,7 +55,7 @@ describe("닫은 상태 저장", () => {
 
 describe("토큰 단계 안내", () => {
   const hint = (hasToken?: boolean) => playerGuideSteps({ ...base, hasToken }).find((s) => s.key === "move")!.hint;
-  it("내 토큰이 없으면 KP에게 요청하거나 기다리라고 알린다", () => {
+  it("내 토큰이 없으면 GM에게 요청하거나 기다리라고 알린다", () => {
     expect(hint(false)).toContain("아직 내 토큰이 없어요");
     expect(hint(true)).not.toContain("아직 내 토큰이 없어요");
     expect(hint(undefined)).not.toContain("아직 내 토큰이 없어요");

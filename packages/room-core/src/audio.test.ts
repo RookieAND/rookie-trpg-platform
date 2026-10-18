@@ -28,7 +28,7 @@ const setup = () => {
 };
 
 describe("음향", () => {
-  it("KP만 다루고, 라이브러리는 KP에게만 간다", () => {
+  it("GM만 다루고, 라이브러리는 GM에게만 간다", () => {
     const { room, add } = setup();
     const t = add("괴물의 울음", "se", A1);
     expect(room.handle(seo, cmd("audio.track.add", { label: "x", kind: "bgm", assetId: A1, volume: 50 })).ok).toBe(false);

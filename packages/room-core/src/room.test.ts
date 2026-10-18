@@ -37,7 +37,7 @@ const addToken = (room: Room, extra: Partial<{ name: string; ownerId: string; la
 };
 
 describe("접속과 일시정지", () => {
-  it("KP 연결이 끊겨도 바로 멈추지 않고, 유예가 끝나야 자동 정지된다", () => {
+  it("GM 연결이 끊겨도 바로 멈추지 않고, 유예가 끝나야 자동 정지된다", () => {
     const room = setup();
     const outs = room.leave("kp1");
     expect(room.sessionStatus).toBe("ACTIVE");
@@ -63,7 +63,7 @@ describe("접속과 일시정지", () => {
     expect(roll).toMatchObject({ ok: false, code: "paused" });
   });
 
-  it("KP가 직접 멈춘 세션은 KP가 돌아와도 풀리지 않고, 이어하기를 해야 진행된다", () => {
+  it("GM이 직접 멈춘 세션은 GM이 돌아와도 풀리지 않고, 이어하기를 해야 진행된다", () => {
     const room = setup();
     const t = addToken(room, { ownerId: "pl1" });
     must(room.handle(kp, cmd("session.pause", {})));
@@ -82,17 +82,17 @@ describe("접속과 일시정지", () => {
     expect(room.handle(seo, cmd("session.end", {}))).toMatchObject({ ok: false, code: "forbidden" });
   });
 
-  it("세션 시작 전에는 PL의 굴림과 이동이 막히고 KP는 장면을 준비할 수 있다", () => {
+  it("세션 시작 전에는 PL의 굴림과 이동이 막히고 GM은 장면을 준비할 수 있다", () => {
     const room = newRoom();
     for (const a of [kp, seo]) room.join(a);
     expect(room.sessionStatus).toBe("IDLE");
     expect(room.handle(seo, cmd("roll.request", { expr: "1d100", secret: false }))).toMatchObject({ ok: false, code: "idle" });
-    const t = addToken(room, { ownerId: "pl1" }); // KP 준비
+    const t = addToken(room, { ownerId: "pl1" }); // GM 준비
     expect(room.handle(seo, cmd("object.move", { id: t.id, x: 1, y: 1, rev: t.rev }))).toMatchObject({ ok: false, code: "idle" });
     expect(room.handle(kp, cmd("roll.request", { expr: "1d100", secret: true })).ok).toBe(true);
   });
 
-  it("세션 시작은 KP만, 번호는 1씩 오른다", () => {
+  it("세션 시작은 GM만, 번호는 1씩 오른다", () => {
     const room = newRoom();
     for (const a of [kp, seo]) room.join(a);
     expect(room.handle(seo, cmd("session.start", {}))).toMatchObject({ ok: false, code: "forbidden" });
@@ -179,7 +179,7 @@ describe("오브젝트 권한과 보임 범위", () => {
     }
   });
 
-  it("GM 전용 오브젝트는 KP에게만 보이고 스냅샷에도 없다", () => {
+  it("GM 전용 오브젝트는 GM에게만 보이고 스냅샷에도 없다", () => {
     const room = setup();
     const outs = must(room.handle(kp, cmd("object.add", { kind: "prop", name: "비밀문", x: 0, y: 0, layer: "gm", visibleTo: "all" })));
     expect(received(outs, kp)).toHaveLength(1);
@@ -249,7 +249,7 @@ describe("굴림", () => {
     expect(room.snapshot(han).rolls).toHaveLength(1);
   });
 
-  it("KP의 비밀 굴림: KP는 결과를, 나머지는 굴렸다는 사실만 받는다", () => {
+  it("GM의 비밀 굴림: GM은 결과를, 나머지는 굴렸다는 사실만 받는다", () => {
     const room = setup({ rng: fixed });
     const outs = must(room.handle(kp, cmd("roll.request", { expr: "CC<=60", secret: true })));
     expect(received(outs, kp)).toEqual([expect.objectContaining({ type: "roll.result" })]);
@@ -261,7 +261,7 @@ describe("굴림", () => {
     }
   });
 
-  it("비밀 굴림은 스냅샷에서도 KP에게만 보인다", () => {
+  it("비밀 굴림은 스냅샷에서도 GM에게만 보인다", () => {
     const room = setup({ rng: fixed });
     must(room.handle(kp, cmd("roll.request", { expr: "1d100", secret: true })));
     expect(room.snapshot(kp).rolls).toHaveLength(1);
@@ -362,7 +362,7 @@ describe("저장과 복원", () => {
     expect(restored.eventsSince(seo, lastSeq)).toEqual([]);
   });
 
-  it("복원한 룸에서 KP가 들어오면 자동으로 재개되어 다시 진행된다", () => {
+  it("복원한 룸에서 GM이 들어오면 자동으로 재개되어 다시 진행된다", () => {
     const restored = Room.fromData(setup().toData());
     restored.join(seo);
     expect(restored.sessionStatus).toBe("PAUSED");

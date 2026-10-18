@@ -31,7 +31,7 @@ const create = (room: Room, visibleTo: "gm" | "all" | string[] = "gm") => {
 };
 
 describe("핸드아웃", () => {
-  it("초안(gm)은 KP만 받는다", () => {
+  it("초안(gm)은 GM만 받는다", () => {
     const { outs } = create(setup());
     expect(toWho(outs, kp)).toEqual(["handout.added"]);
     for (const a of [seo, han, spec]) expect(toWho(outs, a)).toEqual([]);
@@ -84,7 +84,7 @@ describe("핸드아웃", () => {
     }
   });
 
-  it("세션 시작 전에도 KP는 미리 준비할 수 있다", () => {
+  it("세션 시작 전에도 GM은 미리 준비할 수 있다", () => {
     expect(setup(false).handle(kp, cmd("handout.create", { title: "준비", body: "", visibleTo: "gm" })).ok).toBe(true);
   });
 
@@ -116,7 +116,7 @@ describe("핸드아웃", () => {
       expect(room.currentSeq).toBe(seqBefore);
     });
 
-    it("초안은 펼칠 수 없고, KP가 아니면 펼칠 수 없다", () => {
+    it("초안은 펼칠 수 없고, GM이 아니면 펼칠 수 없다", () => {
       const room = setup();
       const draft = create(room, "gm").id;
       expect(show(room, draft)).toMatchObject({ ok: false, code: "bad_message" });
@@ -126,13 +126,13 @@ describe("핸드아웃", () => {
     });
   });
 
-  describe("KP 전용 노트", () => {
+  describe("GM 전용 노트", () => {
     const note = (room: Room) => {
       const outs = must(room.handle(kp, cmd("handout.create", { title: "시나리오의 진상", body: "범인은 이웃", visibleTo: "all", kpOnly: true })));
       return { outs, id: (outs[0]!.event as { data: { id: string } }).data.id };
     };
 
-    it("공개 범위를 all로 만들어도 KP만 받는다", () => {
+    it("공개 범위를 all로 만들어도 GM만 받는다", () => {
       const { outs } = note(setup());
       expect(toWho(outs, kp)).toEqual(["handout.added"]);
       for (const a of [seo, han, spec]) expect(toWho(outs, a)).toEqual([]);
@@ -153,7 +153,7 @@ describe("핸드아웃", () => {
       expect(a.length).toBeGreaterThan(0);
     });
 
-    it("KP 전용을 풀면 일반 초안이 되어 다시 공개할 수 있다", () => {
+    it("GM 전용을 풀면 일반 초안이 되어 다시 공개할 수 있다", () => {
       const room = setup();
       const { id } = note(room);
       must(room.handle(kp, cmd("handout.update", { id, kpOnly: false })));

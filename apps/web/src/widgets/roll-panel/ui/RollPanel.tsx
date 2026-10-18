@@ -21,7 +21,7 @@ interface Props {
   onRoll: (expr: string, secret: boolean) => unknown;
   onPush: (rollId: string) => void;
   onLuck: (rollId: string) => void;
-  /** KP 전용. 판정 요청 */
+  /** GM 전용. 판정 요청 */
   players?: Array<{ userId: string; name: string }>;
   onAsk?: (name: string, difficulty: "regular" | "hard" | "extreme" | undefined, targetUserId?: string) => unknown;
 }
@@ -40,7 +40,7 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
     }
   };
 
-  // 실패한 시트 판정에는 굴린 사람(또는 KP)이 푸시하거나 행운을 쓸 수 있다. 규칙상 안 되는 것은 이유를 보여 준다.
+  // 실패한 시트 판정에는 굴린 사람(또는 GM)이 푸시하거나 행운을 쓸 수 있다. 규칙상 안 되는 것은 이유를 보여 준다.
   const actions = (r: RollLogEntry) => {
     if (!r.check || r.secret || r.outcome.kind !== "cc" || r.outcome.success !== false) return null;
     if (r.userId !== userId && !isKp) return null;
@@ -128,7 +128,7 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
         {error && <div className="err" role="alert">{error}</div>}
         <div className="row foot">
           {isKp && (
-            <label className="check" title="결과는 KP에게만 보여요. 한 번만 적용돼요.">
+            <label className="check" title="결과는 GM에게만 보여요. 한 번만 적용돼요.">
               <input type="checkbox" checked={secret} onChange={(e) => setSecret(e.target.checked)} style={{ accentColor: "#7c86f7" }} />
               비밀 굴림
             </label>

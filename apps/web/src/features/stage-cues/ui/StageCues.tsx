@@ -8,8 +8,8 @@ import { Dialog } from "@/shared/ui";
 const isTyping = (el: Element | null) => el instanceof HTMLElement && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
 
 /**
- * KP 화면 아래의 연출 바(슬롯 1~9, 숫자 키로 실행)와 Cmd/Ctrl+K 명령어 검색.
- * 슬롯 배치는 KP의 개인 설정이라 룸별로 이 브라우저에만 저장한다.
+ * GM 화면 아래의 연출 바(슬롯 1~9, 숫자 키로 실행)와 Cmd/Ctrl+K 명령어 검색.
+ * 슬롯 배치는 GM의 개인 설정이라 룸별로 이 브라우저에만 저장한다.
  */
 export function StageCues({ roomId, source, enabled, send }: { roomId: string; source: CueSource; enabled: boolean; send: (c: ClientCommand) => unknown }) {
   const storageKey = `coc-vtt.slots.${roomId}`;

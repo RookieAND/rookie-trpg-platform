@@ -14,7 +14,7 @@ const conditionText = (b: Branch, handouts: Handout[]) => {
   return `핸드아웃 '${handouts.find((h) => h.id === c.handoutId)?.title ?? "?"}' 공개`;
 };
 
-/** KP의 세션 흐름: 비트(진행 단계)와 분기를 미리 짜 두고, 진행 중에는 현재 위치를 옮긴다. 참가자에게는 보이지 않는다. */
+/** GM의 세션 흐름: 비트(진행 단계)와 분기를 미리 짜 두고, 진행 중에는 현재 위치를 옮긴다. 참가자에게는 보이지 않는다. */
 export function FlowPanel({ flow, scenes, handouts, tracks, status, enabled, send }: { flow: Flow; scenes: Scene[]; handouts: Handout[]; tracks: AudioTrack[]; status: string; enabled: boolean; send: (c: ClientCommand) => unknown }) {
   const [editing, setEditing] = useState<Editing>(null);
   const active = status === "ACTIVE";
