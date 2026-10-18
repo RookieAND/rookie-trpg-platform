@@ -144,6 +144,13 @@ export const DEFAULT_SKILLS: ReadonlyArray<{ name: string; base: number }> = [
   { name: "투척", base: 20 },
   { name: "항법", base: 10 },
   { name: "회계", base: 5 },
+  // 이름을 고쳐 쓰는 기능(분야·언어·무기를 괄호로 적어 바꾼다). 값은 룰북의 초기값이다.
+  { name: "외국어", base: 1 },
+  { name: "예술/공예", base: 5 },
+  { name: "과학", base: 1 },
+  { name: "조종", base: 1 },
+  { name: "중장비 조작", base: 1 },
+  { name: "사격(기관총 등)", base: 10 },
   { name: "신용도", base: 0 },
   { name: "크툴루 신화", base: 0 },
 ];

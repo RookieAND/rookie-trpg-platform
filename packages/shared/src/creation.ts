@@ -156,7 +156,8 @@ export function checkAllocation(c: Characteristics, id: OccupationFormulaId, all
     if ((a.occ > 0 || a.personal > 0) && (FIXED_SKILLS as readonly string[]).includes(name)) errors.push(`${name}에는 포인트를 쓸 수 없어요.`);
     occUsed += a.occ;
     personalUsed += a.personal;
-    if (base.get(name)! + a.occ + a.personal > SKILL_CREATION_CAP && a.occ + a.personal > 0) errors.push(`${name}: 생성 때는 ${SKILL_CREATION_CAP}까지만 올릴 수 있어요.`);
+    // 신용도는 직업의 신용도 범위가 상한이라 75 제한에서 뺀다(아래 직업 검사).
+    if (name !== CREDIT_RATING && base.get(name)! + a.occ + a.personal > SKILL_CREATION_CAP && a.occ + a.personal > 0) errors.push(`${name}: 생성 때는 ${SKILL_CREATION_CAP}까지만 올릴 수 있어요.`);
   }
   if (occupation) {
     const allowed = new Set<string>([...occupation.skills, CREDIT_RATING]);
