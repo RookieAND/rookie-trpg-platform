@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { GameObject, Role } from "@coc-vtt/shared";
 import { useIdentity, type Identity } from "@/entities/user";
-import { ObjectToolbar } from "@/features/board-objects";
+import { ObjectToolbar, uniqueName } from "@/features/board-objects";
 import { FogToolbar } from "@/features/manage-fog";
 import { SceneBar } from "@/features/manage-scenes";
 import { StageCues } from "@/features/stage-cues";
@@ -75,6 +75,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   const objects = useMemo(() => Object.values(state.objects).filter((o) => o.sceneId === shownSceneId), [state.objects, shownSceneId]);
   const characters = useMemo(() => Object.values(state.characters), [state.characters]);
   const sheet = characters.find((c) => c.id === sheetId) ?? characters[0];
+  const hasToken = Object.values(state.objects).some((o) => o.kind === "token" && o.ownerId === me.userId);
   const hasOwn = characters.some((c) => c.ownerId === me.userId);
   const spot = state.spotlight && state.spotlight.n > dismissedN ? state.handouts[state.spotlight.id] : undefined;
   const handoutList = useMemo(() => Object.values(state.handouts), [state.handouts]);
@@ -122,7 +123,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
             <div className="banner" role="status">KP가 세션을 시작하기를 기다리고 있어요.</div>
           )}
           {showPlayerGuide({ role, ready: state.ready, sessionStatus: state.sessionStatus, closed: plGuideClosed }) && (
-            <PlayerGuide spectator={role === "spectator"} steps={playerGuideSteps({ role, userId: me.userId, characters, rolls: state.rolls, handouts: handoutList })} onClose={() => { setPlGuideClosed(true); writeGuideClosed(roomId); }} />
+            <PlayerGuide spectator={role === "spectator"} steps={playerGuideSteps({ role, userId: me.userId, characters, rolls: state.rolls, handouts: handoutList, hasToken })} onClose={() => { setPlGuideClosed(true); writeGuideClosed(roomId); }} />
           )}
           {state.sessionStatus === "IDLE" && isKp && !guideClosed && (
             <StartGuide
@@ -140,6 +141,9 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
           {isKp && (
             <StageCues roomId={roomId} enabled={state.sessionStatus !== "PAUSED"} send={send} source={cueSource} />
           )}
+          {role === "pl" && state.ready && !hasToken && state.sessionStatus !== "PAUSED" && (
+            <div className="dock dock-hint" role="status" data-testid="no-token-hint">아직 내 토큰이 없어요. KP에게 요청하거나 기다려요</div>
+          )}
           <SceneTransition transition={state.transition} />
           {!isKp && state.scenes[state.activeSceneId] && <div className="scene-name" data-testid="scene-name">{state.scenes[state.activeSceneId]!.name}</div>}
           {isKp && shownScene && (
@@ -150,8 +154,8 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               me={me}
               enabled={canEditBoard}
               sceneId={shownSceneId}
-              objectCount={objects.length}
-              firstPlayerId={state.members.find((m) => m.role === "pl")?.userId}
+              objects={objects}
+              players={state.members.filter((m) => m.role === "pl")}
               selected={selected}
               send={send}
               onDeselect={() => setSelectedId(null)}
@@ -222,6 +226,19 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                 />
               )}
               <div style={{ padding: 16, display: "grid", gap: 12, marginTop: characters.length > 0 ? "auto" : 0 }}>
+                {isKp && sheet && (
+                  <button
+                    className="btn"
+                    disabled={!canEditBoard}
+                    title="이 캐릭터의 이름·소유자로 지금 보는 장면에 토큰을 놓아요"
+                    onClick={() => {
+                      const owner = state.members.find((m) => m.userId === sheet.ownerId && m.role === "pl");
+                      send({ type: "object.add", data: { kind: "token", name: uniqueName(sheet.name, objects.map((o) => o.name)), x: 500, y: 400, layer: "object", visibleTo: "all", sceneId: shownSceneId, autoPlace: true, ...(owner ? { ownerId: owner.userId } : {}) } });
+                    }}
+                  >
+                    토큰으로 놓기
+                  </button>
+                )}
                 {role !== "spectator" && (isKp || !hasOwn) && <LoadCharacter me={me} send={send} disabled={state.sessionStatus === "PAUSED"} />}
                 {characters.length === 0 && <SheetEmpty role={role} canLoad={!hasOwn} />}
                 {state.sessionStatus === "IDLE" && state.sessionNumber > 0 && sheet && sheet.ownerId === me.userId && <SaveToVaultButton key={`${sheet.id}-${sheet.rev}`} me={me} character={sheet} />}

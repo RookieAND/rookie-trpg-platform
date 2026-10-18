@@ -187,6 +187,13 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .dock { position: absolute; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; gap: 6px; align-items: center; padding: 4px 6px; border-radius: var(--radius-lg);
   border: 1px solid var(--line-2); background: color-mix(in srgb, var(--panel) 90%, transparent); backdrop-filter: blur(10px); box-shadow: var(--shadow); }
 .dock-label { padding: 0 4px 0 2px; font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .02em; cursor: help; }
+.dock-input { height: 28px; max-width: 150px; padding: 0 8px; border-radius: var(--radius); border: 1px solid var(--line-2); background: var(--panel-2); color: var(--text); font-size: 12px; }
+.dock-input:focus-visible { outline: 1px solid var(--accent); }
+.dock-input:disabled { opacity: .4; }
+.sel-panel { left: auto; right: 8px; bottom: 100px; top: auto; transform: none; flex-direction: column; align-items: stretch; width: 164px; padding: 6px; gap: 4px; }
+.sel-panel .dock-input { max-width: none; width: 100%; }
+.sel-panel .btn { width: 100%; }
+.dock-hint { bottom: 12px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
 .cuebar { align-items: center; }
 
 /* PL 시작 가이드: ‘KP가 세션을 시작하기를 기다리고 있어요’ 배너(top 108px) 아래에 놓는다 */
@@ -236,7 +243,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   .room .topbar [data-testid="connection"][data-state="open"] { display: none; }
   .room .topbar [data-testid="session-status"] { flex: 1 1 44px; }
   .room .topbar > div[style] { flex: 0 !important; }
-  .board { flex: 1 1 0; min-height: 150px; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto auto; overflow: hidden; }
+  .board { flex: 1 1 0; min-height: 150px; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto auto auto; overflow: hidden; }
   .board > svg { grid-row: 2; grid-column: 1 / -1; min-height: 0; height: 100%; width: 100%; }
   .tok-hit { pointer-events: all; }
   .scenebar { grid-row: 1; grid-column: 1 / -1; position: static; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0 6px; border-radius: 0; border-width: 0 0 1px; box-shadow: none; backdrop-filter: none; background: var(--panel); padding: 3px 6px; }
@@ -251,6 +258,9 @@ input[type="checkbox"] { accent-color: var(--accent); }
     background: var(--panel); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; justify-content: flex-start !important; padding: 3px 6px; }
   .dock { grid-row: 4; grid-column: 1 / -1; flex-wrap: nowrap !important; align-items: center; }
   .dock[data-testid="fog-toolbar"] { grid-row: 3; }
+  .dock[data-testid="selected-bar"] { grid-row: 6; flex-direction: row; align-items: center; width: auto; }
+  .dock[data-testid="selected-bar"] .dock-input { width: auto; max-width: 150px; }
+  .dock[data-testid="selected-bar"] .btn { width: auto; }
   .cuebar { grid-row: 5; grid-column: 1 / -1; }
   .dock::-webkit-scrollbar, .cuebar::-webkit-scrollbar { display: none; }
   .dock > *, .cuebar > * { flex: none; }

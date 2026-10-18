@@ -4,9 +4,15 @@ import { chromium } from "playwright-core";
 import assert from "node:assert/strict";
 
 const WEB = process.env.WEB_URL ?? "http://localhost:3000";
+const API = process.env.API_URL ?? "http://localhost:8787";
 const exe = process.env.CHROMIUM_PATH ?? "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
-const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
-const ctx = () => browser.newContext({ viewport: { width: 1280, height: 800 } });
+const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+// 느린 개발 서버·바쁜 머신에서도 흔들리지 않게 기본 대기를 넉넉히 둔다(E2E_TIMEOUT_MS로 조절).
+const ctx = async () => {
+  const c = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  c.setDefaultTimeout(Number(process.env.E2E_TIMEOUT_MS ?? 30000));
+  return c;
+};
 // 같은 서버로 여러 번 돌려도 이전 실행의 룸·캐릭터와 섞이지 않게 이름에 실행 번호를 붙인다.
 const run = Date.now().toString(36);
 const ROOM = `안개 낀 저택 ${run}`;
@@ -328,15 +334,15 @@ try {
 
   // KP가 토큰을 만들고 PL이 받음
   await kp.getByRole("button", { name: "+ 토큰" }).click();
-  await pl.getByTestId("obj-토큰1").waitFor();
+  await pl.getByTestId("obj-서하").waitFor();
   step("KP가 만든 토큰이 PL 화면에 나타남");
 
   // 이미지 업로드: 토큰 이미지, 장면 배경, 핸드아웃 이미지
   const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
   const file = { name: "pic.png", mimeType: "image/png", buffer: PNG };
-  await kp.getByTestId("obj-토큰1").click();
+  await kp.getByTestId("obj-서하").click();
   await kp.getByLabel("이미지 파일").setInputFiles(file);
-  const tokenImg = pl.getByTestId("img-토큰1");
+  const tokenImg = pl.getByTestId("img-서하");
   await tokenImg.waitFor();
   const href = await tokenImg.getAttribute("href");
   const got = await fetch(href);
@@ -348,9 +354,9 @@ try {
   await kp.getByRole("button", { name: "배경 떼기" }).click();
   await kp.keyboard.press("Escape");
   await pl.getByTestId("board-bg").waitFor({ state: "detached" });
-  await kp.getByTestId("obj-토큰1").click();
+  await kp.getByTestId("obj-서하").click();
   await kp.getByRole("button", { name: "이미지 떼기" }).click();
-  await pl.getByTestId("img-토큰1").waitFor({ state: "detached" });
+  await pl.getByTestId("img-서하").waitFor({ state: "detached" });
   await kp.getByRole("tab", { name: "핸드아웃" }).click();
   await kp.getByRole("button", { name: "새 핸드아웃" }).click();
   await kp.getByLabel("핸드아웃 제목").fill("사진 한 장");
@@ -370,14 +376,14 @@ try {
   step("이미지 업로드: 토큰·장면 배경·핸드아웃 이미지가 PL 화면에 나타나고 떼면 사라짐");
 
   // PL이 자기 토큰을 끌어서 이동
-  const token = pl.getByTestId("obj-토큰1");
+  const token = pl.getByTestId("obj-서하");
   const box = await token.locator("circle").first().boundingBox();
   await pl.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await pl.mouse.down();
   await pl.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 60, { steps: 6 });
   await pl.mouse.up();
   await kp.waitForFunction(() => {
-    const el = document.querySelector('[data-testid="obj-토큰1"]');
+    const el = document.querySelector('[data-testid="obj-서하"]');
     return el && Number(el.getAttribute("data-x")) > 500;
   });
   step("PL이 끈 토큰이 KP 화면에서 움직임");
@@ -389,6 +395,14 @@ try {
   assert.equal(await pl.getByTestId("obj-숨김 소품2").count(), 0);
   step("GM 전용 오브젝트는 PL 화면에 없음");
 
+  // 시트→토큰: KP가 시트 탭에서 "토큰으로 놓기"를 누르면 그 캐릭터 이름·소유자로 토큰이 생긴다
+  await kp.getByRole("tab", { name: "시트" }).click();
+  await kp.getByRole("button", { name: "토큰으로 놓기" }).click();
+  await pl.getByTestId(`obj-${CHAR}`).waitFor();
+  assert.equal(await pl.getByTestId(`obj-${CHAR}`).getAttribute("data-mine"), "true");
+  await kp.getByRole("tab", { name: "굴림" }).click();
+  step("시트 탭의 '토큰으로 놓기'로 캐릭터 이름·소유자 토큰이 생기고 그 PL 화면에서 '나'로 표시됨");
+
   // 안개와 시야: 안개 속 오브젝트는 PL 화면에서 아예 사라지고, 시야·밝힌 영역으로 다시 보임
   await kp.getByRole("button", { name: "+ 소품" }).click();
   const plProps = pl.locator('[data-testid^="obj-소품"]');
@@ -396,8 +410,8 @@ try {
   await kp.getByRole("button", { name: "안개 켜기" }).click();
   await pl.getByTestId("fog").waitFor();
   await plProps.first().waitFor({ state: "detached" });
-  await pl.getByTestId("obj-토큰1").waitFor();
-  await kp.getByTestId("obj-토큰1").click();
+  await pl.getByTestId("obj-서하").waitFor();
+  await kp.getByTestId("obj-서하").click();
   await kp.getByLabel("시야 반지름").fill("400");
   await kp.getByRole("button", { name: "시야 주기" }).click();
   await plProps.first().waitFor();
@@ -498,7 +512,7 @@ try {
   await kp2.getByRole("button", { name: "페이드 전환" }).click();
   await pl.getByTestId("scene-name").getByText("서재").waitFor();
   await pl.getByTestId("obj-소품1").waitFor();
-  assert.equal(await pl.getByTestId("obj-토큰1").count(), 0);
+  assert.equal(await pl.getByTestId("obj-서하").count(), 0);
   step("페이드 전환하면 PL 화면이 새 장면으로 통째로 바뀜");
 
   // 연출: Ctrl+K 명령어 검색으로 장면을 바꾸고, 슬롯에 등록한 동작을 숫자 키로 실행
@@ -581,7 +595,7 @@ try {
   await pl.getByRole("button", { name: "보관함에 반영" }).click();
   await pl.getByText("보관함에 반영했어요").waitFor();
   const vault = await (
-    await fetch("http://localhost:8787/characters", { headers: { "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") } })
+    await fetch(`${API}/characters`, { headers: { "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") } })
   ).json();
   assert.equal(vault.find((c) => c.name === CHAR).hp, 9);
   step("세션 종료 뒤 변경된 HP가 보관함 원본에 반영됨");
@@ -602,8 +616,8 @@ try {
   // 이전 실행이 남긴 서재를 비워 개수 한도에 걸리지 않게 한다
   {
     const h = { "content-type": "application/json", "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") };
-    const cur = await (await fetch("http://localhost:8787/library", { headers: h })).json();
-    await fetch("http://localhost:8787/library", { method: "PUT", headers: h, body: JSON.stringify({ macros: [], occupations: cur.occupations, baseRevision: cur.revision }) });
+    const cur = await (await fetch(`${API}/library`, { headers: h })).json();
+    await fetch(`${API}/library`, { method: "PUT", headers: h, body: JSON.stringify({ macros: [], occupations: cur.occupations, baseRevision: cur.revision }) });
   }
 
   // 매크로: 이름 붙여 저장한 식을 한 번에 굴리고, 잘못된 식은 거절하며, 다시 열어도 남아 있다
@@ -621,13 +635,13 @@ try {
   await pl.waitForFunction((n) => [...document.querySelectorAll('[data-testid="roll-entry"]')].filter((e) => e.textContent.includes("3d6")).length > n, before);
   await pl.reload();
   await pl.getByTestId("macro").filter({ hasText: "한 방 " + run }).waitFor();
-  const serverLib = await (await fetch("http://localhost:8787/library", { headers: { "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") } })).json();
+  const serverLib = await (await fetch(`${API}/library`, { headers: { "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") } })).json();
   assert.ok(serverLib.macros.some((m) => m.name === "한 방 " + run && m.expr === "3d6"));
   step("매크로: 저장한 식을 한 번에 굴리고, 잘못된 식은 거절하며, 새로고침해도 남고 서버 서재에 저장됨");
 
   // 서재 충돌: 다른 기기가 먼저 저장해도 내 변경과 항목 단위로 합쳐지고 어느 쪽도 사라지지 않는다
   const dev = { "content-type": "application/json", "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") };
-  const otherPut = await fetch("http://localhost:8787/library", {
+  const otherPut = await fetch(`${API}/library`, {
     method: "PUT",
     headers: dev,
     body: JSON.stringify({ macros: [...serverLib.macros, { id: "other" + run, name: "다른 기기 " + run, expr: "1d4", secret: false }], occupations: serverLib.occupations, baseRevision: serverLib.revision }),
@@ -640,7 +654,7 @@ try {
   await pl.getByRole("button", { name: "닫기", exact: true }).click();
   await pl.getByTestId("macro").filter({ hasText: "다른 기기 " + run }).waitFor();
   await pl.getByTestId("macro").filter({ hasText: "이쪽 " + run }).waitFor();
-  const merged = await (await fetch("http://localhost:8787/library", { headers: dev })).json();
+  const merged = await (await fetch(`${API}/library`, { headers: dev })).json();
   assert.ok(merged.macros.some((m) => m.name === "다른 기기 " + run) && merged.macros.some((m) => m.name === "이쪽 " + run));
   step("서재 충돌: 다른 기기가 먼저 저장해도 항목 단위로 합쳐져 둘 다 남음");
 
@@ -726,6 +740,99 @@ try {
   await pl.waitForTimeout(400);
   assert.equal(await pl.getByText("진상 " + run).count(), 0);
   step("KP 전용 노트는 PL에게 보이지 않고 펼쳐 보일 수도 없음");
+
+  // 토큰 소유자: PL 3명이 각자 자기 토큰만 움직이고, KP가 이름·소유자를 바꾼다
+  {
+    const SHOT = "/tmp/shots-token";
+    const kpT = await (await ctx()).newPage();
+    await login(kpT, "하늘" + run);
+    await kpT.getByLabel("새 룸 이름").fill("토큰방 " + run);
+    await kpT.getByRole("button", { name: "새 룸 만들기" }).click();
+    await kpT.waitForURL(/\/room\//);
+    await kpT.getByTestId("connection").getByText("연결됨").waitFor();
+    await kpT.getByRole("button", { name: "초대", exact: true }).click();
+    const inv = await kpT.getByLabel("초대 링크 주소").inputValue();
+    await kpT.keyboard.press("Escape");
+    const names = ["서하" + run, "도윤" + run, "이안" + run];
+    const pls = [];
+    for (const nm of names) {
+      const p = await (await ctx()).newPage();
+      await p.goto(inv);
+      await p.getByLabel("이름").fill(nm);
+      await p.getByRole("button", { name: "계속하기" }).click();
+      await p.getByRole("button", { name: "PL로 입장" }).click();
+      await p.getByTestId("connection").getByText("연결됨").waitFor();
+      pls.push(p);
+    }
+    await pls[0].getByTestId("no-token-hint").waitFor();
+    step("토큰이 없는 PL 화면에 안내 한 줄이 보임");
+    await kpT.getByRole("button", { name: "세션 시작" }).click();
+    await pls[2].getByTestId("session-status").getByText("진행 중").waitFor();
+
+    await kpT.getByRole("button", { name: "PL 전원 토큰 만들기" }).click();
+    for (const p of pls) for (const nm of names) await p.getByTestId(`obj-${nm}`).waitFor();
+    // 겹치지 않고, 각자 화면에서 자기 토큰만 "내 토큰" 표시
+    const pos = await kpT.evaluate((ns) => ns.map((n) => { const e = document.querySelector(`[data-testid="obj-${n}"]`); return [Number(e.getAttribute("data-x")), Number(e.getAttribute("data-y"))]; }), names);
+    for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) assert.ok(Math.hypot(pos[i][0] - pos[j][0], pos[i][1] - pos[j][1]) >= 56, "토큰이 겹침");
+    for (let i = 0; i < 3; i++) {
+      assert.equal(await pls[i].getByTestId(`obj-${names[i]}`).getAttribute("data-mine"), "true");
+      assert.equal(await pls[i].locator('[data-mine="true"]').count(), 1);
+      assert.equal(await pls[i].getByTestId("no-token-hint").count(), 0);
+    }
+    step("PL 전원 토큰 만들기: 이름대로 3개가 겹치지 않게 놓이고 각자 자기 토큰만 '나'로 표시됨");
+
+    const dragBy = async (page, name, dx, dy) => {
+      const b = await page.getByTestId(`obj-${name}`).locator("circle").first().boundingBox();
+      await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(b.x + b.width / 2 + dx, b.y + b.height / 2 + dy, { steps: 6 });
+      await page.mouse.up();
+    };
+    const posOf = (page, name) => page.evaluate((n) => { const e = document.querySelector(`[data-testid="obj-${n}"]`); return [Number(e.getAttribute("data-x")), Number(e.getAttribute("data-y"))]; }, name);
+    const before = await Promise.all(names.map((n) => posOf(kpT, n)));
+    for (let i = 0; i < 3; i++) {
+      await dragBy(pls[i], names[i], 90, 140);
+      await kpT.waitForFunction(([n, x, y]) => { const e = document.querySelector(`[data-testid="obj-${n}"]`); return Math.hypot(Number(e.getAttribute("data-x")) - x, Number(e.getAttribute("data-y")) - y) > 40; }, [names[i], ...before[i]]);
+    }
+    // 남의 토큰은 안 움직임: 서하가 도윤 토큰을 끌어 본다
+    const dBefore = await posOf(kpT, names[1]);
+    await dragBy(pls[0], names[1], -100, -100);
+    await pls[0].waitForTimeout(500);
+    const dAfter = await posOf(kpT, names[1]);
+    assert.deepEqual(dAfter, dBefore);
+    step("PL 3명이 각자 자기 토큰만 움직이고 남의 토큰은 움직이지 않음");
+
+    // KP가 이름·소유자를 바꾼다: 도윤 토큰을 NPC로 풀고 이름 변경 → 도윤은 못 움직임
+    await kpT.getByTestId(`obj-${names[1]}`).click();
+    await kpT.getByLabel("선택한 오브젝트 이름").fill("문지기 " + run);
+    await kpT.getByRole("button", { name: "이름 바꾸기" }).click();
+    await pls[0].getByTestId(`obj-문지기 ${run}`).waitFor();
+    await kpT.getByLabel("선택한 토큰 소유자").selectOption("");
+    await pls[1].waitForFunction((n) => document.querySelector(`[data-testid="obj-${n}"]`)?.getAttribute("data-mine") === null, "문지기 " + run);
+    const g0 = await posOf(kpT, "문지기 " + run);
+    await dragBy(pls[1], "문지기 " + run, 80, 80);
+    await pls[1].waitForTimeout(500);
+    assert.deepEqual(await posOf(kpT, "문지기 " + run), g0);
+    // 이안에게 넘기면 이안이 움직인다
+    await kpT.getByLabel("선택한 토큰 소유자").selectOption({ label: names[2] });
+    await pls[2].waitForFunction((n) => document.querySelector(`[data-testid="obj-${n}"]`)?.getAttribute("data-mine") === "true", "문지기 " + run);
+    await dragBy(pls[2], "문지기 " + run, 80, 80);
+    await kpT.waitForFunction(([n, x, y]) => { const e = document.querySelector(`[data-testid="obj-${n}"]`); return Math.hypot(Number(e.getAttribute("data-x")) - x, Number(e.getAttribute("data-y")) - y) > 40; }, ["문지기 " + run, ...g0]);
+    // 잠그면 소유자도 못 움직임
+    await kpT.getByRole("button", { name: "잠그기" }).click();
+    await kpT.getByRole("button", { name: "잠김" }).waitFor();
+    const g1 = await posOf(kpT, "문지기 " + run);
+    await dragBy(pls[2], "문지기 " + run, -60, -60);
+    await pls[2].waitForTimeout(500);
+    assert.deepEqual(await posOf(kpT, "문지기 " + run), g1);
+    step("KP가 토큰 이름을 바꾸고 소유자를 NPC로 풀거나 다른 PL에게 넘기고, 잠그면 소유자도 못 움직임");
+
+    // 시트→토큰: KP가 시트 패널에서 토큰으로 놓기
+    await pls[0].getByRole("tab", { name: "시트" }).click();
+    await pls[0].screenshot({ path: `${SHOT}/pl-board.png` });
+    await kpT.screenshot({ path: `${SHOT}/kp-board.png` });
+    await pls[2].screenshot({ path: `${SHOT}/pl3-board.png` });
+  }
 
   // 룸 삭제: 로비 카드에서 두 번 눌러 지우면 목록에서 사라지고, 열려 있던 룸은 끊긴다
   await kp2.goto(WEB);

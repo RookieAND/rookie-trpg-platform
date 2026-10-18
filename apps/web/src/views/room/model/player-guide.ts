@@ -7,6 +7,8 @@ export interface PlayerGuideInput {
   rolls: ReadonlyArray<{ userId: string }>;
   /** 서버가 이 사람에게 보내 준(볼 수 있는) 핸드아웃 */
   handouts: ReadonlyArray<{ kpOnly?: boolean }>;
+  /** 내 소유 토큰이 이 화면에 있는지(없으면 KP가 놓아 줄 때까지 기다려야 한다) */
+  hasToken?: boolean;
 }
 
 export interface GuideStep {
@@ -40,7 +42,12 @@ export function playerGuideSteps(i: PlayerGuideInput): GuideStep[] {
       hint: "‘굴림’ 탭에 CC<=60, 1d100 같은 식을 넣거나 매크로·시트 판정 버튼을 눌러요. 세션이 시작되면 굴릴 수 있어요.",
     },
     handout,
-    { key: "move", done: false, title: "토큰 움직이기", hint: "세션이 시작되면 내 토큰을 끌어서 옮길 수 있어요." },
+    {
+      key: "move",
+      done: false,
+      title: "토큰 움직이기",
+      hint: i.hasToken === false ? "아직 내 토큰이 없어요. KP에게 요청하거나 기다려요. 세션이 시작되면 끌어서 옮길 수 있어요." : "세션이 시작되면 내 토큰을 끌어서 옮길 수 있어요.",
+    },
   ];
 }
 
