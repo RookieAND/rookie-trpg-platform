@@ -85,6 +85,13 @@ create table if not exists images (
   bytes bytea not null,
   created_at timestamptz not null default now()
 );
+
+-- Supabase는 public 테이블을 Data API(공개 anon 키)로도 열어 준다. RLS를 켜고 정책을 두지 않아 그 길로는 아무것도 못 읽게 한다.
+-- 서버는 테이블 소유 계정으로 직접 접속하므로 영향을 받지 않는다.
+alter table rooms enable row level security;
+alter table vaults enable row level security;
+alter table libraries enable row level security;
+alter table images enable row level security;
 `;
 
 export async function migrate(db: Db): Promise<void> {

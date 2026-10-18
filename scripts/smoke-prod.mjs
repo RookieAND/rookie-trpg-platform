@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const MAIN = join(root, "apps/api/dist/main.js");
+const MAIN = process.env.API_MAIN ?? join(root, "apps/api/dist/main.js"); // API_MAIN: pnpm deploy 결과물 등 다른 위치의 main.js
 if (!existsSync(MAIN)) {
   console.error("apps/api/dist/main.js가 없어요. 먼저 `pnpm build:api`를 실행하세요.");
   process.exit(2);

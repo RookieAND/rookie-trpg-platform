@@ -12,3 +12,4 @@ export { Dialog } from "./Dialog";
 export { Group } from "./Group";
 export { useAsk, type ConfirmOptions, type PromptOptions } from "./AskDialog";
 export { StatusChips } from "./StatusChips";
+export { ErrorPanel } from "./ErrorPanel";

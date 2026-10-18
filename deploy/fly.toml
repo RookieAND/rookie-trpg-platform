@@ -1,0 +1,53 @@
+# Fly.io 예시: API 서버 한 대.  fly launch --no-deploy --copy-config --dockerfile ../Dockerfile  (저장소 루트에서)
+# 비밀 값은 이 파일에 쓰지 않고 `fly secrets set KEY=value`로 넣는다(docs/deploy-env.md 3장).
+app = "coc-vtt-api"            # 본인 앱 이름으로 바꾸세요
+primary_region = "nrt"         # 도쿄. 한국 사용자는 nrt가 가깝고, Supabase 프로젝트와 같은 권역이면 더 좋다
+
+[build]
+  dockerfile = "../Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  # 웹 주소(CORS). 커스텀 도메인을 쓰면 그 주소로 바꾸세요. 끝에 / 없이.
+  WEB_ORIGIN = "https://vtt.example.com"
+  # Fly 프록시가 앞에 한 겹 있다.
+  TRUST_PROXY = "1"
+  SUPABASE_URL = "https://YOUR-PROJECT-REF.supabase.co"
+  # DATABASE_URL, S3_*, SUPABASE_JWT_SECRET(레거시 키만) 등 비밀 값은 fly secrets로.
+  S3_ENDPOINT = "https://ACCOUNT_ID.r2.cloudflarestorage.com"
+  S3_BUCKET = "coc-vtt-media"
+
+[deploy]
+  # 룸이 메모리에 있어서 두 대가 동시에 떠 있으면 안 된다. 새 머신을 먼저 띄우는 bluegreen/canary는 쓰지 마세요.
+  strategy = "rolling"
+  max_unavailable = 1
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # 재우지 않는다: 잠들면 메모리의 룸과 접속이 끊긴다.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 400
+    hard_limit = 500
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/ready"
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "20s"
+
+[[vm]]
+  # 룸 수십 개는 256MB로도 되지만 여유를 둔다.
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+# 종료: SIGTERM을 받으면 접속자에게 1012를 알리고 룸을 저장한다. 저장이 끝날 시간을 준다.
+kill_signal = "SIGTERM"
+kill_timeout = 15

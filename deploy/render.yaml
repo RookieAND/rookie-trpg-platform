@@ -1,0 +1,59 @@
+# Render Blueprint 예시: API 서버 한 대 (저장소 루트에 두거나 대시보드에서 이 파일 경로를 지정).
+# 비밀 값은 sync: false로 두고 대시보드에서 직접 입력한다.
+# 무료(free) 플랜은 15분 동안 요청이 없으면 잠들어 룸과 접속이 끊기므로 쓰지 마세요. starter 이상을 쓰세요.
+services:
+  - type: web
+    name: coc-vtt-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: singapore          # 한국에서 가장 가까운 권역
+    numInstances: 1            # 룸이 메모리에 있으므로 반드시 1. 늘리지 마세요.
+    healthCheckPath: /ready
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8080"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: WEB_ORIGIN
+        value: https://vtt.example.com
+      - key: SUPABASE_URL
+        value: https://YOUR-PROJECT-REF.supabase.co
+      - key: S3_ENDPOINT
+        value: https://ACCOUNT_ID.r2.cloudflarestorage.com
+      - key: S3_BUCKET
+        value: coc-vtt-media
+      - key: DATABASE_URL
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      # 레거시 JWT Secret(HS256)을 쓰는 프로젝트만:
+      # - key: SUPABASE_JWT_SECRET
+      #   sync: false
+
+  # 쓰이지 않는 이미지 정리(주 1회). 같은 이미지로 명령만 바꿔 돈다.
+  - type: cron
+    name: coc-vtt-cleanup-images
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    schedule: "0 19 * * 0"     # 일요일 19:00 UTC = 월요일 04:00 KST
+    dockerCommand: node dist/cleanup-images.js --days 7 --max-delete 500
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: S3_ENDPOINT
+        value: https://ACCOUNT_ID.r2.cloudflarestorage.com
+      - key: S3_BUCKET
+        value: coc-vtt-media
+      - key: DATABASE_URL
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false

@@ -1,0 +1,19 @@
+# 이미지에 필요한 것만 보내도록 나머지는 제외한다.
+.git
+.github
+**/node_modules
+**/.next
+**/dist
+**/*.log
+**/*.tsbuildinfo
+**/.env
+**/.env.*
+!**/.env.example
+data
+docs
+deploy
+apps/web
+!apps/web/package.json
+**/e2e
+Dockerfile
+.dockerignore

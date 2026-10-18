@@ -8,7 +8,8 @@
     "start": "next start -p 3000",
     "typecheck": "tsc -p .",
     "e2e": "node e2e/room.e2e.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "e2e:errors": "node e2e/error-boundary.e2e.mjs"
   },
   "dependencies": {
     "@coc-vtt/shared": "workspace:*",

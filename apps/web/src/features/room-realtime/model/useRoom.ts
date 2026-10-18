@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { REALTIME_URL } from "@/shared/config";
+import { REALTIME_URL, secureRealtimeUrl } from "@/shared/config";
 import {
   applyServerMessage,
   initialRoomState,
@@ -83,7 +83,7 @@ export function useRoom({ roomId, user, name, token: initialToken, invite, refre
       setConnection("connecting");
       const qs = new URLSearchParams(token ? { room: roomId, token } : { room: roomId, user, name });
       if (invite) qs.set("invite", invite);
-      const ws = new WebSocket(`${REALTIME_URL}?${qs}`);
+      const ws = new WebSocket(`${secureRealtimeUrl(REALTIME_URL, typeof location === "undefined" ? undefined : location.protocol)}?${qs}`);
       wsRef.current = ws;
 
       ws.onopen = () => {
