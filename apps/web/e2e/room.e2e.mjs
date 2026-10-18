@@ -622,6 +622,7 @@ try {
   // 초안 핸드아웃: 펼쳐 보이기가 막힌 이유를 알려 주고, ‘공개하기’ 한 번으로 전원 공개 + 펼쳐 보이기
   {
     const item = kp.getByTestId("handout-item").filter({ hasText: "낡은 편지" });
+    await item.getByTestId("handout-show-why").waitFor(); // PL 화면이 먼저 바뀌어도 GM 화면이 따라올 때까지 기다린다
     assert.equal(await item.getByRole("button", { name: "펼쳐 보이기" }).isDisabled(), true);
     assert.match(await item.getByTestId("handout-show-why").innerText(), /공개하기/);
     assert.match((await item.getByRole("button", { name: "펼쳐 보이기" }).getAttribute("aria-describedby")) ?? "", /^handout-why-/);
@@ -977,7 +978,7 @@ try {
     await dropOnBoard(kp, "복도.png", "#363", [0.1, 0.9]);
     await kp.getByTestId("intake-background").click();
     await pl.getByTestId("board-bg").waitFor();
-    assert.equal(await kp.getByTestId("board-hint").count(), 0); // 배경이 생기면 안내는 사라진다
+    await kp.getByTestId("board-hint").waitFor({ state: "detached" }); // 배경이 생기면 안내는 사라진다
     step("빈 곳에 놓고 '배경으로'를 고르면 장면 배경이 정해짐(안내 문구도 사라짐)");
 
     // 이미지 형식이 아니면 안내만 하고 아무것도 만들지 않는다
