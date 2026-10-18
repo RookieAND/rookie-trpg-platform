@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClientCommand } from "@coc-vtt/shared";
-import { buildCues, filterCues, type Cue, type CueSource } from "../model/cues";
+import { buildCues, filterCues, slotConfirm, SLOT_CONFIRM_MS, type Cue, type CueSource } from "../model/cues";
 import { assignSlot, clearSlot, emptySlots, parseSlots, SLOT_COUNT, type Slots } from "../model/slots";
 import { Dialog } from "@/shared/ui";
+import { withMod } from "@/shared/lib";
 
 const isTyping = (el: Element | null) => el instanceof HTMLElement && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
 
@@ -11,7 +12,7 @@ const isTyping = (el: Element | null) => el instanceof HTMLElement && (el.isCont
  * GM 화면 아래의 연출 바(슬롯 1~9, 숫자 키로 실행)와 Cmd/Ctrl+K 명령어 검색.
  * 슬롯 배치는 GM의 개인 설정이라 룸별로 이 브라우저에만 저장한다.
  */
-export function StageCues({ roomId, source, enabled, send }: { roomId: string; source: CueSource; enabled: boolean; send: (c: ClientCommand) => unknown }) {
+export function StageCues({ roomId, source, enabled, send, sessionActive = false, notify, bare = false }: { roomId: string; source: CueSource; enabled: boolean; send: (c: ClientCommand) => unknown; /** 세션이 진행 중이면 숫자 키 장면 전환은 3초 취소 창을 둔다 */ sessionActive?: boolean; notify?: (text: string, action?: { label: string; run: () => void }, opts?: { ttl?: number }) => void; /** 휴대폰 시트 안에 놓을 때: 떠 있는 막대가 아니라 그 자리의 한 묶음 */ bare?: boolean }) {
   const storageKey = `coc-vtt.slots.${roomId}`;
   const [slots, setSlots] = useState<Slots>(emptySlots);
   // null이면 닫힘, "run"이면 실행용, 숫자면 그 슬롯에 등록하는 용도
@@ -38,8 +39,11 @@ export function StageCues({ roomId, source, enabled, send }: { roomId: string; s
   const byId = useMemo(() => new Map(cues.map((c) => [c.id, c])), [cues]);
   const run = (cue: Cue) => enabled && send(cue.command);
 
-  const slotsRef = useRef({ slots, byId, enabled, palette });
-  slotsRef.current = { slots, byId, enabled, palette };
+  const slotsRef = useRef({ slots, byId, enabled, palette, sessionActive, notify });
+  slotsRef.current = { slots, byId, enabled, palette, sessionActive, notify };
+  // 숫자 키로 부른 장면 전환을 기다리는 중(3초 안에 취소할 수 있다)
+  const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (pending.current) clearTimeout(pending.current); }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -53,7 +57,19 @@ export function StageCues({ roomId, source, enabled, send }: { roomId: string; s
       if (/^[1-9]$/.test(e.key)) {
         const id = cur.slots[Number(e.key) - 1];
         const cue = id ? cur.byId.get(id) : undefined;
-        if (cue && cur.enabled) send(cue.command);
+        if (!cue || !cur.enabled) return;
+        if (pending.current) {
+          clearTimeout(pending.current);
+          pending.current = null;
+        }
+        const ask = cur.notify ? slotConfirm(cue, cur.sessionActive) : null;
+        if (!ask) return void send(cue.command);
+        const timer = setTimeout(() => {
+          if (pending.current === timer) pending.current = null;
+          send(cue.command);
+        }, SLOT_CONFIRM_MS);
+        pending.current = timer;
+        cur.notify!(ask.text, { label: "취소", run: () => { clearTimeout(timer); if (pending.current === timer) pending.current = null; } }, { ttl: SLOT_CONFIRM_MS });
       }
     };
     window.addEventListener("keydown", onKey);
@@ -62,8 +78,8 @@ export function StageCues({ roomId, source, enabled, send }: { roomId: string; s
 
   return (
     <>
-      <div className="cuebar" data-testid="cuebar" role="toolbar" aria-label="연출 바">
-        <span className="dock-label" title="칸에 장면·핸드아웃을 등록해 두면 숫자 키(1~9)로 바로 실행해요. ⌘K로 검색해도 돼요">단축키</span>
+      <div className={`cuebar${bare ? " bare" : ""}`} data-testid="cuebar" role="toolbar" aria-label="연출 바">
+        {!bare && <span className="dock-label" title={`칸에 장면·핸드아웃을 등록해 두면 숫자 키(1~9)로 실행해요. 진행 중에 장면을 바꾸는 칸은 3초 안에 취소할 수 있어요. ${withMod("K")}로 검색해도 돼요`}>연출 칸</span>}
         {Array.from({ length: SLOT_COUNT }, (_, i) => {
           const id = slots[i];
           const cue = id ? byId.get(id) : undefined;
@@ -86,7 +102,7 @@ export function StageCues({ roomId, source, enabled, send }: { roomId: string; s
             </div>
           );
         })}
-        <button className="cue-btn cue-search" onClick={() => setPalette("run")} aria-label="명령어 검색">⌘K</button>
+        <button className="cue-btn cue-search" onClick={() => setPalette("run")} aria-label="명령어 검색" title={`명령어 검색 (${withMod("K")})`}>{bare ? "검색" : withMod("K")}</button>
       </div>
       {palette !== null && (
         <Palette

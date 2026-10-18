@@ -13,6 +13,7 @@ export function FogToolbar({
   onPicking,
   onRadius,
   send,
+  bare = false,
 }: {
   scene: Scene;
   selected?: GameObject;
@@ -24,6 +25,8 @@ export function FogToolbar({
   onPicking: (on: boolean) => void;
   onRadius: (r: number) => void;
   send: (c: ClientCommand) => unknown;
+  /** 휴대폰 시트 안에 놓을 때: 떠 있는 줄이 아니라 그 자리의 한 묶음 */
+  bare?: boolean;
 }) {
   const fog = scene.fog;
   const on = !!fog?.enabled;
@@ -33,8 +36,8 @@ export function FogToolbar({
   const [more, setMore] = useState(false);
 
   return (
-    <div className="dock" data-testid="fog-toolbar" style={{ bottom: 100 }}>
-      <span className="dock-label" title="안개를 켜면 PL은 밝힌 영역과 시야 안만 볼 수 있어요">안개</span>
+    <div className={bare ? "dock-bare" : "dock"} data-testid="fog-toolbar" {...(bare ? {} : { style: { bottom: 100 } })}>
+      {!bare && <span className="dock-label" title="안개를 켜면 PL은 밝힌 영역과 시야 안만 볼 수 있어요">안개</span>}
       <button className="btn" aria-pressed={on} disabled={!enabled} onClick={() => send({ type: "scene.fog", data: { id: scene.id, enabled: !on } })}>
         안개 {on ? "끄기" : "켜기"}
       </button>

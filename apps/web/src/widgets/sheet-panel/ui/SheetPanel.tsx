@@ -223,10 +223,10 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, rollWhy, 
               <span>{name}</span>
               {isKp ? (
                 <span className="mono" style={{ color: "var(--muted)" }}>
-                  <SkillValueInput key={`${c.id}-${name}-${s.value}`} name={name} value={s.value} disabled={!canEdit} onCommit={(value) => onPatch(c.id, [{ path: "skill", name, value }])} /> <span style={{ fontSize: 11 }}>({half(s.value)}/{fifth(s.value)})</span>
+                  <SkillValueInput key={`${c.id}-${name}-${s.value}`} name={name} value={s.value} disabled={!canEdit} onCommit={(value) => onPatch(c.id, [{ path: "skill", name, value }])} /> <span style={{ fontSize: 12 }}>({half(s.value)}/{fifth(s.value)})</span>
                 </span>
               ) : (
-                <span className="mono" style={{ color: "var(--muted)" }}>{s.value} <span style={{ fontSize: 11 }}>({half(s.value)}/{fifth(s.value)})</span></span>
+                <span className="mono" style={{ color: "var(--muted)" }}>{s.value} <span style={{ fontSize: 12 }}>({half(s.value)}/{fifth(s.value)})</span></span>
               )}
               <button className="btn sm" disabled={!canAct} onClick={() => roll(c.id, name, opts)} aria-label={`${name} 굴리기`}>굴리기</button>
             </div>
@@ -298,7 +298,7 @@ export function SheetEmpty({ role, canLoad }: { role: "kp" | "pl" | "spectator";
       : role === "kp"
         ? "아직 룸에 캐릭터가 없어요. 아래에서 보관함 캐릭터를 불러오거나 PL이 불러오길 기다려요."
         : canLoad
-          ? "내 캐릭터가 아직 없어요. 아래에서 보관함 캐릭터를 불러와요. 보관함이 비었다면 로비의 ‘내 캐릭터’에서 먼저 만들어요."
+          ? "내 캐릭터가 아직 없어요. 아래 ‘캐릭터 만들기’로 바로 만들거나, 보관함에 있는 캐릭터를 불러와요."
           : "아직 내 캐릭터가 없어요.";
   return <div style={{ color: "var(--muted)" }} data-testid="sheet-empty">{text}</div>;
 }

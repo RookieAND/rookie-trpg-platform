@@ -33,7 +33,7 @@ export function playerGuideSteps(i: PlayerGuideInput): GuideStep[] {
       key: "character",
       done: i.characters.some((c) => c.ownerId === i.userId),
       title: "내 캐릭터 준비하기",
-      hint: "‘시트’ 탭에서 보관함 캐릭터를 불러오거나, 로비의 ‘내 캐릭터’에서 새로 만들어요.",
+      hint: "‘시트’ 탭에서 ‘캐릭터 만들기’로 바로 만들거나, 보관함 캐릭터를 불러와요.",
     },
     {
       key: "roll",

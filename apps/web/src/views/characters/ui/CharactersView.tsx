@@ -5,8 +5,9 @@ import { useCallback, useEffect, useState } from "react";
 import type { CharacterInput } from "@coc-vtt/shared";
 import { SheetCsvImport, createCharacter, deleteCharacter, downloadCharacterCsv, listCharacters, updateCharacter, type VaultCharacter } from "@/entities/character";
 import { useIdentity, type Identity } from "@/entities/user";
-import { CharacterForm, CharacterWizard } from "@/features/edit-character";
+import { CharacterForm } from "@/features/edit-character";
 import { OccupationManager, useOccupations } from "@/features/manage-occupations";
+import { CharacterCreator } from "@/widgets/character-creator";
 import { ApiError } from "@/shared/api";
 import { SERVICE_NAME } from "@/shared/config";
 import { useAsk } from "@/shared/ui";
@@ -79,7 +80,7 @@ function Vault({ me }: { me: Identity }) {
         )}
         {error && <div className="err" role="alert">{error}</div>}
 
-        {editing?.mode === "wizard" && <CharacterWizard occupations={jobs.occupations} onSubmit={save} onCancel={() => setEditing(null)} />}
+        {editing?.mode === "wizard" && <CharacterCreator me={me} onCreated={() => { setEditing(null); setError(null); refresh(); }} onCancel={() => setEditing(null)} />}
         {editing && editing.mode !== "wizard" && (
           <CharacterForm
             me={me}

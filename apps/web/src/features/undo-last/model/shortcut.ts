@@ -9,14 +9,15 @@ export function isUndoKey(e: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" |
 }
 
 /** 되돌릴 수 있는 삭제 동작을 한 뒤 띄울 안내. 해당하지 않으면 null. */
-export function undoHint(type: string): string | null {
+export function undoHint(type: string, touch = false): string | null {
+  const how = touch ? "" : " · 되돌리려면 Ctrl+Z";
   switch (type) {
     case "object.remove":
-      return "삭제했어요 · 되돌리려면 Ctrl+Z";
+      return `삭제했어요${how}`;
     case "fog.clear":
-      return "밝힌 영역을 모두 지웠어요 · 되돌리려면 Ctrl+Z";
+      return `밝힌 영역을 모두 지웠어요${how}`;
     case "fog.forget":
-      return "탐험 기록을 지웠어요 · 되돌리려면 Ctrl+Z";
+      return `탐험 기록을 지웠어요${how}`;
     default:
       return null;
   }

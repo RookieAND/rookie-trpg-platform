@@ -38,6 +38,7 @@ export function RoomHeader({
   onRenamed,
   notify,
   onImported,
+  onShortcutHelp,
   send,
 }: {
   me: Identity;
@@ -64,6 +65,8 @@ export function RoomHeader({
   onRenamed: (name: string) => void;
   notify: (text: string) => void;
   onImported: (r: ScenarioImportResult) => void;
+  /** 설정 메뉴의 ‘단축키’ 항목이 부른다 */
+  onShortcutHelp?: () => void;
   send: (c: ClientCommand) => unknown;
 }) {
   const isKp = role === "kp";
@@ -91,6 +94,7 @@ export function RoomHeader({
             <MenuLabel>내 화면</MenuLabel>
             <EffectToggle enabled={effectsEnabled} onToggle={onToggleEffects} />
             {soundControl}
+            {onShortcutHelp && <button type="button" className="btn" data-testid="open-shortcuts" aria-keyshortcuts="?" onClick={() => { close(); onShortcutHelp(); }}>단축키 보기 (?)</button>}
             {isKp && <MenuLabel>룸 설정 (GM)</MenuLabel>}
             {isKp && <EffectSettingsButton effects={effects} send={send} />}
             {isKp && <MadnessTableButton entries={madnessTable} send={send} />}

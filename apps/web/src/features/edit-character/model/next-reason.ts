@@ -20,7 +20,7 @@ export function nextBlockReason(s: WizardState): string | null {
   if (s.step === 1) {
     if (!s.baseOk) return "특성치는 모두 1~99 사이로 적어 주세요.";
     if (s.cutError) return s.cutError;
-    if (s.eduPending) return "‘교육 향상 판정’을 한 번 해야 다음으로 갈 수 있어요.";
+    if (s.eduPending) return "나이 보정 상자의 ‘교육 향상 판정’ 버튼을 한 번 눌러야 다음으로 갈 수 있어요.";
   }
   if (s.step === 2 && s.pointErrors.length > 0) return `포인트를 맞춰 주세요 · ${s.pointErrors[0]}`;
   return null;

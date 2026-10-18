@@ -86,7 +86,7 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
   };
 
   return (
-    <div className="card" style={{ gap: 16 }} data-testid="wizard">
+    <div className="card wizard" style={{ gap: 16 }} data-testid="wizard">
       <ol style={{ display: "flex", gap: 8, margin: 0, padding: 0, listStyle: "none", flexWrap: "wrap" }} aria-label="진행 단계">
         {STEPS.map((s, i) => (
           <li key={s} className="badge" aria-current={i === step ? "step" : undefined} style={{ opacity: i === step ? 1 : 0.55 }}>{i + 1}. {s}</li>
@@ -94,7 +94,7 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
       </ol>
 
       {step === 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 2fr", gap: 12 }}>
+        <div className="wz-basic">
           <label>이름<input className="input" aria-label="이름" value={name} onChange={(e) => setName(e.target.value)} /></label>
           <label>나이<input className="input" aria-label="나이" type="number" value={age} onChange={(e) => { setAge(Number(e.target.value)); resetAgeParts(); }} /></label>
           <label>직업<input className="input" aria-label="직업" value={occupation} maxLength={40} onChange={(e) => { setOccupation(e.target.value); setJob(null); }} /></label>
@@ -123,9 +123,9 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
         <div style={{ display: "grid", gap: 12 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <button className="btn" onClick={roll}>특성치 굴리기</button>
-            <span style={{ color: "var(--muted)", fontSize: 12.5 }}>3d6×5 / (2d6+6)×5. 직접 적어도 돼요(합계 {CHARACTERISTIC_KEYS.reduce((s, k) => s + base[k], 0)}, 포인트 구입은 460).</span>
+            <span style={{ color: "var(--muted)", fontSize: 12.5, flex: "1 1 220px" }}>3d6×5 / (2d6+6)×5. 직접 적어도 돼요(합계 {CHARACTERISTIC_KEYS.reduce((s, k) => s + base[k], 0)}, 포인트 구입은 460).</span>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+          <div className="wz-stats">
             {CHARACTERISTIC_KEYS.map((k) => (
               <label key={k}>{k}<input className="input mono" aria-label={`${k} 기본값`} type="number" value={base[k]} onChange={(e) => { setBase({ ...base, [k]: Number(e.target.value) }); setEdu(null); }} /></label>
             ))}
@@ -138,7 +138,7 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
               {rules.physicalPenalty > 0 && (
                 <>
                   <div>{rules.physicalKeys.join("·")}에서 합계 {rules.physicalPenalty}만큼 깎아요.</div>
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div className="wz-cuts">
                     {rules.physicalKeys.map((k) => (
                       <label key={k} style={{ display: "grid", gap: 2 }}>{k} −<input className="input mono" style={{ width: 80 }} aria-label={`${k} 깎기`} type="number" min={0} value={cut[k] ?? 0} onChange={(e) => setCut({ ...cut, [k]: num(e.target.value) })} /></label>
                     ))}
@@ -153,7 +153,7 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
                 <div style={{ display: "grid", gap: 6 }}>
                   <div>교육 향상 판정 {rules.eduChecks}회: d100이 EDU보다 크면 EDU가 1d10 올라요.</div>
                   <div>
-                    <button className="btn" onClick={rollEdu} disabled={!!edu}>교육 향상 판정</button>
+                    <button className={`btn${edu ? "" : " primary"}`} data-testid="edu-roll" onClick={rollEdu} disabled={!!edu}>교육 향상 판정</button>
                   </div>
                   {edu && (
                     <div className="mono" data-testid="edu-result">
@@ -200,7 +200,7 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
               const fixed = (FIXED_SKILLS as readonly string[]).includes(s.name);
               const star = !!job && (job.skills.includes(s.name) || s.name === "신용도");
               return (
-                <div key={s.name} data-invalid={check.errors.some((e) => e.startsWith(`${s.name}:`))} style={{ display: "grid", gridTemplateColumns: "1fr 50px 80px 80px 50px", gap: 8, alignItems: "center", ...(check.errors.some((e) => e.startsWith(`${s.name}:`)) ? { outline: "1px solid var(--danger)", borderRadius: 6, padding: 2 } : {}) }}>
+                <div key={s.name} className="wz-skill" data-invalid={check.errors.some((e) => e.startsWith(`${s.name}:`))} style={check.errors.some((e) => e.startsWith(`${s.name}:`)) ? { outline: "1px solid var(--danger)", borderRadius: 6, padding: 2 } : undefined}>
                   <span>{star && "★ "}{s.name}</span>
                   <span className="mono" style={{ color: "var(--muted)" }}>{s.value}</span>
                   <input className="input mono" disabled={fixed || (!!job && !star)} aria-label={`${s.name} 직업 포인트`} type="number" min={0} value={a.occ || ""} placeholder="직업" onChange={(e) => setPts(s.name, "occ", num(e.target.value))} />
@@ -227,8 +227,8 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
         </div>
       )}
 
-      {nextWhy && step < STEPS.length - 1 && <div className="why" id="wizard-next-why" data-testid="wizard-next-why" style={{ textAlign: "right" }}>{nextWhy}</div>}
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+      {nextWhy && step < STEPS.length - 1 && <div className="why strong" id="wizard-next-why" data-testid="wizard-next-why" role="status">{nextWhy}</div>}
+      <div className="wz-foot">
         <button className="btn" onClick={onCancel}>취소</button>
         {step > 0 && <button className="btn" onClick={() => setStep(step - 1)}>이전</button>}
         {step < STEPS.length - 1 ? (

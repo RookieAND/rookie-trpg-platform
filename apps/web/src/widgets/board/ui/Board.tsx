@@ -1,36 +1,50 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { STATUS_LABEL_KO, type BoardPing, type FogArea, type GameObject, type Role } from "@coc-vtt/shared";
+import { STATUS_LABEL_KO, type BoardPing, type FogArea, type GameObject, type Role, type SceneGrid } from "@coc-vtt/shared";
 import { imageUrl } from "@/shared/api";
 import { dragHasFiles } from "@/shared/ui";
 import { objectAt } from "../model/drop-target";
+import {
+  DEFAULT_CELL,
+  FULL,
+  H,
+  MAX_ZOOM,
+  W,
+  centerOn,
+  formatDistance,
+  hitRadius,
+  isFit,
+  labelUnits,
+  loadSnap,
+  loadView,
+  panBy,
+  pinchView,
+  pxPerUnit,
+  saveSnap,
+  saveView,
+  screenToBoard,
+  snapCorner,
+  snapPoint,
+  tokenScale,
+  wheelFactor,
+  zoomAt,
+  zoomCenter,
+  zoomLevel,
+  type Frame,
+  type Pt,
+  type View,
+} from "../model/view";
 import { Pings } from "./Ping";
 
-const W = 1000;
-const H = 800;
 const R = 24;
-const MAX_ZOOM = 4;
-const KEY_STEP = 10;
-/** 격자 한 칸의 보드 단위 */
-const CELL = 40;
+/** 방향키 한 번에 움직이는 보드 단위(Shift는 잘게) */
+export const KEY_STEP = 20;
+export const KEY_STEP_FINE = 5;
+/** 격자를 정하지 않은 장면에서 거리를 셀 때 쓰는 한 칸 */
+const CELL = DEFAULT_CELL;
 /** 길게 누르면 핑이 되는 시간(ms)과, 이만큼(화면 px) 움직이면 길게 누르기가 아니다 */
 const LONG_PRESS_MS = 550;
 const LONG_PRESS_SLOP = 10;
-
-interface View {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-const FULL: View = { x: 0, y: 0, w: W, h: H };
-
-/** 보기 영역을 보드 안에 가둔다. */
-const clampView = (v: View): View => {
-  const w = Math.min(W, Math.max(W / MAX_ZOOM, v.w));
-  const h = (w * H) / W;
-  return { w, h, x: Math.max(0, Math.min(W - w, v.x)), y: Math.max(0, Math.min(H - h, v.y)) };
-};
 
 interface Props {
   objects: GameObject[];
@@ -66,16 +80,36 @@ interface Props {
   hint?: string;
   /** 시트가 이어진 토큰을 (끌지 않고) 눌렀을 때. 열 수 있는 사람인지는 부르는 쪽이 정한다. */
   onOpenSheet?: (obj: GameObject) => void;
+  /** 장면의 격자. 보이기·칸 맞추기 설정이 들어 있다. */
+  grid?: SceneGrid;
+  /** 확대·이동을 이 브라우저에 기억할 때 쓰는 키(사람·룸·장면마다 다르다). 없으면 기억하지 않는다. */
+  viewKey?: string;
+  /** 격자 맞춤을 이 사람이 따로 정한 값의 키 */
+  snapKey?: string;
 }
 
-export function Board({ objects, background, me, canInteract, onMove, selectedId, onSelect, fog, onPick, onPing, pings, sceneId, turnTokenIds, onDragStart, animate = true, onImageFile, onObjectMenu, onRequestImage, hint, onOpenSheet }: Props) {
+export function Board({ objects, background, me, canInteract, onMove, selectedId, onSelect, fog, onPick, onPing, pings, sceneId, turnTokenIds, onDragStart, animate = true, onImageFile, onObjectMenu, onRequestImage, hint, onOpenSheet, grid, viewKey, snapKey }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
   const [view, setView] = useState<View>(FULL);
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const pan = useRef<{ px: number; py: number; v: View } | null>(null);
   const kbTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [fileOver, setFileOver] = useState<{ id: string | null } | null>(null);
   const press = useRef<{ timer: ReturnType<typeof setTimeout>; cx: number; cy: number } | null>(null);
+  // 화면에 닿아 있는 손가락(포인터)들과, 두 손가락 확대 중의 시작 상태
+  const pts = useRef(new Map<number, Pt>());
+  const pinch = useRef<{ start: View; ids: [number, number]; p: [Pt, Pt] } | null>(null);
+  // 자(거리 재기): 이 화면에만 그리고 저장하지 않는다
+  const [rulerOn, setRulerOn] = useState(false);
+  const [ruler, setRuler] = useState<{ a: Pt; b: Pt } | null>(null);
+  const rulerDrag = useRef(false);
+  // 격자 맞춤: 장면 설정이 기본이고, 이 사람이 따로 켜거나 끈 값이 있으면 그 값을 쓴다
+  const [snapPref, setSnapPref] = useState<boolean | null>(null);
+  useEffect(() => setSnapPref(snapKey ? loadSnap(snapKey) : null), [snapKey]);
+  const snapOn = Boolean(grid) && (snapPref ?? grid!.snap);
+  const cell = grid?.size ?? CELL;
+
   const cancelPress = () => {
     if (press.current) clearTimeout(press.current.timer);
     press.current = null;
@@ -83,6 +117,27 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
   useEffect(() => cancelPress, []);
   // 토큰을 눌렀다 떼면(거의 움직이지 않고 짧게) 이어진 시트를 연다.
   const tap = useRef<{ id: string; cx: number; cy: number; at: number } | null>(null);
+
+  // 보드 요소의 크기를 지켜본다(이름표·토큰 크기를 화면 배율에 맞추는 데 쓴다).
+  useEffect(() => {
+    const el = svg.current;
+    if (!el) return;
+    const read = () => setSize({ width: el.clientWidth, height: el.clientHeight });
+    read();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const frame = (): Frame => {
+    const r = svg.current!.getBoundingClientRect();
+    return { left: r.left, top: r.top, width: r.width, height: r.height };
+  };
+  const scale = pxPerUnit(view, size); // 보드 1단위가 화면 몇 px인지
+  const labelFs = labelUnits(12, scale);
+  const kt = tokenScale(R * 2, scale);
+  const hitR = hitRadius(44, scale);
+
   /** 길게 누르면 그 자리를 핑한다. 많이 움직이거나 손을 떼면 취소된다. */
   const startPress = (e: React.PointerEvent, obj?: GameObject) => {
     cancelPress();
@@ -96,34 +151,57 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
     const p = toBoard(e);
     press.current = { cx: e.clientX, cy: e.clientY, timer: setTimeout(() => { press.current = null; onPing(Math.round(p.x), Math.round(p.y)); }, LONG_PRESS_MS) };
   };
-  const zoomed = view.w < W;
+  const zoomed = !isFit(view);
   const mineToken = objects.find((o) => o.kind === "token" && o.ownerId === me.userId);
 
-  // 장면이 바뀌면(보이는 오브젝트의 장면이 달라지면) 전체 보기로 돌아간다.
+  // 장면이 바뀌면 그 장면에서 마지막으로 보던 보기를 되살리고, 없으면 맞춤으로 돌아간다.
   const sceneKey = objects[0]?.sceneId ?? background ?? "";
-  useEffect(() => setView(FULL), [sceneKey]);
+  const scopeKey = viewKey ?? sceneKey;
+  useEffect(() => {
+    setView((viewKey && loadView(viewKey)) || FULL);
+    setRuler(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
+  // 바뀐 보기를 잠깐 뒤에 기억한다(끌고 있는 동안 매번 쓰지 않는다).
+  useEffect(() => {
+    if (!viewKey) return;
+    const t = setTimeout(() => saveView(viewKey, view), 250);
+    return () => clearTimeout(t);
+  }, [view, viewKey]);
 
-  const zoomAt = (factor: number, cx = view.x + view.w / 2, cy = view.y + view.h / 2) => {
-    const w = Math.min(W, Math.max(W / MAX_ZOOM, view.w / factor));
-    const k = w / view.w;
-    setView(clampView({ x: cx - (cx - view.x) * k, y: cy - (cy - view.y) * k, w, h: (w * H) / W }));
+  const zoomBy = (factor: number) => setView((v) => zoomCenter(v, frame(), factor));
+  const fit = () => setView(FULL);
+  const focusMine = () => mineToken && setView((v) => centerOn(v, mineToken, Math.max(zoomLevel(v), 2)));
+  const toggleSnap = () => {
+    const next = !snapOn;
+    setSnapPref(next);
+    if (snapKey) saveSnap(snapKey, next);
   };
-  const centerOn = (x: number, y: number) => {
-    const w = Math.min(view.w, W / 2);
-    setView(clampView({ x: x - w / 2, y: y - (w * H) / W / 2, w, h: (w * H) / W }));
+  const toggleRuler = () => {
+    setRulerOn((on) => !on);
+    setRuler(null);
+    rulerDrag.current = false;
   };
+
+  // 휠: 커서 아래를 기준으로 확대·축소. 안 막으면 Ctrl+휠이 페이지 확대로 새어 나가므로 막을 수 있는 리스너로 단다.
+  useEffect(() => {
+    const el = svg.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const f = wheelFactor(e.deltaY, e.deltaMode, e.ctrlKey);
+      const r = el.getBoundingClientRect();
+      setView((v) => zoomAt(v, { left: r.left, top: r.top, width: r.width, height: r.height }, f, e.clientX, e.clientY));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   const canMove = (o: GameObject) =>
     canInteract && me.role !== "spectator" && (me.role === "kp" || (o.ownerId === me.userId && !o.locked));
 
-  const toBoard = (e: { clientX: number; clientY: number }) => {
-    const el = svg.current!;
-    const pt = el.createSVGPoint();
-    pt.x = e.clientX;
-    pt.y = e.clientY;
-    const p = pt.matrixTransform(el.getScreenCTM()!.inverse());
-    return { x: Math.max(0, Math.min(W, p.x)), y: Math.max(0, Math.min(H, p.y)) };
-  };
+  const toBoard = (e: { clientX: number; clientY: number }) => screenToBoard(view, frame(), e.clientX, e.clientY);
+  const place = (p: Pt) => (snapOn ? snapPoint(p, cell) : p);
 
   return (
     <>
@@ -134,19 +212,23 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
       width="100%"
       height="100%"
       role="application"
-      aria-label="게임 보드. 토큰을 고르고 방향키로 움직일 수 있어요. + − 키로 확대·축소하고, P 키나 길게 누르기로 모두에게 가리킬 수 있어요. 고른 토큰이 있으면 Tab으로 다음 토큰을 고르고, Esc로 선택을 풀어요."
+      aria-label="게임 보드. 토큰을 고르고 방향키로 움직일 수 있어요. + − 키로 확대·축소하고, 0 키로 맞춰 봐요. P 키나 길게 누르기로 모두에게 가리킬 수 있어요. 고른 토큰이 있으면 Tab으로 다음 토큰을 고르고, Esc로 선택을 풀어요. 물음표 키로 단축키를 볼 수 있어요."
+      aria-keyshortcuts="+ - 0 P ArrowUp ArrowDown ArrowLeft ArrowRight Tab Escape ?"
       tabIndex={0}
       id="game-board"
       data-testid="board"
-      onWheel={(e) => {
-        if (!e.ctrlKey && !e.metaKey && !e.altKey) return;
-        const p = toBoard(e as unknown as React.PointerEvent);
-        zoomAt(e.deltaY < 0 ? 1.25 : 0.8, p.x, p.y);
-      }}
+      data-zoom={zoomLevel(view).toFixed(2)}
+      data-ruler={rulerOn ? "on" : undefined}
+      data-snap={snapOn ? "on" : undefined}
       onKeyDown={(e) => {
-        if (e.key === "+" || e.key === "=") return void zoomAt(1.25);
-        if (e.key === "-" || e.key === "_") return void zoomAt(0.8);
-        if (e.key === "0") return void setView(FULL);
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.key === "+" || e.key === "=") return void zoomBy(1.25);
+        if (e.key === "-" || e.key === "_") return void zoomBy(0.8);
+        if (e.key === "0") return void fit();
+        if (e.key === "Escape" && (rulerOn || ruler)) {
+          setRuler(null);
+          return void setRulerOn(false);
+        }
         if ((e.key === "p" || e.key === "P") && onPing) {
           const sel = objects.find((x) => x.id === selectedId);
           return void (sel && onPing(Math.round(sel.x), Math.round(sel.y)));
@@ -156,9 +238,13 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         const o = objects.find((x) => x.id === selectedId);
         if (!o || !canMove(o)) return;
         e.preventDefault();
-        const step = e.shiftKey ? KEY_STEP * 5 : KEY_STEP;
+        // 격자 맞춤이 켜져 있으면 한 칸씩, 아니면 20단위씩. Shift는 5단위로 잘게(맞추지 않음).
+        const fine = e.shiftKey;
+        const step = fine ? KEY_STEP_FINE : snapOn ? cell : KEY_STEP;
         const cur = drag?.id === o.id ? drag : { id: o.id, x: o.x, y: o.y };
-        const next = { id: o.id, x: Math.max(0, Math.min(W, cur.x + dir[0]! * step)), y: Math.max(0, Math.min(H, cur.y + dir[1]! * step)) };
+        const raw = { x: Math.max(0, Math.min(W, cur.x + dir[0]! * step)), y: Math.max(0, Math.min(H, cur.y + dir[1]! * step)) };
+        const to = fine ? raw : place(raw);
+        const next = { id: o.id, x: to.x, y: to.y };
         setDrag(next);
         // 키를 멈추면 한 번에 서버로 보낸다(연타가 오래된 위치 거절을 부르지 않게).
         clearTimeout(kbTimer.current);
@@ -195,12 +281,40 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         onImageFile(file, { objectId: objectAt(objects, p.x, p.y), x: Math.round(p.x), y: Math.round(p.y), cx: e.clientX, cy: e.clientY });
       }}
       onDoubleClick={(e) => {
-        if (!onPing || onPick) return;
+        if (!onPing || onPick || rulerOn) return;
         if (e.target !== svg.current && (e.target as Element).getAttribute("data-bg") === null) return;
         const p = toBoard(e as unknown as React.PointerEvent);
         onPing(Math.round(p.x), Math.round(p.y));
       }}
+      onPointerDownCapture={(e) => {
+        // 토큰이든 빈 곳이든, 손가락이 둘이 되면 두 손가락 확대를 시작한다(끌던 것은 멈춘다).
+        // 첫 손가락(primary)이 닿으면 이전 기록은 모두 낡은 것이다(떼는 이벤트를 놓친 경우를 대비)
+        if (e.isPrimary) {
+          pts.current.clear();
+          pinch.current = null;
+        }
+        pts.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pts.current.size >= 2 && !pinch.current) {
+          const [a, b] = [...pts.current.entries()];
+          cancelPress();
+          pan.current = null;
+          tap.current = null;
+          rulerDrag.current = false;
+          setDrag(null);
+          pinch.current = { start: view, ids: [a![0], b![0]], p: [a![1], b![1]] };
+        }
+      }}
       onPointerDown={(e) => {
+        if (pinch.current) return;
+        if (rulerOn) {
+          // 자: 눌러서 끌면 그 사이 거리를 보여 준다
+          const p = toBoard(e);
+          const a = snapOn ? snapCorner(p, cell) : p;
+          setRuler({ a, b: a });
+          rulerDrag.current = true;
+          (e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId);
+          return;
+        }
         if (e.target !== svg.current && (e.target as Element).getAttribute("data-bg") === null) return;
         if (e.altKey && onPing && !onPick) {
           const p = toBoard(e);
@@ -214,24 +328,54 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
           return;
         }
         onSelect(null);
+        // 빈 곳을 끌면 보기를 옮긴다(안개 영역 고르기 같은 도구를 켜 두었을 때는 위에서 이미 빠져나갔다).
         if (zoomed) {
           (e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId);
           pan.current = { px: e.clientX, py: e.clientY, v: view };
         }
       }}
       onPointerMove={(e) => {
-        if (press.current && Math.hypot(e.clientX - press.current.cx, e.clientY - press.current.cy) > LONG_PRESS_SLOP) cancelPress();
-        if (pan.current) {
-          const el = svg.current!;
-          const scale = Math.min(el.clientWidth / pan.current.v.w, el.clientHeight / pan.current.v.h);
-          setView(clampView({ ...pan.current.v, x: pan.current.v.x - (e.clientX - pan.current.px) / scale, y: pan.current.v.y - (e.clientY - pan.current.py) / scale }));
+        if (pts.current.has(e.pointerId)) pts.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        const pc = pinch.current;
+        if (pc) {
+          const a = pts.current.get(pc.ids[0]);
+          const b = pts.current.get(pc.ids[1]);
+          if (a && b) setView(pinchView(pc.start, frame(), pc.p, [a, b]));
           return;
         }
-        if (drag && e.buttons) setDrag({ ...drag, ...toBoard(e) });
+        if (press.current && Math.hypot(e.clientX - press.current.cx, e.clientY - press.current.cy) > LONG_PRESS_SLOP) cancelPress();
+        if (rulerDrag.current) {
+          const p = toBoard(e);
+          setRuler((r) => (r ? { a: r.a, b: snapOn ? snapCorner(p, cell) : p } : r));
+          return;
+        }
+        if (pan.current) {
+          const el = svg.current!;
+          setView(panBy(pan.current.v, { width: el.clientWidth, height: el.clientHeight }, e.clientX - pan.current.px, e.clientY - pan.current.py));
+          return;
+        }
+        if (drag && e.buttons) setDrag({ ...drag, ...place(toBoard(e)) });
       }}
-      onPointerCancel={cancelPress}
+      onPointerCancel={(e) => {
+        cancelPress();
+        pts.current.delete(e.pointerId);
+        if (pinch.current?.ids.includes(e.pointerId)) pinch.current = null;
+        pan.current = null;
+        rulerDrag.current = false;
+        setDrag(null);
+      }}
       onPointerUp={(e) => {
         cancelPress();
+        pts.current.delete(e.pointerId);
+        if (pinch.current) {
+          // 한 손가락을 떼면 확대는 끝이다. 남은 손가락은 다시 눌러야 끌기가 된다.
+          if (pinch.current.ids.includes(e.pointerId)) pinch.current = null;
+          return;
+        }
+        if (rulerDrag.current) {
+          rulerDrag.current = false;
+          return;
+        }
         const t = tap.current;
         tap.current = null;
         if (t && onOpenSheet && Math.hypot(e.clientX - t.cx, e.clientY - t.cy) < 6 && Date.now() - t.at < LONG_PRESS_MS) {
@@ -253,9 +397,14 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
           <path d="M40 0H0V40" fill="none" stroke="#1a1d22" strokeWidth="1" />
         </pattern>
+        {grid?.show && (
+          <pattern id="grid-user" width={grid.size} height={grid.size} patternUnits="userSpaceOnUse">
+            <path d={`M${grid.size} 0H0V${grid.size}`} fill="none" stroke="rgba(190,200,230,.28)" strokeWidth={Math.max(1, 1 / scale)} />
+          </pattern>
+        )}
       </defs>
       {background && <image href={imageUrl(background)} width={W} height={H} preserveAspectRatio="xMidYMid meet" data-testid="board-bg" pointerEvents="none" />}
-      <rect width={W} height={H} fill="url(#grid)" pointerEvents="none" />
+      {(!grid || grid.show) && <rect width={W} height={H} fill={grid?.show ? "url(#grid-user)" : "url(#grid)"} pointerEvents="none" data-testid={grid?.show ? "board-grid" : undefined} />}
       <rect data-bg="" width={W} height={H} fill="transparent" />
       {fog && (
         <g data-testid="fog" data-areas={fog.areas.length} pointerEvents="none">
@@ -287,6 +436,10 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         const mine = o.kind === "token" && me.role === "pl" && o.ownerId === me.userId;
         const stroke = hidden ? "#e3a94a" : mine ? "#4cc38a" : o.kind === "token" ? "#b8c7ff" : "#6b727c";
         const fill = hidden ? "rgba(227,169,74,.12)" : o.kind === "token" ? "#2b3a5e" : "#23272d";
+        // 몸통(링·배지·막대 포함)은 많이 축소했을 때만 커진다. 이름표는 따로 화면 글자 크기를 지킨다.
+        const body = kt === 1 ? undefined : `translate(${pos.x} ${pos.y}) scale(${kt}) translate(${-pos.x} ${-pos.y})`;
+        const labelY = pos.y + kt * (o.kind === "token" ? R + 8 : o.image ? 40 : 22) + labelFs * 0.95;
+        const desc = `${o.name}${mine ? ", 내 토큰" : ""}${hidden ? ", GM 전용" : ""}${o.locked ? ", 잠김" : ""}, 위치 ${Math.round(pos.x)} ${Math.round(pos.y)}`;
         return (
           <g
             key={o.id}
@@ -296,14 +449,18 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
             data-mine={mine ? "true" : undefined}
             data-locked={o.locked ? "true" : undefined}
             data-linked={o.characterId ? "true" : undefined}
-            style={{ cursor: canMove(o) ? "grab" : o.characterId && onOpenSheet ? "pointer" : "default" }}
+            role="img"
+            aria-label={desc}
+            style={{ cursor: rulerOn ? "crosshair" : canMove(o) ? "grab" : o.characterId && onOpenSheet ? "pointer" : "default" }}
             onContextMenu={(e) => {
               if (!onObjectMenu) return;
               e.preventDefault(); // 메뉴는 pointerdown 에서 이미 열었다
               e.stopPropagation();
             }}
             onPointerDown={(e) => {
+              if (rulerOn) return; // 자를 켜 두면 토큰 위에서도 재기가 시작된다
               e.stopPropagation();
+              if (pinch.current) return;
               if (e.button === 2) {
                 // 오른쪽 클릭: 고르면서 바로 메뉴를 연다. 고르면 아래 도구 줄이 생겨 보드 크기가 바뀌므로, contextmenu 때는 이미 토큰이 비켜 있을 수 있다.
                 onSelect(o.id);
@@ -324,7 +481,8 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
               }
             }}
           >
-            <circle className="tok-hit" cx={pos.x} cy={pos.y} r={44} />
+            <circle className="tok-hit" cx={pos.x} cy={pos.y} r={hitR} />
+            <g transform={body}>
             {mine && <circle cx={pos.x} cy={pos.y} r={R + 5} fill="none" stroke="#4cc38a" strokeWidth="1.5" opacity="0.55" data-testid="mine-ring" pointerEvents="none" />}
             {turnTokenIds?.includes(o.id) && (
               <g pointerEvents="none" data-testid="turn-ring">
@@ -357,42 +515,54 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
                 {o.name.slice(0, 1)}
               </text>
             )}
-            <text x={pos.x} y={pos.y + (o.kind === "token" ? R + 18 : o.image ? 48 : 32)} textAnchor="middle" fill={hidden ? "#e3a94a" : "#a0a7b0"} fontSize="12" pointerEvents="none" stroke="#0a0b0d" strokeWidth="3.5" strokeLinejoin="round" paintOrder="stroke">
-              {o.name}
-              {hidden ? " · GM 전용" : ""}
-              {o.locked ? " · 잠김" : ""}
-            </text>
             {o.kind === "token" && o.vitals && <TokenVitalsBar name={o.name} vitals={o.vitals} x={pos.x} y={pos.y} />}
-            {selectedId === o.id && !o.image && onRequestImage && drag?.id !== o.id && (
-              <g
-                data-testid="add-image-chip"
-                style={{ cursor: "pointer" }}
-                aria-hidden
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => onRequestImage(o, e.clientX, e.clientY)}
-              >
-                <rect x={pos.x - 38} y={pos.y + (o.kind === "token" ? R + 24 : 40)} width="76" height="18" rx="9" fill="#1a1b1e" stroke="#7c86f7" strokeWidth="1" />
-                <text x={pos.x} y={pos.y + (o.kind === "token" ? R + 37 : 53)} textAnchor="middle" fill="#b8c7ff" fontSize="11" fontWeight="600" pointerEvents="none">이미지 올리기</text>
-              </g>
-            )}
-            {drag?.id === o.id && Math.hypot(drag.x - o.x, drag.y - o.y) >= CELL / 8 && (
-              <g pointerEvents="none" data-testid="move-dist">
-                <line x1={o.x} y1={o.y} x2={drag.x} y2={drag.y} stroke="#b8c7ff" strokeWidth="1.5" strokeDasharray="4 4" opacity="0.7" />
-                <circle cx={o.x} cy={o.y} r={3} fill="#b8c7ff" opacity="0.7" />
-                <text x={drag.x + R + 10} y={drag.y + 5} fill="#e7e9ec" fontSize="14" fontWeight="600" stroke="#08090a" strokeWidth="3" paintOrder="stroke">
-                  {(Math.hypot(drag.x - o.x, drag.y - o.y) / CELL).toFixed(1)}칸
-                </text>
-              </g>
-            )}
             {mine && (
               <g pointerEvents="none" data-testid="mine-badge">
                 <rect x={pos.x + R - 12} y={pos.y - R - 6} width="22" height="16" rx="8" fill="#4cc38a" />
                 <text x={pos.x + R - 1} y={pos.y - R + 6} textAnchor="middle" fill="#08090a" fontSize="11" fontWeight="700">나</text>
               </g>
             )}
+            </g>
+            <text x={pos.x} y={labelY} textAnchor="middle" fill={hidden ? "#e3a94a" : "#c3c9d2"} fontSize={labelFs} pointerEvents="none" stroke="#0a0b0d" strokeWidth={(3.5 * labelFs) / 12} strokeLinejoin="round" paintOrder="stroke" data-testid={`label-${o.name}`}>
+              {o.name}
+              {hidden ? " · GM 전용" : ""}
+              {o.locked ? " · 잠김" : ""}
+            </text>
+            {selectedId === o.id && !o.image && onRequestImage && drag?.id !== o.id && (
+              <g
+                data-testid="add-image-chip"
+                transform={`translate(${pos.x} ${labelY + 8}) scale(${labelFs / 12})`}
+                style={{ cursor: "pointer" }}
+                aria-hidden
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => onRequestImage(o, e.clientX, e.clientY)}
+              >
+                <rect x={-38} y={0} width="76" height="18" rx="9" fill="#1a1b1e" stroke="#7c86f7" strokeWidth="1" />
+                <text x={0} y={13} textAnchor="middle" fill="#b8c7ff" fontSize="11" fontWeight="600" pointerEvents="none">이미지 올리기</text>
+              </g>
+            )}
+            {drag?.id === o.id && Math.hypot(drag.x - o.x, drag.y - o.y) >= cell / 8 && (
+              <g pointerEvents="none" data-testid="move-dist">
+                <line x1={o.x} y1={o.y} x2={drag.x} y2={drag.y} stroke="#b8c7ff" strokeWidth={Math.max(1.5, 1.5 / scale)} strokeDasharray="4 4" opacity="0.7" />
+                <circle cx={o.x} cy={o.y} r={3} fill="#b8c7ff" opacity="0.7" />
+                <text x={drag.x + R * kt + 10} y={drag.y + 5} fill="#e7e9ec" fontSize={labelUnits(14, scale)} fontWeight="600" stroke="#08090a" strokeWidth={(3 * labelUnits(14, scale)) / 14} paintOrder="stroke">
+                  {(Math.hypot(drag.x - o.x, drag.y - o.y) / cell).toFixed(1)}칸
+                </text>
+              </g>
+            )}
           </g>
         );
       })}
+      {ruler && (
+        <g pointerEvents="none" data-testid="ruler" data-a={`${Math.round(ruler.a.x)},${Math.round(ruler.a.y)}`} data-b={`${Math.round(ruler.b.x)},${Math.round(ruler.b.y)}`}>
+          <line x1={ruler.a.x} y1={ruler.a.y} x2={ruler.b.x} y2={ruler.b.y} stroke="#f0b429" strokeWidth={Math.max(2, 2 / scale)} strokeLinecap="round" />
+          <circle cx={ruler.a.x} cy={ruler.a.y} r={Math.max(4, 5 / scale)} fill="#f0b429" stroke="#08090a" strokeWidth="1" />
+          <circle cx={ruler.b.x} cy={ruler.b.y} r={Math.max(4, 5 / scale)} fill="#f0b429" stroke="#08090a" strokeWidth="1" />
+          <text x={(ruler.a.x + ruler.b.x) / 2} y={(ruler.a.y + ruler.b.y) / 2 - labelUnits(10, scale)} textAnchor="middle" fill="#ffe39a" fontSize={labelUnits(14, scale)} fontWeight="700" stroke="#08090a" strokeWidth={(3.5 * labelUnits(14, scale)) / 14} paintOrder="stroke" data-testid="ruler-label">
+            {formatDistance(ruler.a, ruler.b, cell)}
+          </text>
+        </g>
+      )}
       {hint && !fileOver && (
         <g data-testid="board-hint" pointerEvents="none">
           <rect x={W / 2 - 150} y={H - 52} width="300" height="28" rx="14" fill="rgba(14,15,17,.88)" stroke="#6b727c" strokeDasharray="4 4" />
@@ -422,11 +592,13 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
       ))}
     </ul>
     {fileOver && onImageFile && <div className="drop-veil" data-testid="drop-veil" aria-hidden>{fileOver.id ? "이 토큰의 이미지로 넣어요" : "놓으면 쓰임을 물어봐요"}</div>}
-    <div className="zoom-ctl" role="group" aria-label="보드 확대·이동">
-      <button type="button" className="btn sm" aria-label="확대" onClick={() => zoomAt(1.25)} disabled={view.w <= W / MAX_ZOOM + 0.5}>＋</button>
-      <button type="button" className="btn sm" aria-label="축소" onClick={() => zoomAt(0.8)} disabled={!zoomed}>－</button>
-      {zoomed && <button type="button" className="btn sm" onClick={() => setView(FULL)}>전체</button>}
-      {mineToken && <button type="button" className="btn sm" data-testid="focus-mine" onClick={() => centerOn(mineToken.x, mineToken.y)}>내 토큰</button>}
+    <div className="zoom-ctl" role="group" aria-label="보드 확대·이동" data-testid="zoom-ctl">
+      <button type="button" className="btn sm zc" aria-label="확대" title="확대 (+)" onClick={() => zoomBy(1.25)} disabled={view.w <= W / MAX_ZOOM + 0.5}>＋</button>
+      <button type="button" className="btn sm zc" aria-label="축소" title="축소 (-)" onClick={() => zoomBy(0.8)} disabled={!zoomed}>－</button>
+      <button type="button" className="btn sm zc" data-testid="zoom-fit" title="보드 전체가 보이게 맞춰요 (0)" onClick={fit} disabled={!zoomed}>맞춤</button>
+      {mineToken && <button type="button" className="btn sm zc" data-testid="focus-mine" title="내 토큰이 가운데 오게 해요" onClick={focusMine}>내 토큰</button>}
+      <button type="button" className="btn sm zc" data-testid="ruler-toggle" aria-pressed={rulerOn} title="보드를 끌어서 두 곳 사이의 거리를 재요. 나에게만 보여요" onClick={toggleRuler}>자</button>
+      {grid && <button type="button" className="btn sm zc" data-testid="snap-toggle" aria-pressed={snapOn} title="켜면 토큰이 칸 가운데로 맞춰져요" onClick={toggleSnap}>칸 맞춤</button>}
     </div>
     </>
   );

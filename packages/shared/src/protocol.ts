@@ -22,6 +22,8 @@ export interface Scene {
   start?: boolean;
   /** 이 장면으로 바뀔 때 틀 배경음(음원 라이브러리의 트랙 id). GM만 안다. */
   bgmTrackId?: string;
+  /** 격자. 모두가 안다(그리기·칸 맞추기는 각자 화면에서 한다). 없으면 격자를 그리지 않고 맞추지도 않는다. */
+  grid?: SceneGrid;
   /** 안개. GM만 설정과 밝힌 영역을 안다. */
   fog?: SceneFog;
   /** 안개가 켜진 활성 장면에서 지금 보이는 원들(밝힌 영역 + 시야 토큰). GM이 아닌 사람에게만 온다. */
@@ -29,6 +31,16 @@ export interface Scene {
   /** 한 번이라도 시야에 들어왔던 곳(탐험 기록). 안개가 켜진 활성 장면에서 GM이 아닌 사람에게만 온다. */
   fogExplored?: FogArea[];
 }
+
+/** 장면의 격자. size는 한 칸의 보드 단위(보드는 1000x800). */
+export interface SceneGrid {
+  size: number;
+  show: boolean;
+  snap: boolean;
+}
+export const GRID_MIN = 10;
+export const GRID_MAX = 200;
+export const DEFAULT_GRID_SIZE = 40;
 
 export const MAX_FOG_ZONES = 60;
 /** 한 룸에 둘 수 있는 장면·오브젝트·캐릭터·핸드아웃 수 */
@@ -534,6 +546,8 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
   /** 보드의 한 곳을 모두에게 가리킨다(저장하지 않는 일회성 신호). sceneId는 보고 있는 장면이고 활성 장면과 같아야 한다. */
   z.object({ type: z.literal("board.ping"), data: z.object({ sceneId: id, x: coord, y: coord }) }),
   z.object({ type: z.literal("scene.fog"), data: z.object({ id, enabled: z.boolean() }) }),
+  /** 장면의 격자(크기·보이기·칸에 맞추기). 모두 보내야 한다. */
+  z.object({ type: z.literal("scene.grid"), data: z.object({ id, size: z.number().int().min(GRID_MIN).max(GRID_MAX), show: z.boolean(), snap: z.boolean() }) }),
   z.object({ type: z.literal("fog.reveal"), data: z.object({ sceneId: id, x: coord, y: coord, r: z.number().int().min(10).max(FOG_MAX_RADIUS) }) }),
   z.object({ type: z.literal("fog.remove"), data: z.object({ sceneId: id, zoneId: id }) }),
   z.object({ type: z.literal("fog.clear"), data: z.object({ sceneId: id }) }),

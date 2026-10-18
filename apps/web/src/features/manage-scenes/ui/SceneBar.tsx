@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { josa, BGM_STOP, MAX_SCENES, type AudioTrack, type ClientCommand, type Scene } from "@coc-vtt/shared";
+import { josa, BGM_STOP, DEFAULT_GRID_SIZE, GRID_MAX, GRID_MIN, MAX_SCENES, type AudioTrack, type ClientCommand, type Scene } from "@coc-vtt/shared";
 import type { Caller } from "@/shared/api";
 import { ImageUploadButton, Menu, MenuLabel, onTabListKeyDown, useAsk } from "@/shared/ui";
 
@@ -88,6 +88,7 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
                     ))}
                   </select>
                 )}
+                <GridSettings scene={viewing} enabled={enabled} send={send} />
                 <button className="btn" disabled={!enabled} onClick={async () => {
                   close();
                   const next = await ask.prompt({ title: "장면 이름 바꾸기", label: "장면 이름", initial: viewing.name, confirmLabel: "바꾸기" });
@@ -99,6 +100,39 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
           </Menu>
         </div>
       )}
+    </div>
+  );
+}
+
+/** 장면 설정 메뉴 안의 격자: 보이기, 칸에 맞추기(모두의 기본값), 한 칸 크기. 정하지 않으면 격자가 없다. */
+function GridSettings({ scene, enabled, send }: { scene: Scene; enabled: boolean; send: (c: ClientCommand) => unknown }) {
+  const grid = scene.grid;
+  const [size, setSize] = useState(String(grid?.size ?? DEFAULT_GRID_SIZE));
+  useEffect(() => setSize(String(grid?.size ?? DEFAULT_GRID_SIZE)), [scene.id, grid?.size]);
+  const n = Math.round(Number(size));
+  const valid = Number.isFinite(n) && n >= GRID_MIN && n <= GRID_MAX;
+  // 서버 응답이 오기 전에 연달아 눌러도 앞선 선택이 되돌려지지 않게, 마지막으로 보낸 값을 기억한다.
+  const last = useRef({ size: grid?.size ?? DEFAULT_GRID_SIZE, show: grid?.show ?? false, snap: grid?.snap ?? false });
+  useEffect(() => { last.current = { size: grid?.size ?? DEFAULT_GRID_SIZE, show: grid?.show ?? false, snap: grid?.snap ?? false }; }, [scene.id, grid?.size, grid?.show, grid?.snap]);
+  const push = (patch: { size?: number; show?: boolean; snap?: boolean }) => {
+    last.current = { ...last.current, ...patch };
+    send({ type: "scene.grid", data: { id: scene.id, ...last.current } });
+  };
+  const commitSize = () => {
+    if (valid && n !== (grid?.size ?? DEFAULT_GRID_SIZE)) push({ size: n });
+    else if (!valid) setSize(String(grid?.size ?? DEFAULT_GRID_SIZE));
+  };
+  return (
+    <div className="grid-settings" data-testid="grid-settings">
+      <MenuLabel>격자</MenuLabel>
+      <label className="check"><input type="checkbox" data-testid="grid-show" checked={grid?.show ?? false} disabled={!enabled} onChange={(e) => push({ show: e.target.checked })} /> 격자 보이기</label>
+      <label className="check"><input type="checkbox" data-testid="grid-snap" checked={grid?.snap ?? false} disabled={!enabled} onChange={(e) => push({ snap: e.target.checked })} /> 토큰을 칸에 맞추기</label>
+      <label className="check">
+        한 칸
+        <input className="input" style={{ width: 72 }} type="number" inputMode="numeric" min={GRID_MIN} max={GRID_MAX} step={5} data-testid="grid-size" aria-label="격자 한 칸 크기" aria-invalid={!valid} value={size} disabled={!enabled}
+          onChange={(e) => setSize(e.target.value)} onBlur={commitSize} onKeyDown={(e) => e.key === "Enter" && commitSize()} />
+        <span className="why">{GRID_MIN}~{GRID_MAX}</span>
+      </label>
     </div>
   );
 }

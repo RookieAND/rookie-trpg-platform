@@ -58,3 +58,16 @@ export function filterCues(cues: Cue[], query: string): Cue[] {
   }
   return scored.sort((a, b) => a.score - b.score).map((x) => x.cue);
 }
+
+/** 숫자 키로 장면을 바꾸기 전에 취소할 수 있게 기다려 주는 시간(ms) */
+export const SLOT_CONFIRM_MS = 3000;
+
+/**
+ * 숫자 키로 부른 동작을 바로 하지 않고 한 줄로 알린 뒤 기다려야 하는가.
+ * 세션이 진행 중일 때 장면을 바꾸는 동작만 해당한다(PL 화면이 한꺼번에 바뀌므로). 아니면 null.
+ */
+export function slotConfirm(cue: Pick<Cue, "label" | "command">, sessionActive: boolean): { text: string } | null {
+  if (!sessionActive || cue.command.type !== "scene.activate") return null;
+  const name = (cue.label.split(" · ")[1] ?? "").replace(/ \((바로|페이드)\)$/, "");
+  return { text: `장면 전환: ${name} · ${SLOT_CONFIRM_MS / 1000}초 뒤` };
+}

@@ -585,6 +585,8 @@ export class Room {
         return this.sceneSetBgm(who, command.data);
       case "scene.fog":
         return this.sceneFog(who, command.data);
+      case "scene.grid":
+        return this.sceneGrid(who, command.data);
       case "fog.reveal":
         return this.fogReveal(who, command.data);
       case "fog.remove":
@@ -1235,6 +1237,14 @@ export class Room {
     return ok(...this.emitScene(scene));
   }
 
+  private sceneGrid(who: Actor, d: { id: string; size: number; show: boolean; snap: boolean }): Result {
+    if (who.role !== "kp") return fail("forbidden", "GM만 격자를 바꿀 수 있어요.");
+    const scene = this.scenes.get(d.id);
+    if (!scene) return fail("not_found", "장면을 찾을 수 없어요.");
+    scene.grid = { size: d.size, show: d.show, snap: d.snap };
+    return ok(...this.emitScene(scene));
+  }
+
   private sceneBackground(who: Actor, d: { id: string; image: string | null }): Result {
     if (who.role !== "kp") return fail("forbidden", "GM만 장면 배경을 바꿀 수 있어요.");
     const scene = this.scenes.get(d.id);
@@ -1569,6 +1579,7 @@ export class Room {
       name: this.freeSceneName(src.name),
       ...(src.background ? { background: src.background } : {}),
       ...(src.bgmTrackId ? { bgmTrackId: src.bgmTrackId } : {}),
+      ...(src.grid ? { grid: { ...src.grid } } : {}),
       ...(src.fog ? { fog: { enabled: src.fog.enabled, zones: src.fog.zones.map((z) => ({ ...z, id: this.newId() })) } } : {}),
     };
     // 원본 바로 뒤에 놓는다.

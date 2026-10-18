@@ -16,8 +16,8 @@ interface Input {
 export function useRoomNotices({ lastError, sendFailed, reconnected, lastUndo }: Input) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
-  const push = useCallback((kind: Toast["kind"], text: string, action?: ToastAction) => {
-    setToasts((l) => pushToast(l, { kind, text, ttl: action ? ACTION_TTL : kind === "error" ? ERROR_TTL : INFO_TTL, ...(action ? { action } : {}) }, nextId.current++));
+  const push = useCallback((kind: Toast["kind"], text: string, action?: ToastAction, ttl?: number) => {
+    setToasts((l) => pushToast(l, { kind, text, ttl: ttl ?? (action ? ACTION_TTL : kind === "error" ? ERROR_TTL : INFO_TTL), ...(action ? { action } : {}) }, nextId.current++));
   }, []);
   const dismiss = useCallback((id: number) => setToasts((l) => l.filter((t) => t.id !== id)), []);
 
@@ -37,7 +37,7 @@ export function useRoomNotices({ lastError, sendFailed, reconnected, lastUndo }:
   }, [lastUndo, push]);
 
   /** 화면에서 직접 띄우는 한 줄 안내. action을 주면 토스트 안에 버튼(예: 되돌리기)이 붙는다. */
-  const notify = useCallback((text: string, action?: ToastAction) => push("info", text, action), [push]);
+  const notify = useCallback((text: string, action?: ToastAction, opts?: { ttl?: number }) => push("info", text, action, opts?.ttl), [push]);
 
   return { toasts, dismiss, notify };
 }
