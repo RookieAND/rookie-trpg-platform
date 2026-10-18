@@ -1,12 +1,13 @@
 "use client";
 import { useState } from "react";
-import { formatRollLog, josa, luckBlockReason, luckNeeded, pushBlockReason, type Character, type RollLogEntry, type RollRuleInput } from "@coc-vtt/shared";
+import { formatRollLog, josa, luckBlockReason, luckNeeded, parseCommand, pushBlockReason, type Character, type RollLogEntry, type RollRuleInput } from "@coc-vtt/shared";
 import { MacroBar, useRollMacros } from "@/features/roll-macros";
 import type { Caller } from "@/shared/api";
 import { downloadText } from "@/shared/lib";
 import { Hint } from "@/shared/ui";
 import { RollResult } from "./RollResult";
 import { AskForm } from "./RollAsk";
+import { OpposedForm } from "./OpposedForm";
 
 interface Props {
   me: Caller;
@@ -20,26 +21,52 @@ interface Props {
   disabledReason?: string | null;
   error: string | null;
   /** false를 돌려주면 보내지 못한 것이라 식을 지우지 않는다. */
-  onRoll: (expr: string, secret: boolean) => unknown;
+  onRoll: (expr: string, secret: boolean, characterId?: string) => unknown;
   onPush: (rollId: string) => void;
   onLuck: (rollId: string) => void;
   /** GM 전용. 판정 요청 */
   players?: Array<{ userId: string; name: string }>;
   onAsk?: (name: string, difficulty: "regular" | "hard" | "extreme" | undefined, targetUserId?: string) => unknown;
+  /** GM 전용. 그룹 판정(PL 전원 또는 한 명의 캐릭터가 한꺼번에 굴림) */
+  onGroup?: (name: string, difficulty: "regular" | "hard" | "extreme" | undefined, targetUserId?: string, secret?: boolean) => unknown;
+  /** 대항 판정. b는 캐릭터 id를 아는 GM은 characterId, PL은 상대 PL의 userId로 가리킨다. */
+  onOpposed?: (a: { characterId: string; name: string }, b: { characterId?: string; userId?: string; name: string }, secret: boolean) => unknown;
+  /** 이미 적용한 피해: 굴림 id → 캐릭터 id들 */
+  damageApplied?: Record<string, string[]>;
+  /** GM 전용. 피해 굴림 결과를 캐릭터 HP에 적용 */
+  onApplyDamage?: (rollId: string, characterId: string, armor: number) => unknown;
 }
 
-export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disabled, disabledReason, error, onRoll, onPush, onLuck, players, onAsk }: Props) {
+export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disabled, disabledReason, error, onRoll, onPush, onLuck, players, onAsk, onGroup, onOpposed, damageApplied = {}, onApplyDamage }: Props) {
   const [expr, setExpr] = useState("");
   const [secret, setSecret] = useState(false);
   const [help, setHelp] = useState(false);
   const macro = useRollMacros(me);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [dbChar, setDbChar] = useState("");
+  // 식에 db(피해 보너스)가 있으면 어느 캐릭터의 보너스를 쓸지 정한다. 시트가 하나뿐이면 그 시트다.
+  const usesDb = /db/i.test(expr);
+  const dbTarget = characters.find((c) => c.id === dbChar) ?? characters.find((c) => c.ownerId === userId) ?? characters[0];
 
   const submit = () => {
-    if (!expr.trim() || disabled) return;
-    if (onRoll(expr.trim(), secret) !== false) {
+    const text = expr.trim();
+    if (!text || disabled) return;
+    // 서버가 같은 규칙으로 다시 검사한다. 먼저 이 자리에서 알려 주면 보내기 전에 고칠 수 있다.
+    const parsed = parseCommand(text);
+    if (!parsed.ok) return setLocalError(parsed.error);
+    if (parsed.command.kind === "expr" && parsed.command.parsed.usesDb && !dbTarget) return setLocalError("db(피해 보너스)는 캐릭터 시트가 있어야 쓸 수 있어요.");
+    setLocalError(null);
+    if (onRoll(text, secret, parsed.command.kind === "expr" && parsed.command.parsed.usesDb ? dbTarget?.id : undefined) !== false) {
       setExpr("");
       setSecret(false); // 비밀 굴림은 한 번만. 다음 굴림이 실수로 비밀이 되지 않게 끈다.
     }
+  };
+  const macroRoll = (m: { expr: string; secret: boolean }) => {
+    const parsed = parseCommand(m.expr);
+    const needsDb = parsed.ok && parsed.command.kind === "expr" && parsed.command.parsed.usesDb;
+    if (needsDb && !dbTarget) return setLocalError("db(피해 보너스)는 캐릭터 시트가 있어야 쓸 수 있어요.");
+    setLocalError(null);
+    onRoll(m.expr, isKp && m.secret, needsDb ? dbTarget?.id : undefined);
   };
 
   // 실패한 시트 판정에는 굴린 사람(또는 GM)이 푸시하거나 행운을 쓸 수 있다. 규칙상 안 되는 것은 이유를 보여 준다.
@@ -104,6 +131,7 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
             </div>
             <RollResult outcome={r.outcome} />
             {actions(r)}
+            {r.damage && isKp && onApplyDamage && <DamageApply roll={r} characters={characters} applied={damageApplied[r.id] ?? []} disabled={disabled} onApply={onApplyDamage} />}
           </div>
         ))}
         {hidden.map((h) => (
@@ -113,23 +141,29 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
         ))}
       </div>
       <div className="compose">
-        <MacroBar error={macro.error} macros={macro.macros} isKp={isKp} disabled={disabled} onRoll={(m) => onRoll(m.expr, isKp && m.secret)} onAdd={macro.add} onRemove={macro.remove} />
-        {isKp && onAsk && <AskForm players={players ?? []} disabled={disabled} onAsk={onAsk} />}
+        <MacroBar error={macro.error} macros={macro.macros} isKp={isKp} disabled={disabled} onRoll={macroRoll} onAdd={macro.add} onRemove={macro.remove} />
+        {isKp && onAsk && <AskForm players={players ?? []} disabled={disabled} onAsk={onAsk} {...(onGroup ? { onGroup } : {})} />}
+        {onOpposed && <OpposedForm isKp={isKp} disabled={disabled} userId={userId} characters={characters} players={players ?? []} onOpposed={onOpposed} />}
         <div className="row">
           <input
             className="input mono"
             aria-label="굴림 식"
             aria-describedby={disabled && disabledReason ? "roll-why" : undefined}
-            placeholder="CC<=60 또는 1d100"
+            placeholder="CC<=60, 1d100, (2d6+6)*5, 1d10+db"
             value={expr}
             disabled={disabled}
-            onChange={(e) => setExpr(e.target.value)}
+            onChange={(e) => { setExpr(e.target.value); if (localError) setLocalError(null); }}
             onKeyDown={(e) => e.key === "Enter" && submit()}
           />
           <button className="btn primary" onClick={submit} disabled={disabled || !expr.trim()} aria-describedby={disabled && disabledReason ? "roll-why" : undefined}>굴리기</button>
         </div>
         {disabled && disabledReason && <div className="why" id="roll-why" data-testid="roll-why">{disabledReason}</div>}
-        {error && <div className="err" role="alert">{error}</div>}
+        {usesDb && characters.length > 1 && (
+          <select className="input" aria-label="db를 쓸 캐릭터" value={dbTarget?.id ?? ""} onChange={(e) => setDbChar(e.target.value)}>
+            {characters.map((c) => <option key={c.id} value={c.id}>{c.name}의 피해 보너스</option>)}
+          </select>
+        )}
+        {(localError || error) && <div className="err" role="alert" data-testid="roll-expr-error">{localError ?? error}</div>}
         <div className="row foot">
           {isKp && (
             <label className="check" title="결과는 GM에게만 보여요. 한 번만 적용돼요.">
@@ -162,5 +196,34 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
         )}
       </div>
     </>
+  );
+}
+
+/** 피해 굴림 결과를 GM이 캐릭터 HP에 적용한다. 방어구 값을 빼고, 같은 피해는 같은 캐릭터에게 한 번만 들어간다. */
+function DamageApply({ roll, characters, applied, disabled, onApply }: { roll: RollLogEntry; characters: Character[]; applied: string[]; disabled: boolean; onApply: (rollId: string, characterId: string, armor: number) => unknown }) {
+  const [target, setTarget] = useState("");
+  const [armor, setArmor] = useState("0");
+  const total = roll.outcome.kind === "dice" ? roll.outcome.total : 0;
+  const armorN = /^\d{1,2}$/.test(armor.trim()) ? Number(armor.trim()) : null;
+  const pick = characters.find((c) => c.id === target) ?? characters.find((c) => !applied.includes(c.id)) ?? characters[0];
+  const done = pick ? applied.includes(pick.id) : false;
+  const names = applied.map((id) => characters.find((c) => c.id === id)?.name).filter((n): n is string => Boolean(n));
+  return (
+    <div className="dmg-apply" data-testid="damage-apply">
+      <select className="input" aria-label="피해를 받을 캐릭터" value={pick?.id ?? ""} onChange={(e) => setTarget(e.target.value)}>
+        {characters.map((c) => <option key={c.id} value={c.id}>{c.name}{applied.includes(c.id) ? " (적용됨)" : ""}</option>)}
+      </select>
+      <input className="input mono num" inputMode="numeric" aria-label="방어구" title="피해에서 뺄 방어구 값" placeholder="방어구" value={armor} onChange={(e) => setArmor(e.target.value)} />
+      <button
+        className="btn sm"
+        data-testid="damage-apply-btn"
+        disabled={disabled || !pick || done || armorN === null}
+        title={done ? "이 피해는 이미 이 캐릭터에게 적용했어요" : `피해 ${total}에서 방어구를 빼고 HP에 적용해요`}
+        onClick={() => pick && armorN !== null && onApply(roll.id, pick.id, armorN)}
+      >
+        피해 적용
+      </button>
+      {names.length > 0 && <span className="res-sub" data-testid="damage-applied">적용됨: {names.join(", ")}</span>}
+    </div>
   );
 }

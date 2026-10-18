@@ -29,7 +29,7 @@ import { FlowPanel } from "@/widgets/flow-panel";
 import { InitiativePanel } from "@/widgets/initiative-panel";
 import { HandoutSpotlight } from "@/widgets/handout-spotlight";
 import { RollEffect } from "@/widgets/roll-effect";
-import { AskBanner, RollPanel } from "@/widgets/roll-panel";
+import { AskBanner, ConBanner, RollPanel } from "@/widgets/roll-panel";
 import { SceneTransition, useSceneFade } from "@/widgets/scene-transition";
 import { SanEffect } from "@/widgets/san-effect";
 import { RoomHeader } from "@/widgets/room-header";
@@ -38,6 +38,7 @@ import { PlayerGuide } from "./PlayerGuide";
 import { pauseNotice } from "../model/pause-notice";
 import { rollBlockReason } from "../model/roll-reason";
 import { rollToastText, shouldToastRoll } from "../model/roll-toast";
+import { damageToastText } from "../model/damage-toast";
 import { playerGuideSteps, readGuideClosed, showPlayerGuide, writeGuideClosed } from "../model/player-guide";
 import { SheetPanel, SheetEmpty, type RollOptions } from "@/widgets/sheet-panel";
 
@@ -139,6 +140,12 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     notices.notify(rollToastText(lastRoll));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastRoll?.id]);
+  // GM이 피해를 적용하면 시트 주인과 GM에게 결과를 한 줄로 알린다.
+  const lastDamage = state.lastDamage;
+  useEffect(() => {
+    if (lastDamage) notices.notify(damageToastText(lastDamage.result));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastDamage?.n]);
   const audio = useAudioEngine({ bgm: state.bgm, stopFadeMs: state.stopFadeMs, lastSe: state.lastSe, clockOffset: state.clockOffset, lastRollId: state.rolls.at(-1)?.id ?? null, lastRollAt: state.rolls.at(-1)?.at ?? null, ready: state.ready, prefs: sound.prefs });
 
   const handoutIds = useMemo(() => handoutList.map((h) => h.id), [handoutList]);
@@ -222,6 +229,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
           {kpAway && <div className="banner" role="status" data-testid="kp-away-banner">GM 연결이 끊겼어요. 잠시 기다려요.</div>}
           {paused && <div className="banner" role="status" data-testid="pause-banner">{pauseNotice(role, state.pauseReason)}</div>}
           {role === "pl" && <AskBanner asks={state.rollAsks} userId={me.userId} canRoll={active} hasCharacter={characters.some((c) => c.ownerId === me.userId)} onRoll={(name, difficulty) => { const mine = characters.find((c) => c.ownerId === me.userId); if (!mine) return; send({ type: "roll.request", data: { secret: false, skill: { characterId: mine.id, name, bonus: 0, ...(difficulty ? { difficulty } : {}) } } }); setTab("roll"); }} />}
+          {role !== "spectator" && <ConBanner last={state.lastDamage} characters={characters} canRoll={active} onRoll={(characterId) => { if (send({ type: "roll.request", data: { secret: false, skill: { characterId, name: "CON", bonus: 0 } } }) !== false) sheetRollAt.current = Date.now(); }} />}
           {myTurn && state.initiative && <MyTurnBadge round={state.initiative.round} lowered={isKp} onOpen={() => setTab("combat")} />}
           {state.sessionStatus === "IDLE" && !isKp && (
             <div className="banner" role="status">GM이 세션을 시작하기를 기다리고 있어요.</div>
@@ -299,11 +307,15 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               disabled={!active || role === "spectator"}
               disabledReason={rollBlockReason(role, state.sessionStatus)}
               error={null}
-              onRoll={(expr, secret) => send({ type: "roll.request", data: { expr, secret } })}
+              onRoll={(expr, secret, characterId) => send({ type: "roll.request", data: { expr, secret, ...(characterId ? { characterId } : {}) } })}
               onPush={(rollId) => send({ type: "roll.push", data: { rollId } })}
               onLuck={(rollId) => send({ type: "luck.spend", data: { rollId } })}
               players={state.members.filter((m) => m.role === "pl").map((m) => ({ userId: m.userId, name: m.name }))}
               onAsk={(name, difficulty, targetUserId) => send({ type: "roll.ask", data: { name, ...(difficulty ? { difficulty } : {}), ...(targetUserId ? { targetUserId } : {}) } })}
+              onGroup={(name, difficulty, targetUserId, secret) => send({ type: "roll.group", data: { name, secret: secret === true, ...(difficulty ? { difficulty } : {}), ...(targetUserId ? { userIds: [targetUserId] } : {}) } })}
+              onOpposed={role === "spectator" ? undefined : (a, b, secret) => send({ type: "roll.opposed", data: { a, b, secret } })}
+              damageApplied={state.damageApplied}
+              onApplyDamage={isKp ? (rollId, characterId, armor) => send({ type: "damage.apply", data: { characterId, rollId, armor } }) : undefined}
             />
           ) : tab === "flow" && isKp && state.flow ? (
             <FlowPanel flow={state.flow} scenes={scenes} handouts={handoutList} tracks={state.audioLibrary} status={state.sessionStatus} enabled send={send} />
@@ -334,6 +346,8 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                     if (send({ type: "damage.roll", data: { characterId, weaponIndex } }) !== false) sheetRollAt.current = Date.now();
                   }}
                   onMadnessRoll={(characterId, mode) => send({ type: "madness.roll", data: { characterId, mode } })}
+                  onApplyDamage={isKp ? (characterId, amount, armor) => send({ type: "damage.apply", data: { characterId, amount, armor } }) : undefined}
+                  onHeal={isKp ? (characterId, kind, amount) => send({ type: "hp.heal", data: { characterId, kind, ...(amount !== undefined ? { amount } : {}) } }) : undefined}
                   onRemove={isKp || (role === "pl" && state.sessionStatus === "IDLE" && state.sessionNumber === 0 && sheet?.ownerId === me.userId) ? (characterId) => send({ type: "character.remove", data: { id: characterId } }) : undefined}
                   onRoll={(characterId, name, o: RollOptions) => {
                     // 시트를 보던 자리에서 결과를 토스트로 알려 주고, 굴림 탭으로 옮기지 않는다(굴림 기록에는 그대로 쌓인다).

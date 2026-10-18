@@ -534,15 +534,55 @@ try {
   await pl.getByRole("tab", { name: "굴림" }).click(); // 시트에서 굴려도 탭이 바뀌지 않으니 기록을 보려면 굴림 탭으로 간다
   await pl.getByTestId("roll-entry").getByText(`${CHAR} · 주먹 피해`).first().waitFor();
   await pl.getByRole("tab", { name: "시트" }).click();
-  await pl.getByTestId("conditions").getByRole("button", { name: "중상" }).click();
+  // 상태 표시는 GM만 바꾼다: PL 시트에는 토글이 없고, GM이 켜면 PL 시트에 칩으로 보인다
+  assert.equal(await pl.getByTestId("conditions").count(), 0, "PL은 상태 표시를 직접 바꿀 수 없어요");
   await kp.getByRole("tab", { name: "시트" }).click();
+  await kp.getByTestId("conditions").getByRole("button", { name: "중상" }).click();
   await kp.getByTestId("conditions").getByRole("button", { name: "중상", pressed: true }).waitFor();
+  await pl.getByTestId("sheet-status").getByTestId("status-chips").getByText("중상").waitFor();
   assert.equal(await kp.getByLabel("소지품").inputValue(), "손전등");
-  await pl.getByTestId("conditions").getByRole("button", { name: "중상" }).click();
+  await kp.getByTestId("conditions").getByRole("button", { name: "중상" }).click();
   await kp.getByTestId("conditions").getByRole("button", { name: "중상", pressed: false }).waitFor();
+  await pl.getByTestId("status-chips").getByText("중상").waitFor({ state: "detached" });
   await pl.getByRole("tab", { name: "굴림" }).click();
   await kp.getByRole("tab", { name: "굴림" }).click();
-  step("무기 피해 굴림이 로그에 남고, 중상 상태와 소지품이 GM 시트에 반영됨");
+  step("무기 피해 굴림이 로그에 남고, 중상 표시는 GM만 바꾸며 PL 시트에는 칩으로 보이고, 소지품이 GM 시트에 반영됨");
+
+  // 주사위 식: (2d6+6)*5 처럼 괄호·곱셈을 쓰고, 항별 결과가 로그에 남는다. 잘못된 식은 한국어로 거절한다
+  {
+    const expr = pl.getByLabel("굴림 식");
+    const cnt0 = await pl.getByTestId("roll-entry").count();
+    await expr.fill("(2d6+6)*5");
+    await pl.getByRole("button", { name: "굴리기", exact: true }).click();
+    await pl.waitForFunction((n) => document.querySelectorAll('[data-testid="roll-entry"]').length > n, cnt0);
+    const entry = pl.getByTestId("roll-entry").first();
+    await entry.getByTestId("dice-total").waitFor();
+    const total = Number(await entry.getByTestId("dice-total").innerText());
+    assert.ok(total % 5 === 0 && total >= 40 && total <= 90, `(2d6+6)*5 결과 범위: ${total}`);
+    assert.match(await entry.getByTestId("dice-breakdown").innerText(), /^\(2d6\[\d,\d\]\+6\)\*5$/);
+    assert.equal(await entry.getByTestId("dice-term").count(), 1);
+    await kp.getByTestId("roll-entry").first().getByTestId("dice-total").waitFor(); // GM 로그에도 같은 항목
+    // 1d10+db: 내 캐릭터의 피해 보너스가 항으로 더해진다
+    await expr.fill("1d10+db");
+    await pl.getByRole("button", { name: "굴리기", exact: true }).click();
+    await pl.waitForFunction((n) => document.querySelectorAll('[data-testid="roll-entry"]').length > n, cnt0 + 1);
+    await pl.getByTestId("roll-entry").first().getByTestId("dice-term").filter({ hasText: /^db\(/ }).waitFor();
+    // 잘못된 식은 보내기 전에 알려 주고, 로그에 남지 않는다
+    const before = await pl.getByTestId("roll-entry").count();
+    await expr.fill("2d6+");
+    await pl.getByRole("button", { name: "굴리기", exact: true }).click();
+    await pl.getByTestId("roll-expr-error").getByText(/식을 읽지 못했어요/).waitFor();
+    await expr.fill("1001d6");
+    await pl.getByRole("button", { name: "굴리기", exact: true }).click();
+    await pl.getByTestId("roll-expr-error").getByText(/1000개까지/).waitFor();
+    // 클라이언트가 막지 못하는 계산 중 오류(결과가 너무 큼)는 서버가 한국어로 거절한다
+    await expr.fill("1000d6*1000000");
+    await pl.getByRole("button", { name: "굴리기", exact: true }).click();
+    await pl.getByTestId("toast").getByText(/결과가 너무 커요/).waitFor();
+    assert.equal(await pl.getByTestId("roll-entry").count(), before);
+    await expr.fill("");
+  }
+  step("주사위 식: (2d6+6)*5와 1d10+db가 항별 결과와 함께 로그에 남고, 잘못된 식은 한국어로 거절됨");
 
   // 핸드아웃: 초안 → 특정 PL에게 공개 → 다시 초안
   await kp.getByRole("tab", { name: "핸드아웃" }).click();
@@ -1267,6 +1307,147 @@ try {
   step("전투 순서: GM 전용 NPC 시트는 PL에게 '알 수 없는 상대'로만 보이고(이름·DEX 숨김), GM에게는 그대로 보임");
   await kp2.getByRole("tab", { name: "굴림" }).click();
   await pl.getByRole("tab", { name: "굴림" }).click();
+
+  // 피해 적용과 부상 규칙(7판): 중상 → 빈사 → 응급처치/회복, 상태 칩은 시트와 전투 순서에 같이 보임
+  {
+    const hpOf = (page) => page.getByTestId("stat-hp");
+    await kp2.getByRole("tab", { name: "시트" }).click();
+    await kp2.getByLabel("캐릭터 선택").selectOption({ label: CHAR });
+    await pl.getByRole("tab", { name: "시트" }).click();
+    await hpOf(kp2).getByText("9/10").waitFor();
+    await hpOf(pl).getByText("9/10").waitFor();
+    assert.equal(await pl.getByTestId("gm-vitals").count(), 0, "PL 시트에는 피해·회복 입력이 없어요");
+    await pl.getByTestId("sheet-status").getByText("부상").waitFor(); // HP가 최대보다 낮으면 부상
+    // 1) 한 번에 6: 최대 HP 10의 절반(5) 이상이라 중상
+    await kp2.getByLabel("적용할 피해").fill("6");
+    await kp2.getByTestId("sheet-apply-damage").click();
+    await hpOf(pl).getByText("3/10").waitFor();
+    await hpOf(kp2).getByText("3/10").waitFor();
+    await pl.getByTestId("sheet-status").getByTestId("status-chips").getByText("중상").waitFor();
+    await pl.getByTestId("wound-hint").getByText(/중상이에요/).waitFor();
+    assert.match(await pl.getByTestId("wound-threshold").innerText(), /한 번에 5 이상 피해/);
+    await pl.getByTestId("toast").getByText(/중상이에요. 건강 판정\(CON\)을 해요/).waitFor();
+    // 건강 판정(CON) 빠른 굴림: 배너와 시트 버튼 모두 CON으로 굴린다
+    await pl.getByTestId("con-banner").waitFor();
+    await pl.getByTestId("con-banner-roll").click();
+    await pl.getByTestId("con-banner").waitFor({ state: "detached" });
+    await pl.getByTestId("toast").getByText(new RegExp(`${CHAR} · CON · \\d+`)).waitFor();
+    await pl.getByTestId("con-roll").waitFor();
+    // 2) 방어구가 피해 이상이면 아무 일도 없다
+    await kp2.getByLabel("적용할 피해").fill("4");
+    await kp2.getByLabel("방어구", { exact: true }).fill("4");
+    await kp2.getByTestId("sheet-apply-damage").click();
+    await kp2.getByTestId("toast").getByText(/피해를 받지 않았어요/).waitFor();
+    await hpOf(kp2).getByText("3/10").waitFor();
+    await kp2.getByLabel("방어구", { exact: true }).fill("0");
+    // 3) 전투 순서에도 같은 상태 칩이 붙는다
+    await kp2.getByRole("tab", { name: /^전투/ }).click();
+    await kp2.getByRole("button", { name: "전투 시작" }).click();
+    await pl.getByRole("tab", { name: /^전투/ }).click();
+    await kp2.getByTestId("initiative-entry").filter({ hasText: CHAR }).getByTestId("initiative-status").getByText("중상").waitFor();
+    await pl.getByTestId("initiative-entry").filter({ hasText: CHAR }).getByTestId("initiative-status").getByText("중상").waitFor();
+    // 4) HP가 0이 되면 중상 상태라 빈사
+    await kp2.getByRole("tab", { name: "시트" }).click();
+    await kp2.getByLabel("적용할 피해").fill("3");
+    await kp2.getByTestId("sheet-apply-damage").click();
+    await hpOf(kp2).getByText("0/10").waitFor();
+    await pl.getByRole("tab", { name: "시트" }).click();
+    await pl.getByTestId("sheet-status").getByTestId("status-chips").getByText("빈사").waitFor();
+    await pl.getByTestId("wound-hint").getByText(/빈사 상태예요/).waitFor();
+    await pl.getByRole("tab", { name: /^전투/ }).click();
+    await pl.getByTestId("initiative-entry").filter({ hasText: CHAR }).getByTestId("initiative-status").getByText("빈사").waitFor();
+    // 5) 한 바퀴 돌아 라운드가 오르면 빈사 라운드 세기가 오른다
+    await kp2.getByRole("tab", { name: /^전투/ }).click();
+    const turns = await kp2.getByTestId("initiative-entry").count();
+    for (let i = 0; i < turns; i++) await kp2.getByRole("button", { name: "다음 차례" }).click();
+    await kp2.getByTestId("initiative-round").getByText("2라운드").waitFor();
+    await pl.getByRole("tab", { name: "시트" }).click();
+    await pl.getByTestId("wound-hint").getByText(/1라운드째/).waitFor();
+    // 6) 응급처치: HP 1, 빈사는 풀리고 중상은 남는다
+    await kp2.getByRole("tab", { name: "시트" }).click();
+    await kp2.getByTestId("heal-firstaid").click();
+    await hpOf(pl).getByText("1/10").waitFor();
+    await pl.getByTestId("sheet-status").getByTestId("status-chips").getByText("중상").waitFor();
+    assert.equal(await pl.getByTestId("sheet-status").getByText("빈사").count(), 0);
+    // 7) HP가 최대의 절반(5) 이상이 되면 중상이 풀린다 (남은 표시는 부상뿐)
+    await kp2.getByLabel("회복량").fill("3");
+    await kp2.getByTestId("heal-manual").click();
+    await hpOf(pl).getByText("4/10").waitFor();
+    await pl.getByTestId("sheet-status").getByTestId("status-chips").getByText("중상").waitFor();
+    await kp2.getByTestId("heal-natural").click();
+    await hpOf(pl).getByText("5/10").waitFor();
+    await pl.getByTestId("sheet-status").getByTestId("status-chips").getByText("부상").waitFor();
+    assert.equal(await pl.getByTestId("sheet-status").getByText("중상").count(), 0);
+    step("피해 적용: 중상 기준·건강 판정(CON) 안내·방어구·빈사/응급처치/회복으로 상태 칩이 시트와 전투 순서에 바뀌고, PL 화면엔 GM 전용 입력이 없음");
+
+    // 8) 피해 굴림 결과를 굴림 기록에서 대상 시트에 적용 (같은 피해는 같은 캐릭터에게 한 번만)
+    await kp2.getByRole("button", { name: "주먹 피해" }).click();
+    await kp2.getByRole("tab", { name: "굴림" }).click();
+    const dmgEntry = kp2.getByTestId("roll-entry").first();
+    await dmgEntry.getByTestId("damage-apply").waitFor();
+    assert.equal(await pl.getByTestId("damage-apply").count(), 0, "PL에게는 피해 적용 버튼이 없어요");
+    await dmgEntry.getByLabel("피해를 받을 캐릭터").selectOption({ label: SECRET_NPC });
+    await dmgEntry.getByTestId("damage-apply-btn").click();
+    await dmgEntry.getByTestId("damage-applied").getByText(SECRET_NPC).waitFor();
+    await dmgEntry.getByLabel("피해를 받을 캐릭터").selectOption({ label: `${SECRET_NPC} (적용됨)` });
+    assert.equal(await dmgEntry.getByTestId("damage-apply-btn").isDisabled(), true, "같은 피해를 두 번 적용할 수 없어요");
+    step("피해 굴림 결과를 굴림 기록의 '피해 적용'으로 대상 시트에 넣고, 같은 대상에게는 다시 못 넣음");
+
+    // 9) 정리: HP를 9로 되돌리고(잘못 누른 값을 고치는 직접 입력도 상태를 맞춘다) 전투를 끝낸다
+    await kp2.getByRole("tab", { name: "시트" }).click();
+    const gbox = kp2.getByLabel("HP 직접 입력");
+    await gbox.fill("9");
+    await gbox.press("Enter");
+    await hpOf(pl).getByText("9/10").waitFor();
+    await kp2.getByRole("tab", { name: /^전투/ }).click();
+    await kp2.getByRole("button", { name: "전투 종료" }).click();
+    await confirmAsk(kp2);
+    await kp2.getByRole("button", { name: "전투 시작" }).waitFor();
+    await kp2.getByRole("tab", { name: "굴림" }).click();
+    await pl.getByRole("tab", { name: "굴림" }).click();
+  }
+
+  // 대항 판정: GM이 NPC 시트와 PL 시트를 맞붙이면 두 굴림이 로그 한 항목으로 남는다
+  {
+    await kp2.getByRole("tab", { name: "굴림" }).click();
+    const form = kp2.getByTestId("opposed-form");
+    await form.getByRole("button", { name: "대항 판정" }).click();
+    await form.getByLabel("주도하는 캐릭터").selectOption({ label: SECRET_NPC });
+    await form.getByLabel("주도하는 기능").selectOption("관찰력");
+    await form.getByLabel("맞서는 캐릭터").selectOption({ label: CHAR });
+    await form.getByLabel("맞서는 기능").selectOption("관찰력");
+    const before = await kp2.getByTestId("roll-entry").count();
+    await form.getByTestId("opposed-submit").click();
+    for (const page of [kp2, pl]) {
+      const e = page.getByTestId("roll-entry").first();
+      await e.getByTestId("opposed-result").waitFor();
+      assert.equal(await e.getByTestId("opposed-side").count(), 2);
+      assert.match(await e.getByTestId("opposed-summary").innerText(), /이겼어요|둘 다 실패했어요|비겼어요/);
+      assert.match(await e.innerText(), new RegExp(`${SECRET_NPC} · 관찰력 대 ${CHAR} · 관찰력|${CHAR}`));
+    }
+    assert.equal(await kp2.getByTestId("roll-entry").count(), before + 1, "대항 판정은 한 항목만 남겨요");
+    // 대항 판정에는 푸시·행운 버튼이 없다
+    assert.equal(await kp2.getByTestId("roll-entry").first().getByRole("button", { name: /푸시|행운/ }).count(), 0);
+    await form.getByRole("button", { name: "대항 판정" }).click();
+  }
+  step("대항 판정: GM이 NPC 시트와 PL 시트를 맞붙이면 두 굴림과 결과 문장이 한 항목으로 모두에게 보이고 푸시·행운은 없음");
+
+  // 그룹 판정: 판정 요청에서 '한꺼번에 굴리기'를 켜면 PL들의 캐릭터가 같은 기능으로 굴러 한 항목으로 요약됨
+  {
+    await openAsk(kp2);
+    await kp2.getByLabel("요청할 기능").fill("관찰력");
+    await kp2.getByLabel("그룹 판정").check();
+    await kp2.getByTestId("ask-send").click();
+    for (const page of [kp2, pl]) {
+      const e = page.getByTestId("roll-entry").first();
+      await e.getByTestId("group-result").waitFor();
+      assert.ok((await e.getByTestId("group-entry").count()) >= 1);
+      assert.match(await e.getByTestId("group-summary").innerText(), /성공했어요/);
+      assert.ok((await e.innerText()).includes(CHAR));
+      assert.ok(!(await e.innerText()).includes(SECRET_NPC), "그룹 판정에는 NPC 시트가 들어가지 않아요");
+    }
+  }
+  step("그룹 판정: GM의 '그룹 판정' 요청이 PL 캐릭터들의 굴림을 한 항목으로 묶어 요약함 (NPC 시트는 제외)");
 
   // 세션 흐름: 비트와 분기를 짜 두면 조건이 맞을 때 GM에게만 제안하고, 엔딩을 확정하면 종료 창이 채워짐
   await kp2.getByRole("tab", { name: /^흐름/ }).click();

@@ -108,9 +108,72 @@ function SanResult({ o }: { o: Extract<RollOutcome, { kind: "san" }> }) {
   );
 }
 
+type Dice = Extract<RollOutcome, { kind: "dice" }>;
+
+/** 주사위 식: 여러 항·괄호·곱셈·db가 있으면 계산식과 항별 결과를 풀어 보여 준다. */
+function DiceResult({ o }: { o: Dice }) {
+  if (!o.terms || !o.breakdown) return <div className="mono">{describeOutcome(o)}</div>;
+  return (
+    <div className="res" data-testid="dice-expr-result">
+      <div className="res-main">
+        <b className="mono" data-testid="dice-total">{o.total}</b>
+        <span className="res-sub mono" data-testid="dice-breakdown">{o.breakdown}</span>
+      </div>
+      <div className="res-terms res-sub" data-testid="dice-terms">
+        {o.terms.map((t, i) => (
+          <span key={i} className="mono" data-testid="dice-term">
+            {t.text}{t.rolls.length ? ` [${t.rolls.length <= 20 ? t.rolls.join(", ") : `${t.rolls.length}개`}]` : ""} = {t.sum}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SideLine({ side, win }: { side: Extract<RollOutcome, { kind: "opposed" }>["a"]; win: boolean }) {
+  return (
+    <div className={`opp-side${win ? " win" : ""}`} data-testid="opposed-side" data-win={win ? "true" : "false"}>
+      <span>{side.character} · {side.name}</span>
+      <LevelBadge level={side.level} />
+      <span className="mono"><b>{side.percent.total}</b> / {side.target}</span>
+    </div>
+  );
+}
+
+/** 대항 판정: 두 굴림을 나란히, 이긴 쪽에 표시하고 결과 문장을 붙인다. */
+function OpposedResult({ o }: { o: Extract<RollOutcome, { kind: "opposed" }> }) {
+  return (
+    <div className="opp" data-testid="opposed-result" data-winner={o.winner}>
+      <SideLine side={o.a} win={o.winner === "a"} />
+      <SideLine side={o.b} win={o.winner === "b"} />
+      <div className={`res-sub${o.winner === "tie" || o.statusQuo ? " warn" : ""}`} data-testid="opposed-summary">{o.summary}</div>
+    </div>
+  );
+}
+
+/** 그룹 판정: 캐릭터마다 한 줄, 맨 아래에 요약. */
+function GroupResult({ o }: { o: Extract<RollOutcome, { kind: "group" }> }) {
+  return (
+    <div className="opp" data-testid="group-result">
+      {o.entries.map((e) => (
+        <div key={e.characterId} className="opp-side" data-testid="group-entry" data-success={e.success ? "true" : "false"}>
+          <span>{e.character}</span>
+          <LevelBadge level={e.level} />
+          <span className="mono"><b>{e.percent.total}</b> / {e.target}</span>
+          <span className="res-sub">{e.success ? "성공" : "실패"}</span>
+        </div>
+      ))}
+      <div className="res-sub" data-testid="group-summary">{o.summary}</div>
+    </div>
+  );
+}
+
 /** 굴림 결과를 성공 단계(색+글자), 목표값·굴림값·주사위 내역으로 풀어 보여 준다. */
 export function RollResult({ outcome: o }: { outcome: RollOutcome }) {
   if (o.kind === "cc") return <CcResult o={o} />;
   if (o.kind === "san") return <SanResult o={o} />;
+  if (o.kind === "dice") return <DiceResult o={o} />;
+  if (o.kind === "opposed") return <OpposedResult o={o} />;
+  if (o.kind === "group") return <GroupResult o={o} />;
   return <div className="mono">{describeOutcome(o)}</div>;
 }

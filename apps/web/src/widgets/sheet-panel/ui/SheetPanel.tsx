@@ -1,12 +1,13 @@
 "use client";
 import { useMemo, useState } from "react";
 import { StatInput } from "./StatInput";
+import { VitalsPanel } from "./VitalsPanel";
 import { SyncedTextarea } from "./SyncedTextarea";
 import { stepDelta } from "../model/stat-input";
 import { downloadCharacterCsv } from "@/entities/character";
 import { SanPanel } from "@/features/san-check";
 import { Group, Hint, useAsk } from "@/shared/ui";
-import { josa, CHARACTERISTIC_KEYS, CONDITIONS, CONDITION_LABEL_KO, deriveCharacter, fifth, half, isSkillEdited, sheetCsvSourceFromCharacter, skillBaseValues, type Character, type SheetOp, type StatPath } from "@coc-vtt/shared";
+import { josa, CHARACTERISTIC_KEYS, deriveCharacter, fifth, half, isSkillEdited, sheetCsvSourceFromCharacter, skillBaseValues, type Character, type HealKind, type SheetOp, type StatPath } from "@coc-vtt/shared";
 
 export interface RollOptions {
   bonus: number;
@@ -34,6 +35,10 @@ interface Props {
   onNewDay: (characterId: string) => void;
   onMadnessRoll: (characterId: string, mode: "realtime" | "summary") => void;
   onDamage: (characterId: string, weaponIndex: number) => void;
+  /** GM 전용. 적은 피해를 방어구를 빼고 HP에 적용한다(중상·기절·빈사·사망은 서버가 정한다). */
+  onApplyDamage?: (characterId: string, amount: number, armor: number) => void;
+  /** GM 전용. 응급처치(+1), 자연 회복, 직접 회복 */
+  onHeal?: (characterId: string, kind: HealKind, amount?: number) => void;
   /** 이 캐릭터를 룸에서 뺄 수 있을 때만 준다(GM은 늘, PL은 첫 세션 전) */
   onRemove?: (characterId: string) => void;
 }
@@ -46,7 +51,7 @@ const BARS: Array<{ path: StatPath; label: string }> = [
 ];
 
 /** 캐릭터 시트: 기본 정보 / 파생 수치(상태 바) / 특성치 / 무기 / 기능 / 소지품 / 비고 묶음. 묶음 제목을 눌러 접고 펼친다. */
-export function SheetPanel({ characters, selectedId, onSelect, canAct, rollWhy, canEdit = canAct, canEditText = canEdit, onPatch, onRoll, isKp, onSanCheck, onNewDay, onMadnessRoll, onDamage, onRemove }: Props) {
+export function SheetPanel({ characters, selectedId, onSelect, canAct, rollWhy, canEdit = canAct, canEditText = canEdit, onPatch, onRoll, isKp, onSanCheck, onNewDay, onMadnessRoll, onDamage, onApplyDamage, onHeal, onRemove }: Props) {
   const ask = useAsk();
   const c = characters.find((x) => x.id === selectedId) ?? characters[0];
   const [bonus, setBonus] = useState(0);
@@ -112,23 +117,17 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, rollWhy, 
           })}
         </div>
 
-        <div className="row" data-testid="conditions">
-          {CONDITIONS.map((k) => {
-            const on = c.conditions?.includes(k) ?? false;
-            return (
-              <button
-                key={k}
-                className={`btn sm${on ? " on-danger" : ""}`}
-                aria-pressed={on}
-                disabled={!canEdit}
-                onClick={() => onPatch(c.id, [{ path: "condition", name: k, on: !on }])}
-              >
-                {CONDITION_LABEL_KO[k]}
-              </button>
-            );
-          })}
-          <Hint term="condition" />
-        </div>
+        <VitalsPanel
+          c={c}
+          maxHp={d.limits.hp}
+          isKp={isKp}
+          canEdit={canEdit}
+          canAct={canAct}
+          onPatch={onPatch}
+          onConRoll={() => roll(c.id, "CON", { bonus: 0, ...(isKp && secret ? { secret: true } : {}) })}
+          {...(onApplyDamage ? { onApplyDamage } : {})}
+          {...(onHeal ? { onHeal } : {})}
+        />
 
         <SanPanel
           character={c}
