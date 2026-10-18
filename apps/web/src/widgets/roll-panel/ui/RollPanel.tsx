@@ -29,7 +29,10 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
 
   const submit = () => {
     if (!expr.trim() || disabled) return;
-    if (onRoll(expr.trim(), secret) !== false) setExpr("");
+    if (onRoll(expr.trim(), secret) !== false) {
+      setExpr("");
+      setSecret(false); // 비밀 굴림은 한 번만. 다음 굴림이 실수로 비밀이 되지 않게 끈다.
+    }
   };
 
   // 실패한 시트 판정에는 굴린 사람(또는 KP)이 푸시하거나 행운을 쓸 수 있다. 규칙상 안 되는 것은 이유를 보여 준다.
@@ -107,7 +110,7 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
         {isKp && (
           <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input type="checkbox" checked={secret} onChange={(e) => setSecret(e.target.checked)} style={{ accentColor: "#7c86f7" }} />
-            비밀 굴림 (결과는 KP에게만 보여요)
+            비밀 굴림 (결과는 KP에게만 보여요 · 한 번만 적용)
           </label>
         )}
         <div style={{ display: "flex", gap: 8 }}>

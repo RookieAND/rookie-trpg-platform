@@ -7,6 +7,8 @@ import { CHARACTERISTIC_KEYS, CONDITIONS, CONDITION_LABEL_KO, deriveCharacter, f
 export interface RollOptions {
   bonus: number;
   difficulty?: "regular" | "hard" | "extreme";
+  /** KP만. 결과를 KP에게만 보인다. */
+  secret?: boolean;
 }
 
 interface Props {
@@ -40,11 +42,16 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
   const c = characters.find((x) => x.id === selectedId) ?? characters[0];
   const [bonus, setBonus] = useState(0);
   const [difficulty, setDifficulty] = useState<RollOptions["difficulty"]>(undefined);
+  const [secret, setSecret] = useState(false);
   const [filter, setFilter] = useState("");
   if (!c) return null;
+  const roll = (id: string, name: string, o: RollOptions) => {
+    onRoll(id, name, o);
+    if (secret) setSecret(false);
+  };
 
   const d = deriveCharacter(c);
-  const opts: RollOptions = { bonus, ...(difficulty ? { difficulty } : {}) };
+  const opts: RollOptions = { bonus, ...(difficulty ? { difficulty } : {}), ...(isKp && secret ? { secret: true } : {}) };
   const skills = Object.entries(c.skills)
     .filter(([name]) => name.includes(filter.trim()))
     .sort(([a], [b]) => a.localeCompare(b, "ko"));
@@ -130,10 +137,16 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
         <span>보너스·페널티<Hint term="bonus" /></span>
         <span>난이도<Hint term="difficulty" /></span>
       </div>
+      {isKp && (
+        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="checkbox" aria-label="비밀 판정" checked={secret} onChange={(e) => setSecret(e.target.checked)} style={{ accentColor: "#7c86f7" }} />
+          비밀 판정 (결과는 KP에게만 · 한 번만 적용)
+        </label>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
         {CHARACTERISTIC_KEYS.map((k) => (
-          <button key={k} className="btn" style={{ height: 48, display: "grid", lineHeight: 1.2, padding: "4px 0" }} disabled={!canAct} onClick={() => onRoll(c.id, k, opts)} aria-label={`${k} 굴리기`}>
+          <button key={k} className="btn" style={{ height: 48, display: "grid", lineHeight: 1.2, padding: "4px 0" }} disabled={!canAct} onClick={() => roll(c.id, k, opts)} aria-label={`${k} 굴리기`}>
             <span style={{ color: "var(--muted)", fontSize: 11 }}>{k}</span>
             <span className="mono">{c.characteristics[k]}</span>
           </button>
@@ -148,7 +161,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
               <span>
                 {w.name} <span className="mono" style={{ color: "var(--muted)", fontSize: 12 }}>{w.skill} · {w.damage}</span>
               </span>
-              <button className="btn" style={{ height: 28, padding: "0 10px" }} disabled={!canAct} onClick={() => onRoll(c.id, w.skill, opts)} aria-label={`${w.name} 공격`}>공격</button>
+              <button className="btn" style={{ height: 28, padding: "0 10px" }} disabled={!canAct} onClick={() => roll(c.id, w.skill, opts)} aria-label={`${w.name} 공격`}>공격</button>
               <button className="btn" style={{ height: 28, padding: "0 10px" }} disabled={!canAct} onClick={() => onDamage(c.id, i)} aria-label={`${w.name} 피해`}>피해</button>
             </div>
           ))}
@@ -166,7 +179,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
             <input type="checkbox" title="이번 세션에서 성공했어요 (행운으로 성공한 건 제외). 세션 끝에 성장 굴림을 해요." aria-label={`${name} 성장 표시`} checked={s.grown} disabled={!canEdit} onChange={(e) => onPatch(c.id, [{ path: "skill", name, grown: e.target.checked }])} style={{ accentColor: "#7c86f7" }} />
             <span>{name}</span>
             <span className="mono" style={{ color: "var(--muted)" }}>{s.value} <span style={{ fontSize: 11 }}>({half(s.value)}/{fifth(s.value)})</span></span>
-            <button className="btn" style={{ height: 28, padding: "0 10px" }} disabled={!canAct} onClick={() => onRoll(c.id, name, opts)} aria-label={`${name} 굴리기`}>굴리기</button>
+            <button className="btn" style={{ height: 28, padding: "0 10px" }} disabled={!canAct} onClick={() => roll(c.id, name, opts)} aria-label={`${name} 굴리기`}>굴리기</button>
           </div>
         ))}
         {skills.length === 0 && <div style={{ color: "var(--muted)" }}>일치하는 기능이 없어요.</div>}
