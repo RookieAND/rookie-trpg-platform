@@ -100,7 +100,7 @@ export function ObjectToolbar({
           <button className="btn" disabled={!enabled} onClick={() => send({ type: "object.update", data: { id: selected.id, layer: selected.layer === "gm" ? "object" : "gm" } })}>
             {selected.layer === "gm" ? "공개" : "숨기기"}
           </button>
-          <ImageUploadButton me={me} label="이미지" disabled={!enabled} onUploaded={(image) => send({ type: "object.update", data: { id: selected.id, image } })} />
+          <ImageUploadButton me={me} label="이미지" current={selected.image} disabled={!enabled} onUploaded={(image) => send({ type: "object.update", data: { id: selected.id, image } })} />
           {selected.image && <button className="btn" disabled={!enabled} onClick={() => send({ type: "object.update", data: { id: selected.id, image: null } })}>이미지 떼기</button>}
           <button className="btn danger" disabled={!enabled} title="지워도 Ctrl+Z 로 되돌릴 수 있어요" onClick={() => (send({ type: "object.remove", data: { id: selected.id } }), onDeselect())}>삭제</button>
       </div>

@@ -653,6 +653,259 @@ try {
   // 되돌릴 기록이 더는 없으면(직접 눌러 확인) 오류 토스트. 버튼으로도 되돌릴 수 있다.
   step("되돌리기: KP 토큰 삭제 뒤 Ctrl+Z 로 복귀하고, 이동도 Ctrl+Z 로 원위치");
 
+  // 보드 단축키·오른쪽 클릭 메뉴: Backspace 삭제 + Ctrl+Z, Ctrl+D 복제, Esc 선택 해제, Tab 이동, 메뉴 항목
+  {
+    const sel = kp.getByTestId("selected-bar");
+    const selName = () => sel.getByLabel("선택한 오브젝트 이름").inputValue();
+    await undoTok.click();
+    await kp.keyboard.press("Backspace");
+    await undoTok.waitFor({ state: "detached" });
+    await kp.getByTestId("toast").getByText(/되돌리려면 Ctrl\+Z/).first().waitFor();
+    assert.equal(await sel.count(), 0); // 지우면 선택도 풀린다
+    await kp.keyboard.press("Control+z");
+    await undoTok.waitFor();
+    step("Backspace 로 선택한 오브젝트를 지우면 안내 토스트가 뜨고 Ctrl+Z 로 돌아옴");
+
+    // 글을 쓰는 칸에서는 Backspace 가 오브젝트를 지우지 않는다
+    await undoTok.click();
+    await kp.getByLabel("굴림 식").focus();
+    await kp.keyboard.press("Backspace");
+    await kp.waitForTimeout(250);
+    assert.equal(await undoTok.count(), 1);
+    await undoTok.click(); // 포커스를 보드로
+
+    // Ctrl+D 복제: 새 이름으로 생기고 복제본이 선택된다
+    await kp.keyboard.press("Control+d");
+    const copy = kp.getByTestId("obj-숨김 소품2 2");
+    await copy.waitFor();
+    await kp.waitForFunction(() => document.querySelector('[data-testid="selected-bar"] input')?.value === "숨김 소품2 2");
+    assert.equal(await copy.getAttribute("data-x") !== await undoTok.getAttribute("data-x"), true);
+    step("Ctrl+D 로 복제하면 이름에 번호가 붙고 복제본이 선택됨");
+
+    // 오른쪽 클릭 메뉴: 이름 바꾸기, 보이기/숨기기(PL 화면과 맞춰 봄), 삭제 + 되돌리기
+    await copy.click({ button: "right" });
+    const menu = kp.getByTestId("object-menu");
+    await menu.waitFor();
+    await kp.screenshot({ path: `${SHOTS}/ctx-menu.png` });
+    await menu.getByRole("menuitem", { name: "이름 바꾸기" }).click();
+    await menu.getByLabel("새 이름").fill("메뉴 시험");
+    await kp.keyboard.press("Enter");
+    const tested = kp.getByTestId("obj-메뉴 시험");
+    await tested.waitFor();
+    await menu.waitFor({ state: "detached" });
+    assert.equal(await pl.getByTestId("obj-메뉴 시험").count(), 0); // 숨김 오브젝트라 PL 에게는 안 보인다
+    await tested.click({ button: "right" });
+    await kp.getByRole("menuitem", { name: "보이기" }).click();
+    await pl.getByTestId("obj-메뉴 시험").waitFor();
+    await tested.click({ button: "right" });
+    await kp.getByRole("menuitem", { name: "숨기기" }).click();
+    await pl.getByTestId("obj-메뉴 시험").waitFor({ state: "detached" });
+    await tested.click({ button: "right" });
+    await kp.getByRole("menuitem", { name: "삭제" }).click();
+    await tested.waitFor({ state: "detached" });
+    await kp.getByTestId("toast").getByText(/되돌리려면 Ctrl\+Z/).first().waitFor();
+    await kp.keyboard.press("Control+z");
+    await tested.waitFor();
+    // 메뉴가 열려 있는 동안에는 Delete 가 먹지 않고, Esc 는 메뉴만 닫는다
+    await tested.click({ button: "right" });
+    await kp.keyboard.press("Delete");
+    await kp.waitForTimeout(250);
+    assert.equal(await tested.count(), 1);
+    await kp.keyboard.press("Escape");
+    await kp.getByTestId("object-menu").waitFor({ state: "detached" });
+    assert.equal(await sel.count(), 1);
+    // 복제(메뉴)와 잠금(토큰)
+    const seo = kp.getByTestId("obj-서하");
+    await seo.click({ button: "right" });
+    await kp.getByRole("menuitem", { name: "잠금", exact: true }).click();
+    await kp.locator('[data-testid="obj-서하"][data-locked="true"]').waitFor();
+    await seo.click({ button: "right" });
+    await kp.getByRole("menuitem", { name: "잠금 해제" }).click();
+    await kp.locator('[data-testid="obj-서하"]:not([data-locked])').waitFor();
+    // 오른쪽 클릭으로는 토큰이 끌려 다니지 않는다
+    assert.equal(await sel.count(), 1);
+    // 정리: 시험용 오브젝트를 지운다
+    await tested.click();
+    await kp.keyboard.press("Delete");
+    await tested.waitFor({ state: "detached" });
+    step("오른쪽 클릭 메뉴: 이름 바꾸기·보이기/숨기기·잠금/해제·삭제(Ctrl+Z 복구), 메뉴가 열려 있으면 단축키 무시");
+
+    // Esc 로 선택 해제, Tab 으로 토큰 사이 이동(고른 것이 있을 때만 가로챔)
+    await seo.click();
+    assert.equal(await selName(), "서하");
+    await kp.keyboard.press("Tab");
+    await sel.waitFor();
+    assert.ok((await selName()).length > 0);
+    await kp.keyboard.press("Shift+Tab");
+    await kp.waitForFunction(() => document.querySelector('[data-testid="selected-bar"] input')?.value === "서하");
+    await kp.keyboard.press("Escape");
+    await sel.waitFor({ state: "detached" });
+    step("Esc 로 선택이 풀리고, Tab/Shift+Tab 으로 토큰 사이를 오감");
+  }
+
+  // 이미지 넣기: 끌어다 놓기·붙여넣기·이미지 고르기(다시 쓰기)·빈 상태 안내·핸드아웃 끌어놓기
+  {
+    const makePng = (name, color) =>
+      `(() => { const c = document.createElement("canvas"); c.width = c.height = 8; const g = c.getContext("2d"); g.fillStyle = ${JSON.stringify(color)}; g.fillRect(0, 0, 8, 8);
+        return new Promise((res) => c.toBlob((b) => res(new File([b], ${JSON.stringify(name)}, { type: "image/png" })), "image/png")); })()`;
+    // 브라우저 안에서 PNG 를 만들어 보드에 끌어다 놓거나 붙여 넣는다(실제 파일 끌기를 흉내 냄)
+    const dropOnBoard = (page, name, color, at) =>
+      page.evaluate(async ({ mk, at }) => {
+        const file = await eval(mk);
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        const board = document.querySelector('[data-testid="board"]');
+        const r = board.getBoundingClientRect();
+        const clientX = r.left + r.width * at[0];
+        const clientY = r.top + r.height * at[1];
+        for (const type of ["dragenter", "dragover", "drop"]) board.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX, clientY }));
+      }, { mk: makePng(name, color), at });
+    const dropOnPoint = (page, name, color, x, y) =>
+      page.evaluate(async ({ mk, x, y }) => {
+        const file = await eval(mk);
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        const board = document.querySelector('[data-testid="board"]');
+        for (const type of ["dragenter", "dragover", "drop"]) board.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: x, clientY: y }));
+      }, { mk: makePng(name, color), x, y });
+    let uploads = 0;
+    kp.on("request", (r) => r.method() === "POST" && /\/images$/.test(r.url()) && uploads++);
+
+    // 배경이 비어 있으면 한 줄 안내가 보이고, 이미지 없는 선택 토큰에는 '이미지 올리기' 칩이 뜬다
+    const hint = kp.getByTestId("board-hint");
+    await hint.waitFor();
+    assert.match(await hint.textContent(), /끌어다 놓아 배경/);
+    await kp.getByTestId("obj-서하").click();
+    await kp.getByTestId("add-image-chip").waitFor();
+    await kp.screenshot({ path: `${SHOTS}/img-hint-chip.png` });
+    await kp.keyboard.press("Escape");
+    await kp.getByTestId("add-image-chip").waitFor({ state: "detached" });
+
+    // 빈 곳에 놓으면 쓰임을 묻는다 → 새 토큰으로
+    await dropOnBoard(kp, "맨홀 뚜껑.png", "#c33", [0.9, 0.12]);
+    const intake = kp.getByTestId("image-intake");
+    await intake.waitFor();
+    await kp.screenshot({ path: `${SHOTS}/img-intake.png` });
+    assert.deepEqual(await intake.getByRole("menuitem").allInnerTexts(), ["배경으로", "새 토큰으로", "소품으로", "취소"]);
+    await intake.getByRole("menuitem", { name: "새 토큰으로" }).click();
+    const manhole = kp.getByTestId("obj-맨홀 뚜껑");
+    await manhole.waitFor();
+    await intake.waitFor({ state: "detached" });
+    await pl.getByTestId("img-맨홀 뚜껑").waitFor();
+    // 새로 만든 토큰이 선택된다
+    await kp.waitForFunction(() => document.querySelector('[data-testid="selected-bar"] input')?.value === "맨홀 뚜껑");
+    step("파일을 빈 보드에 끌어다 놓으면 쓰임을 묻고, 새 토큰으로 놓으면 PL 화면에도 그림이 보임");
+
+    // 토큰 위에 놓으면 묻지 않고 그 토큰의 그림이 바뀐다
+    const before = await pl.getByTestId("img-맨홀 뚜껑").getAttribute("href");
+    const mb = await manhole.locator("circle").first().boundingBox();
+    await dropOnPoint(kp, "다른 그림.png", "#36c", mb.x + mb.width / 2, mb.y + mb.height / 2);
+    await kp.waitForFunction((h) => document.querySelector('[data-testid="img-맨홀 뚜껑"]')?.getAttribute("href") !== h, before);
+    assert.equal(await kp.getByTestId("image-intake").count(), 0);
+    step("토큰 위에 파일을 놓으면 바로 그 토큰의 이미지가 바뀜");
+
+    // 배경으로
+    await dropOnBoard(kp, "복도.png", "#363", [0.1, 0.9]);
+    await kp.getByTestId("intake-background").click();
+    await pl.getByTestId("board-bg").waitFor();
+    assert.equal(await kp.getByTestId("board-hint").count(), 0); // 배경이 생기면 안내는 사라진다
+    step("빈 곳에 놓고 '배경으로'를 고르면 장면 배경이 정해짐(안내 문구도 사라짐)");
+
+    // 이미지 형식이 아니면 안내만 하고 아무것도 만들지 않는다
+    await kp.evaluate(() => {
+      const dt = new DataTransfer();
+      dt.items.add(new File(["hi"], "메모.txt", { type: "text/plain" }));
+      const board = document.querySelector('[data-testid="board"]');
+      for (const type of ["dragenter", "dragover", "drop"]) board.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: 100, clientY: 400 }));
+    });
+    await kp.getByTestId("toast").getByText(/PNG, JPG, GIF, WEBP/).first().waitFor();
+    assert.equal(await kp.getByTestId("image-intake").count(), 0);
+
+    // 붙여넣기(클립보드 이미지): 같은 팝오버 → 소품으로
+    await kp.getByTestId("board").focus();
+    await kp.evaluate(async (mk) => {
+      const file = await eval(mk);
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      document.activeElement.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt }));
+    }, makePng("image.png", "#c93"));
+    await kp.getByTestId("image-intake").waitFor();
+    await kp.keyboard.press("Escape"); // Esc 로 닫으면 아무것도 만들지 않는다
+    await kp.getByTestId("image-intake").waitFor({ state: "detached" });
+    await kp.getByTestId("board").focus();
+    await kp.evaluate(async (mk) => {
+      const file = await eval(mk);
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      document.activeElement.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt }));
+    }, makePng("열쇠.png", "#c93"));
+    await kp.getByTestId("intake-prop").click();
+    await kp.getByTestId("obj-열쇠").waitFor();
+    await pl.getByTestId("img-열쇠").waitFor();
+    // 글을 쓰는 칸에 붙여 넣을 때는 끼어들지 않는다
+    await kp.getByLabel("굴림 식").focus();
+    await kp.evaluate(async (mk) => {
+      const file = await eval(mk);
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      document.activeElement.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt }));
+    }, makePng("무시.png", "#000"));
+    await kp.waitForTimeout(250);
+    assert.equal(await kp.getByTestId("image-intake").count(), 0);
+    step("클립보드 이미지를 붙여 넣으면 같은 팝오버가 뜨고(Esc 로 취소), 소품으로 놓을 수 있음. 입력칸에서는 끼어들지 않음");
+
+    // 이미지 고르기: 이 룸에서 쓴 이미지를 다시 고르면 새로 올리지 않는다
+    const upBefore = uploads;
+    await kp.getByTestId("obj-서하").click();
+    await kp.getByRole("button", { name: "이미지", exact: true }).click();
+    const picker = kp.getByTestId("image-picker");
+    await picker.waitFor();
+    assert.ok((await picker.getByTestId("image-thumb").count()) >= 3);
+    await kp.screenshot({ path: `${SHOTS}/img-picker.png` });
+    await picker.getByTestId("image-thumb").first().click();
+    await pl.getByTestId("img-서하").waitFor();
+    assert.equal(uploads, upBefore);
+    // 오른쪽 클릭 메뉴의 '이미지 바꾸기'도 같은 목록을 쓴다
+    await kp.getByTestId("obj-서하").click({ button: "right" });
+    await kp.getByRole("menuitem", { name: "이미지 바꾸기" }).click();
+    const pop = kp.getByTestId("object-image-pop");
+    await pop.waitFor();
+    await pop.getByTestId("image-thumb").nth(1).click();
+    await pop.waitFor({ state: "detached" });
+    assert.equal(uploads, upBefore);
+    step("이미지 고르기: 이 룸에서 쓴 이미지를 다시 고르면 새로 올리지 않음(툴바·오른쪽 클릭 메뉴 모두)");
+
+    // 핸드아웃 편집기의 이미지 칸에 끌어다 놓기
+    await kp.getByRole("tab", { name: "핸드아웃" }).click();
+    await kp.getByRole("button", { name: "새 핸드아웃" }).click();
+    await kp.evaluate(async (mk) => {
+      const file = await eval(mk);
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      const zone = document.querySelector('[data-testid="handout-image-drop"]');
+      for (const type of ["dragenter", "dragover", "drop"]) zone.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+    }, makePng("편지.png", "#eee"));
+    await kp.getByAltText("핸드아웃 이미지 미리보기").waitFor();
+    await kp.getByRole("button", { name: "취소" }).click();
+    await kp.getByRole("tab", { name: "굴림" }).click();
+    step("핸드아웃 편집기의 이미지 칸에 파일을 끌어다 놓으면 이미지가 들어감");
+
+    // 정리: 시험용 오브젝트·배경·그림을 되돌려 놓는다
+    for (const nm of ["맨홀 뚜껑", "열쇠"]) {
+      await kp.getByTestId(`obj-${nm}`).click();
+      await kp.keyboard.press("Backspace");
+      await kp.getByTestId(`obj-${nm}`).waitFor({ state: "detached" });
+    }
+    await openSceneMenu(kp);
+    await kp.getByRole("button", { name: "배경 떼기" }).click();
+    await kp.keyboard.press("Escape");
+    await pl.getByTestId("board-bg").waitFor({ state: "detached" });
+    await kp.getByTestId("obj-서하").click();
+    await kp.getByRole("button", { name: "이미지 떼기" }).click();
+    await pl.getByTestId("img-서하").waitFor({ state: "detached" });
+    await kp.keyboard.press("Escape");
+  }
+
   // 굴림: 공개
   await pl.getByLabel("굴림 식").fill("CC<=60");
   await pl.getByRole("button", { name: "굴리기" }).click();
@@ -1235,6 +1488,7 @@ try {
   console.log("\n모든 확인 통과");
 } catch (e) {
   console.error("\n실패:", e.message);
+  if (process.env.E2E_DEBUG) console.error(e.stack); // 어느 줄에서 멈췄는지 보고 싶을 때
   process.exitCode = 1;
 } finally {
   await browser.close();
