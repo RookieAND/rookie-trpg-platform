@@ -7,7 +7,7 @@ const WEB = process.env.WEB_URL ?? "http://localhost:3000";
 // API 주소. 다른 포트로 띄운 서버에 돌릴 때 API_URL로 알려 준다.
 const API = process.env.API_URL ?? "http://localhost:8787";
 const exe = process.env.CHROMIUM_PATH ?? "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
-const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox"] });
+const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox", "--no-proxy-server"] });
 const ctx = () => browser.newContext({ viewport: { width: 1280, height: 800 } });
 // 같은 서버로 여러 번 돌려도 이전 실행의 룸·캐릭터와 섞이지 않게 이름에 실행 번호를 붙인다.
 const run = Date.now().toString(36);
@@ -17,6 +17,13 @@ const step = (m) => console.log("✓", m);
 // 설정·장면 설정 메뉴 안의 항목은 메뉴를 먼저 열어야 보인다. 쓰고 나면 Esc로 닫아 아래 화면을 가리지 않게 한다.
 const openSettings = async (page) => { if (!(await page.getByRole("menu").count())) await page.getByTestId("settings-menu").click(); };
 const openSceneMenu = async (page) => { if (!(await page.getByRole("menu").count())) await page.getByRole("button", { name: /장면 설정/ }).click(); };
+
+// 이전 실행이 남긴 룸이 사용자별 룸 수 한도를 채우지 않게, 시작할 때 이 시험의 사용자들 룸을 비운다.
+for (const who of ["하늘", "서하", "낯선이"]) {
+  const h = { "x-dev-user": encodeURIComponent(who), "x-dev-name": encodeURIComponent(who) };
+  const list = await fetch(`${API}/rooms`, { headers: h }).then((r) => (r.ok ? r.json() : [])).catch(() => []);
+  for (const r of list) if (r.role === "kp") await fetch(`${API}/rooms/${r.id}`, { method: "DELETE", headers: h }).catch(() => {});
+}
 
 const login = async (page, name) => {
   await page.goto(WEB);
