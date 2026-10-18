@@ -69,7 +69,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
           <path d="M40 0H0V40" fill="none" stroke="#1a1d22" strokeWidth="1" />
         </pattern>
       </defs>
-      {background && <image href={imageUrl(background)} width={W} height={H} preserveAspectRatio="xMidYMid slice" data-testid="board-bg" pointerEvents="none" />}
+      {background && <image href={imageUrl(background)} width={W} height={H} preserveAspectRatio="xMidYMid meet" data-testid="board-bg" pointerEvents="none" />}
       <rect width={W} height={H} fill="url(#grid)" pointerEvents="none" />
       {fog && (
         <g data-testid="fog" data-areas={fog.areas.length} pointerEvents="none">

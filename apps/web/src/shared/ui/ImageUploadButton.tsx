@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import { uploadImage, type Caller } from "../api";
+import { shrinkImage } from "../api/shrink-image";
 
 /** 파일을 골라 올리고, 끝나면 이미지 id를 알려 주는 버튼. */
 export function ImageUploadButton({ me, label, onUploaded, disabled, className = "btn" }: { me: Caller; label: string; onUploaded: (id: string) => void; disabled?: boolean; className?: string }) {
@@ -13,7 +14,7 @@ export function ImageUploadButton({ me, label, onUploaded, disabled, className =
     setBusy(true);
     setError(null);
     try {
-      onUploaded(await uploadImage(me, file));
+      onUploaded(await uploadImage(me, await shrinkImage(file)));
     } catch (e) {
       setError(e instanceof Error ? e.message : "이미지를 올리지 못했어요.");
     } finally {

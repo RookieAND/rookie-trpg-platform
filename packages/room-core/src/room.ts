@@ -1019,6 +1019,8 @@ export class Room {
   private passesFog(obj: GameObject, m: Pick<Member, "userId" | "role">, areas: FogArea[] | undefined): boolean {
     if (m.role === "kp" || !areas) return true;
     if (obj.ownerId === m.userId) return true;
+    // 파티원(PL 소유 토큰)은 안개와 상관없이 다른 PL에게도 보인다. 숨기려면 KP가 토큰을 숨긴다.
+    if (obj.kind === "token" && obj.ownerId && m.role === "pl") return true;
     return areas.some((a) => (a.x - obj.x) ** 2 + (a.y - obj.y) ** 2 <= a.r ** 2);
   }
 
@@ -1181,17 +1183,54 @@ export class Room {
   }
 
   /** 활성 장면을 바꾼다. PL에게는 새 장면에서 보이는 오브젝트 전체를 사람마다 따로 보낸다. */
-  private sceneActivate(who: Actor, d: { id: string; transition: Transition }): Result {
+  private sceneActivate(who: Actor, d: { id: string; transition: Transition; bringParty?: boolean }): Result {
     if (who.role !== "kp") return fail("forbidden", "KP만 장면을 바꿀 수 있어요.");
     const scene = this.scenes.get(d.id);
     if (!scene) return fail("not_found", "장면을 찾을 수 없어요.");
     if (d.id === this.activeSceneId) return fail("bad_message", "이미 진행 중인 장면이에요.");
-    return ok(...this.activateScene(scene, d.transition));
+    return ok(...this.activateScene(scene, d.transition, d.bringParty !== false));
   }
 
-  private activateScene(scene: Scene, transition: Transition): Out[] {
-    this.activeSceneId = scene.id;
+  /**
+   * 새 장면에 토큰이 없는 PL에게는 이전 장면의 토큰을 빈자리에 복사해 둔다(이름·이미지·시야를 이어받는다).
+   * 장면이 활성이 되기 전에 만들어서, 이 추가는 KP에게만 알림이 가고 PL에게는 scene.activated의 목록으로 간다.
+   */
+  private bringPartyTokens(scene: Scene): Out[] {
     const out: Out[] = [];
+    const have = new Set([...this.objects.values()].filter((o) => o.sceneId === scene.id && o.kind === "token" && o.ownerId).map((o) => o.ownerId));
+    const sources = new Map<string, GameObject>();
+    for (const o of this.objects.values()) {
+      if (o.kind !== "token" || !o.ownerId || o.sceneId === scene.id || have.has(o.ownerId)) continue;
+      if (this.members.get(o.ownerId)?.role !== "pl") continue;
+      if (o.sceneId === this.activeSceneId || !sources.has(o.ownerId)) sources.set(o.ownerId, o);
+    }
+    for (const src of sources.values()) {
+      if (this.objects.size >= MAX_OBJECTS) break;
+      const spot = this.freeSpot(scene.id, 500, 400);
+      const obj: GameObject = {
+        id: this.newId(),
+        sceneId: scene.id,
+        kind: "token",
+        name: src.name,
+        x: spot.x,
+        y: spot.y,
+        layer: src.layer,
+        visibleTo: "all",
+        locked: false,
+        rev: 0,
+        ownerId: src.ownerId!,
+        ...(src.image ? { image: src.image } : {}),
+        ...(src.vision ? { vision: src.vision } : {}),
+      };
+      this.objects.set(obj.id, obj);
+      out.push(...this.fanOutObject(null, obj));
+    }
+    return out;
+  }
+
+  private activateScene(scene: Scene, transition: Transition, bringParty = true): Out[] {
+    const out: Out[] = bringParty ? this.bringPartyTokens(scene) : [];
+    this.activeSceneId = scene.id;
     for (const m of this.members.values()) {
       const data: Extract<Out["event"], { type: "scene.activated" }>["data"] = { scene: this.sceneFor(scene, m.role === "kp"), transition };
       if (m.role !== "kp") {

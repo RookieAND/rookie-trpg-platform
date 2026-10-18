@@ -472,7 +472,15 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("scene.setBgm"), data: z.object({ id, trackId: id.nullable() }) }),
   z.object({ type: z.literal("scene.background"), data: z.object({ id, image: imageId.nullable() }) }),
   z.object({ type: z.literal("scene.remove"), data: z.object({ id }) }),
-  z.object({ type: z.literal("scene.activate"), data: z.object({ id, transition: z.enum(["cut", "fade"]).default("cut") }) }),
+  z.object({
+    type: z.literal("scene.activate"),
+    data: z.object({
+      id,
+      transition: z.enum(["cut", "fade"]).default("cut"),
+      /** 새 장면에 토큰이 없는 PL에게 토큰을 따라오게 한다. 생략하면 켬(false일 때만 끈다). */
+      bringParty: z.boolean().optional(),
+    }),
+  }),
   /** 무기의 피해를 굴린다(피해 보너스 포함). */
   z.object({ type: z.literal("damage.roll"), data: z.object({ characterId: id, weaponIndex: z.number().int().min(0).max(MAX_WEAPONS - 1) }) }),
   /** 실패한 시트 판정을 한 번 더 굴린다(푸시). 굴린 사람이나 KP가 할 수 있다. */

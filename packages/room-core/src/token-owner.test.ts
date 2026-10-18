@@ -79,17 +79,20 @@ describe("토큰 소유자·이름·빈자리", () => {
     expect(room.handle(pl1, cmd("object.move", { id: t.id, x: 1, y: 1, rev: cur.rev })).ok).toBe(false);
   });
 
-  it("안개에서: 소유자가 바뀌면 새 주인에게는 보이고 옛 주인에게서는 사라진다", () => {
+  it("안개에서: 소유자를 주면 주인과 파티원에게 보이고, 풀면 시야 밖에서 다시 사라진다", () => {
     const { room, add } = setup();
     must(room.handle(kp, cmd("scene.fog", { id: "main", enabled: true })));
-    const t = add("멀리", { x: 900, y: 700, ownerId: "pl1" });
-    expect(room.snapshot(pl1).objects.map((o) => o.id)).toContain(t.id);
-    expect(room.snapshot(pl2).objects.map((o) => o.id)).not.toContain(t.id);
-    const out = must(room.handle(kp, cmd("object.update", { id: t.id, ownerId: "pl2" })));
-    expect(toUser(out, "object.removed", "pl1")).toHaveLength(1);
-    expect(toUser(out, "object.added", "pl2")).toHaveLength(1);
+    const t = add("멀리", { x: 900, y: 700 });
     expect(room.snapshot(pl1).objects.map((o) => o.id)).not.toContain(t.id);
+    expect(room.snapshot(pl2).objects.map((o) => o.id)).not.toContain(t.id);
+    const given = must(room.handle(kp, cmd("object.update", { id: t.id, ownerId: "pl1" })));
+    expect(toUser(given, "object.added", "pl1")).toHaveLength(1);
+    expect(toUser(given, "object.added", "pl2")).toHaveLength(1);
     expect(room.snapshot(pl2).objects.map((o) => o.id)).toContain(t.id);
+    const freed = must(room.handle(kp, cmd("object.update", { id: t.id, ownerId: null })));
+    expect(toUser(freed, "object.removed", "pl1")).toHaveLength(1);
+    expect(toUser(freed, "object.removed", "pl2")).toHaveLength(1);
+    expect(room.snapshot(pl1).objects.map((o) => o.id)).not.toContain(t.id);
   });
 
   it("이름을 바꾸면 보이는 사람에게 갱신이 간다", () => {
@@ -97,5 +100,40 @@ describe("토큰 소유자·이름·빈자리", () => {
     const t = add("토큰");
     const out = must(room.handle(kp, cmd("object.update", { id: t.id, name: "새 이름" })));
     expect(toUser(out, "object.updated", "pl1")).toHaveLength(1);
+  });
+});
+
+describe("장면 전환에 PL 토큰이 따라옴", () => {
+  const twoScenes = () => {
+    const { room, add } = setup();
+    const out = must(room.handle(kp, cmd("scene.create", { name: "지하실" })));
+    const sceneId = (out[0]!.event as { data: { id: string } }).data.id;
+    return { room, add, sceneId };
+  };
+
+  it("새 장면에 토큰이 없는 PL에게는 이름·소유자를 이어받은 토큰이 빈자리에 생긴다", () => {
+    const { room, add, sceneId } = twoScenes();
+    add("서하", { ownerId: "pl1" });
+    const out = must(room.handle(kp, cmd("scene.activate", { id: sceneId, transition: "cut" })));
+    const mine = room.snapshot(pl1).objects.filter((o) => o.kind === "token" && o.ownerId === "pl1");
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.sceneId).toBe(sceneId);
+    expect(mine[0]!.name).toBe("서하");
+    // PL은 장면 목록으로 받고 KP는 object.added로 받는다
+    expect(toUser(out, "object.added", "kp1")).toHaveLength(1);
+    expect(toUser(out, "object.added", "pl1")).toHaveLength(0);
+  });
+
+  it("이미 토큰이 있는 PL은 복사하지 않고, bringParty=false면 아무도 복사하지 않는다", () => {
+    const a = twoScenes();
+    a.add("서하", { ownerId: "pl1" });
+    a.add("서하(지하실)", { ownerId: "pl1", sceneId: a.sceneId });
+    must(a.room.handle(kp, cmd("scene.activate", { id: a.sceneId, transition: "cut" })));
+    expect(a.room.snapshot(pl1).objects.filter((o) => o.ownerId === "pl1")).toHaveLength(1);
+
+    const b = twoScenes();
+    b.add("서하", { ownerId: "pl1" });
+    must(b.room.handle(kp, cmd("scene.activate", { id: b.sceneId, transition: "cut", bringParty: false })));
+    expect(b.room.snapshot(pl1).objects.filter((o) => o.ownerId === "pl1")).toHaveLength(0);
   });
 });

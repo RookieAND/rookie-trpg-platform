@@ -479,7 +479,7 @@ try {
   await pl.getByTestId("obj-서하").waitFor();
   await kp.getByTestId("obj-서하").click();
   await kp.getByLabel("시야 반지름").fill("400");
-  await kp.getByRole("button", { name: "시야 주기" }).click();
+  await kp.getByRole("button", { name: "시야 주기", exact: true }).click();
   await plProps.first().waitFor();
   await kp.getByRole("button", { name: "시야 없애기" }).click();
   await plProps.first().waitFor({ state: "detached" });
@@ -490,11 +490,13 @@ try {
   await kp.getByTestId("fog-zones").getByText("밝힌 영역 1").waitFor();
   await plProps.first().waitFor();
   await kp.getByRole("button", { name: "보드를 눌러 밝히는 중…" }).click();
+  kp.once("dialog", (d) => d.accept());
   await kp.getByRole("button", { name: "영역 모두 지우기" }).click();
   await plProps.first().waitFor({ state: "detached" });
   // 탐험 기록: 시야가 지나간 자리는 지금 안 보여도 기록으로 남고, KP가 지울 수 있다
   await pl.getByTestId("fog-explored").waitFor();
   await kp.getByTestId("fog-explored-count").getByText(/탐험 기록 [1-9]/).waitFor();
+  kp.once("dialog", (d) => d.accept());
   await kp.getByRole("button", { name: "탐험 기록 지우기" }).click();
   await kp.getByTestId("fog-explored-count").getByText("탐험 기록 0").waitFor();
   await pl.getByTestId("fog-explored").waitFor({ state: "detached" });
@@ -821,6 +823,7 @@ try {
   await pl.getByTestId("scene-name").getByText("서재").waitFor();
   await kp2.getByRole("tab", { name: /^음향/ }).click();
   await track.getByTestId("audio-playing").waitFor();
+  kp2.once("dialog", (d) => d.accept());
   await track.getByRole("button", { name: /삭제$/ }).click();
   await track.waitFor({ state: "detached" });
   step("음향: 비트 큐에 묶은 배경음이 비트에 들어가면 흐르고, 음원을 지우면 목록에서 사라짐");

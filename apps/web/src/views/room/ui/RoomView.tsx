@@ -79,6 +79,8 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   const kpAway = active && !isKp && state.kpAwaySince !== null;
   const scenes = useMemo(() => Object.values(state.scenes), [state.scenes]);
   // KP는 활성이 아닌 장면도 골라 꾸밀 수 있고, 장면이 사라지면 활성 장면으로 돌아온다.
+  // 비트나 단축키로 진행 장면이 바뀌면 KP 화면도 그 장면을 따라간다.
+  useEffect(() => setViewSceneId(null), [state.activeSceneId]);
   const shownSceneId = isKp && viewSceneId && state.scenes[viewSceneId] ? viewSceneId : state.activeSceneId;
   const objects = useMemo(() => Object.values(state.objects).filter((o) => o.sceneId === shownSceneId), [state.objects, shownSceneId]);
   const characters = useMemo(() => Object.values(state.characters), [state.characters]);
@@ -181,7 +183,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
             </div>
           )}
           {isKp && shownScene && (
-            <FogToolbar scene={shownScene} selected={selected} enabled={canEditBoard} picking={fogPicking} radius={fogRadius} onPicking={setFogPicking} onRadius={setFogRadius} send={send} />
+            <FogToolbar scene={shownScene} selected={selected} partyTokens={objects.filter((o) => o.kind === "token" && o.ownerId)} enabled={canEditBoard} picking={fogPicking} radius={fogRadius} onPicking={setFogPicking} onRadius={setFogRadius} send={send} />
           )}
           {isKp && (
             <ObjectToolbar

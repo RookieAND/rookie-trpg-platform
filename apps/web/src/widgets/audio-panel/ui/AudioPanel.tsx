@@ -93,7 +93,7 @@ export function AudioPanel({ me, library, bgm, enabled, send }: { me: Caller; li
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <span style={{ color: "var(--muted)", fontSize: 12, flex: 1 }}>기본 볼륨 {t.volume}</span>
               <button className="btn" disabled={!enabled} onClick={() => send({ type: "audio.play", data: { trackId: t.id, fadeMs: t.kind === "bgm" ? fadeMs : 0 } })}>재생</button>
-              <button className="btn" disabled={!enabled} aria-label={`${t.label} 삭제`} onClick={() => send({ type: "audio.track.remove", data: { id: t.id } })}>삭제</button>
+              <button className="btn" disabled={!enabled} aria-label={`${t.label} 삭제`} onClick={() => window.confirm(`'${t.label}'을(를) 지울까요? 장면·비트에 묶어 둔 연결도 풀려요.`) && send({ type: "audio.track.remove", data: { id: t.id } })}>삭제</button>
             </div>
           </div>
         ))}
