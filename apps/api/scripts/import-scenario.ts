@@ -1,5 +1,8 @@
 /**
- * 시나리오 파일(JSON)을 룸 하나로 옮긴다: 장면, 소품·NPC 토큰, NPC 시트, 핸드아웃, 세션 흐름(비트·분기).
+ * 시나리오 파일(JSON)을 룸 하나로 옮긴다: 장면, 소품·NPC 토큰, NPC 시트, 핸드아웃, 세션 흐름(비트·분기),
+ * 광기 증상표(madnessTable), 음원(audio — 로컬 오디오 파일을 올리고 장면·비트 배경음에 연결).
+ * 룸을 만들기 전에 파일 존재·크기·형식·참조를 전부 검증하므로, 문제가 있으면 룸이 만들어지지 않는다.
+ * 형식은 docs/scenario-format.md 를 본다.
  * KP가 직접 룸을 만든 것처럼 서버에 명령을 보내므로 저장소(파일/Postgres)와 상관없이 같은 방식으로 저장된다.
  *
  * 사용법(서버가 켜져 있어야 한다):
@@ -7,31 +10,11 @@
  *
  * 개발용 로그인에서는 이름이 곧 신원이다. 웹 로비에서 같은 이름으로 로그인하면 룸이 "내 룸"에 보인다.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import WebSocket from "ws";
+import { validateScenario, type ScenarioFile } from "./scenario-validate";
 import { defaultSkillValues, type ClientCommand, type Flow, type Scene, type ServerMessage, type Snapshot } from "@coc-vtt/shared";
-
-interface ScenarioFile {
-  format: string;
-  version: number;
-  roomName: string;
-  scenes: Array<{ key: string; name: string; start?: boolean }>;
-  tokens: Array<{ scene: string; kind: "token" | "prop"; name: string; x: number; y: number; layer: "background" | "object" | "gm"; visibleTo: "all" | "gm" }>;
-  characters: Array<{
-    name: string;
-    age: number;
-    occupation: string;
-    characteristics: Record<"STR" | "CON" | "SIZ" | "DEX" | "APP" | "INT" | "POW" | "EDU", number>;
-    hp?: number;
-    san?: number;
-    skills: Array<{ name: string; value: number }>;
-    notes?: string;
-    backstory?: string;
-  }>;
-  handouts: Array<{ key: string; title: string; body: string; visibleTo: "all" | "gm" }>;
-  beats: Array<{ key: string; name: string; kind: "start" | "progress" | "ending"; scene?: string; handouts: string[]; memo: string; sanReward?: string }>;
-  branches: Array<{ from: string; to: string; label: string }>;
-}
 
 function parseArgs(argv: string[]) {
   const positional: string[] = [];
@@ -110,9 +93,30 @@ async function main() {
   const sc = JSON.parse(readFileSync(file, "utf8")) as ScenarioFile;
   if (sc.format !== "roll-and-call-scenario" || sc.version !== 1) throw new Error("지원하지 않는 시나리오 파일이에요.");
 
+  // 룸을 만들기 전에 전부 검증한다. 오디오 파일은 한 번만 읽어 두고 그대로 올린다.
+  const baseDir = dirname(resolve(file));
+  const audioBytes = new Map<string, Buffer>();
+  const problems = validateScenario(sc, (rel) => {
+    const abs = resolve(baseDir, rel);
+    if (!existsSync(abs) || !statSync(abs).isFile()) return null;
+    const bytes = readFileSync(abs);
+    audioBytes.set(rel, bytes);
+    return bytes;
+  });
+  if (problems.length > 0) throw new Error(`시나리오 파일에 문제가 있어서 룸을 만들지 않았어요.\n${problems.map((p) => `  - ${p}`).join("\n")}`);
+
   const userId = user.trim().toLowerCase().replace(/\s+/g, "-");
   const enc = encodeURIComponent;
   const headers = { "content-type": "application/json", "x-dev-user": enc(userId), "x-dev-name": enc(user) };
+
+  // 오디오는 룸을 만들기 전에 올린다. 업로드가 실패해도 빈 룸이 남지 않는다(올라간 파일은 쓰이지 않을 뿐이다).
+  const assetByKey = new Map<string, string>();
+  for (const a of sc.audio ?? []) {
+    const r = await fetch(`${api}/audio`, { method: "POST", headers: { ...headers, "content-type": "application/octet-stream" }, body: new Uint8Array(audioBytes.get(a.file)!) });
+    const text = await r.text();
+    if (!r.ok) throw new Error(`음원을 올리지 못했어요(${a.key}, ${r.status}): ${text}`);
+    assetByKey.set(a.key, (JSON.parse(text) as { id: string }).id);
+  }
 
   const res = await fetch(`${api}/rooms`, { method: "POST", headers, body: JSON.stringify({ name: room ?? sc.roomName }) });
   if (!res.ok) throw new Error(`룸을 만들지 못했어요(${res.status}): ${await res.text()}`);
@@ -121,6 +125,19 @@ async function main() {
   const wsUrl = `${api.replace(/^http/, "ws")}/ws?${new URLSearchParams({ room: created.id, user: userId, name: user })}`;
   const kp = new Kp(wsUrl);
   await kp.open();
+
+  if (sc.madnessTable) await kp.send({ type: "settings.madness", data: { entries: sc.madnessTable.map((e) => e.trim()) } });
+
+  // 음원 라이브러리: key → 트랙 id
+  const trackId = new Map<string, string>();
+  for (const a of sc.audio ?? []) {
+    const assetId = assetByKey.get(a.key)!;
+    const ev = await kp.send({ type: "audio.track.add", data: { label: a.label.trim(), kind: a.kind, assetId, volume: 80 } });
+    const lib = ev.find((e) => e.type === "audio.library");
+    const track = lib && lib.type === "audio.library" ? lib.data.tracks.find((t) => t.assetId === assetId) : undefined;
+    if (!track) throw new Error(`음원을 라이브러리에 넣지 못했어요: ${a.key}`);
+    trackId.set(a.key, track.id);
+  }
 
   const sceneId = new Map<string, string>();
   const handoutId = new Map<string, string>();
@@ -138,6 +155,7 @@ async function main() {
       if (!added || added.type !== "scene.added") throw new Error(`장면을 만들지 못했어요: ${s.name}`);
       sceneId.set(s.key, added.data.id);
     }
+    if (s.bgm) await kp.send({ type: "scene.setBgm", data: { id: sceneId.get(s.key)!, trackId: trackId.get(s.bgm)! } });
     if (s.start) await kp.send({ type: "scene.setStart", data: { id: sceneId.get(s.key)! } });
   }
 
@@ -184,6 +202,7 @@ async function main() {
         ...(b.scene ? { sceneId: sceneId.get(b.scene)! } : {}),
         handoutIds: b.handouts.map((k) => handoutId.get(k)!),
         ...(b.sanReward ? { sanReward: b.sanReward } : {}),
+        ...(b.bgm ? { bgmTrackId: trackId.get(b.bgm)! } : {}),
       },
     });
     const upd = ev.find((e) => e.type === "flow.updated");
@@ -200,6 +219,7 @@ async function main() {
   console.log(`  룸 id: ${created.id}`);
   console.log(`  초대 코드: ${created.invite.code}`);
   console.log(`  장면 ${sc.scenes.length} · 토큰 ${sc.tokens.length} · NPC 시트 ${sc.characters.length} · 핸드아웃 ${sc.handouts.length} · 비트 ${sc.beats.length} · 분기 ${sc.branches.length}`);
+  if (sc.madnessTable || sc.audio) console.log(`  광기표 ${sc.madnessTable?.length ?? 0}줄 · 음원 ${sc.audio?.length ?? 0}개`);
   console.log(`  웹에서 "${user}"(으)로 로그인하면 내 룸에 보여요: /room/${created.id}`);
 }
 
