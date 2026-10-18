@@ -29,6 +29,7 @@ interface Props {
 export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disabled, error, onRoll, onPush, onLuck, players, onAsk }: Props) {
   const [expr, setExpr] = useState("");
   const [secret, setSecret] = useState(false);
+  const [help, setHelp] = useState(false);
   const macro = useRollMacros(me);
 
   const submit = () => {
@@ -64,13 +65,13 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {!pushWhy && (
             <>
-              <button className="btn" style={{ height: 26, padding: "0 10px" }} disabled={disabled} title="같은 조건으로 한 번 더 굴려요. 또 실패하면 더 나쁜 일이 생길 수 있어요." onClick={() => onPush(r.id)}>푸시</button>
+              <button className="btn sm" disabled={disabled} title="같은 조건으로 한 번 더 굴려요. 또 실패하면 더 나쁜 일이 생길 수 있어요." onClick={() => onPush(r.id)}>푸시</button>
               <Hint term="push" />
             </>
           )}
           {!luckWhy && need !== null && (
             <>
-              <button className="btn" style={{ height: 26, padding: "0 10px" }} disabled={disabled || luck < need} title={luck < need ? `행운이 모자라요 (보유 ${luck})` : `행운 ${need}을 깎아 성공으로 바꿔요`} onClick={() => onLuck(r.id)}>
+              <button className="btn sm" disabled={disabled || luck < need} title={luck < need ? `행운이 모자라요 (보유 ${luck})` : `행운 ${need}을 깎아 성공으로 바꿔요`} onClick={() => onLuck(r.id)}>
                 행운 {need} 쓰기
               </button>
               <Hint term="luck" />
@@ -109,16 +110,10 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
           </div>
         ))}
       </div>
-      <MacroBar error={macro.error} macros={macro.macros} isKp={isKp} disabled={disabled} onRoll={(m) => onRoll(m.expr, isKp && m.secret)} onAdd={macro.add} onRemove={macro.remove} />
       <div className="compose">
+        <MacroBar error={macro.error} macros={macro.macros} isKp={isKp} disabled={disabled} onRoll={(m) => onRoll(m.expr, isKp && m.secret)} onAdd={macro.add} onRemove={macro.remove} />
         {isKp && onAsk && <AskForm players={players ?? []} disabled={disabled} onAsk={onAsk} />}
-        {isKp && (
-          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input type="checkbox" checked={secret} onChange={(e) => setSecret(e.target.checked)} style={{ accentColor: "#7c86f7" }} />
-            비밀 굴림 (결과는 KP에게만 보여요 · 한 번만 적용)
-          </label>
-        )}
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="row">
           <input
             className="input mono"
             aria-label="굴림 식"
@@ -130,26 +125,37 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
           />
           <button className="btn primary" onClick={submit} disabled={disabled || !expr.trim()}>굴리기</button>
         </div>
-        <div className="res-sub" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <span>성공 단계<Hint term="level" /></span>
-          <span>보너스·페널티<Hint term="bonus" /></span>
-          <span>푸시<Hint term="push" /></span>
-          <span>행운<Hint term="luck" /></span>
-        </div>
         {error && <div className="err" role="alert">{error}</div>}
-        <button
-          className="btn"
-          style={{ height: 28 }}
-          disabled={rolls.length === 0}
-          title="이 화면에서 볼 수 있었던 굴림을 마크다운 파일로 저장해요"
-          onClick={() => {
-            const d = new Date();
-            const day = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-            downloadText(`roll-log-${day}.md`, formatRollLog(rolls, { title: "굴림 기록", isKp }));
-          }}
-        >
-          굴림 기록 저장
-        </button>
+        <div className="row foot">
+          {isKp && (
+            <label className="check" title="결과는 KP에게만 보여요. 한 번만 적용돼요.">
+              <input type="checkbox" checked={secret} onChange={(e) => setSecret(e.target.checked)} style={{ accentColor: "#7c86f7" }} />
+              비밀 굴림
+            </label>
+          )}
+          <span className="spacer" />
+          <button className="btn ghost sm" aria-expanded={help} onClick={() => setHelp((h) => !h)}>규칙 도움말</button>
+          <button
+            className="btn ghost sm"
+            disabled={rolls.length === 0}
+            title="이 화면에서 볼 수 있었던 굴림을 마크다운 파일로 저장해요"
+            onClick={() => {
+              const d = new Date();
+              const day = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+              downloadText(`roll-log-${day}.md`, formatRollLog(rolls, { title: "굴림 기록", isKp }));
+            }}
+          >
+            굴림 기록 저장
+          </button>
+        </div>
+        {help && (
+          <div className="res-sub row">
+            <span>성공 단계<Hint term="level" /></span>
+            <span>보너스·페널티<Hint term="bonus" /></span>
+            <span>푸시<Hint term="push" /></span>
+            <span>행운<Hint term="luck" /></span>
+          </div>
+        )}
       </div>
     </>
   );

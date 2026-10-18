@@ -59,46 +59,45 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
     .sort(([a], [b]) => a.localeCompare(b, "ko"));
 
   return (
-    <div style={{ overflow: "auto", padding: 16, display: "grid", gap: 16, alignContent: "start" }} data-testid="sheet">
-      <div style={{ display: "grid", gap: 4 }}>
+    <div className="sheet" data-testid="sheet">
+      <div className="sheet-head">
         {characters.length > 1 ? (
           <select className="input" aria-label="캐릭터 선택" value={c.id} onChange={(e) => onSelect(e.target.value)}>
             {characters.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
           </select>
         ) : (
-          <strong style={{ fontSize: 16 }}>{c.name}</strong>
+          <strong style={{ fontSize: 15 }}>{c.name}</strong>
         )}
-        <span style={{ color: "var(--muted)" }}>{c.occupation || "직업 없음"} · {c.age}세 · MOV {d.mov} · DB {d.damageBonus} · 체격 {d.build}</span>
+        <span className="sheet-sub">{c.occupation || "직업 없음"} · {c.age}세 · MOV {d.mov} · DB {d.damageBonus} · 체격 {d.build}</span>
       </div>
 
-      <div style={{ display: "grid", gap: 8 }}>
+      <div className="sheet-sec">
         {BARS.map(({ path, label }) => {
           const max = d.limits[path];
           const cur = c[path];
           return (
-            <div key={path} style={{ display: "grid", gridTemplateColumns: "56px 1fr auto", gap: 8, alignItems: "center" }}>
-              <span>{label}{path === "san" && <Hint term="san" />}{path === "luck" && <Hint term="luck" />}</span>
+            <div key={path} className="bar-row">
+              <span className="bar-label">{label}{path === "san" && <Hint term="san" />}{path === "luck" && <Hint term="luck" />}</span>
               <div style={{ height: 8, borderRadius: 4, background: "var(--panel-2)", overflow: "hidden" }}>
                 <div style={{ width: `${Math.min(100, (cur / max) * 100)}%`, height: "100%", background: path === "hp" ? "var(--danger)" : "var(--accent)" }} />
               </div>
-              <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                <button className="btn" style={{ height: 28, padding: "0 10px" }} aria-label={`${label} 감소`} disabled={!canEdit} onClick={() => onPatch(c.id, [{ path, delta: -1 }])}>−</button>
-                <span className="mono" style={{ minWidth: 56, textAlign: "center" }} data-testid={`stat-${path}`}>{cur}/{max}</span>
-                <button className="btn" style={{ height: 28, padding: "0 10px" }} aria-label={`${label} 증가`} disabled={!canEdit} onClick={() => onPatch(c.id, [{ path, delta: 1 }])}>+</button>
+              <span className="bar-ctl">
+                <button className="btn ico" aria-label={`${label} 감소`} disabled={!canEdit} onClick={() => onPatch(c.id, [{ path, delta: -1 }])}>−</button>
+                <span className="mono bar-val" data-testid={`stat-${path}`}>{cur}/{max}</span>
+                <button className="btn ico" aria-label={`${label} 증가`} disabled={!canEdit} onClick={() => onPatch(c.id, [{ path, delta: 1 }])}>+</button>
               </span>
             </div>
           );
         })}
       </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }} data-testid="conditions">
+      <div className="row" data-testid="conditions">
         {CONDITIONS.map((k) => {
           const on = c.conditions?.includes(k) ?? false;
           return (
             <button
               key={k}
-              className="btn"
-              style={{ height: 28, padding: "0 10px", ...(on ? { borderColor: "var(--danger)", color: "var(--danger)" } : {}) }}
+              className={`btn sm${on ? " on-danger" : ""}`}
               aria-pressed={on}
               disabled={!canEdit}
               onClick={() => onPatch(c.id, [{ path: "condition", name: k, on: !on }])}
@@ -120,103 +119,104 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, canEdit =
         onMadnessRoll={(mode) => onMadnessRoll(c.id, mode)}
       />
 
-      <div style={{ display: "flex", gap: 8 }}>
-        <select className="input" aria-label="보너스·페널티" value={bonus} onChange={(e) => setBonus(Number(e.target.value))}>
-          <option value={2}>보너스 2</option>
-          <option value={1}>보너스 1</option>
-          <option value={0}>기본</option>
-          <option value={-1}>페널티 1</option>
-          <option value={-2}>페널티 2</option>
-        </select>
-        <select className="input" aria-label="난이도" value={difficulty ?? ""} onChange={(e) => setDifficulty((e.target.value || undefined) as RollOptions["difficulty"])}>
-          <option value="">난이도 없음</option>
-          <option value="regular">보통</option>
-          <option value="hard">어려움</option>
-          <option value="extreme">극단적</option>
-        </select>
-      </div>
-      <div className="res-sub" style={{ display: "flex", gap: 12, marginTop: -8 }}>
-        <span>보너스·페널티<Hint term="bonus" /></span>
-        <span>난이도<Hint term="difficulty" /></span>
-      </div>
-      {isKp && (
-        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input type="checkbox" aria-label="비밀 판정" checked={secret} onChange={(e) => setSecret(e.target.checked)} style={{ accentColor: "#7c86f7" }} />
-          비밀 판정 (결과는 KP에게만 · 한 번만 적용)
-        </label>
-      )}
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-        {CHARACTERISTIC_KEYS.map((k) => (
-          <button key={k} className="btn" style={{ height: 48, display: "grid", lineHeight: 1.2, padding: "4px 0" }} disabled={!canAct} onClick={() => roll(c.id, k, opts)} aria-label={`${k} 굴리기`}>
-            <span style={{ color: "var(--muted)", fontSize: 11 }}>{k}</span>
-            <span className="mono">{c.characteristics[k]}</span>
-          </button>
-        ))}
+      <div className="sheet-sec">
+        <div className="section-title">판정</div>
+        <div className="row">
+          <select className="input" style={{ flex: 1, minWidth: 0 }} aria-label="보너스·페널티" value={bonus} onChange={(e) => setBonus(Number(e.target.value))}>
+            <option value={2}>보너스 2</option>
+            <option value={1}>보너스 1</option>
+            <option value={0}>기본</option>
+            <option value={-1}>페널티 1</option>
+            <option value={-2}>페널티 2</option>
+          </select>
+          <Hint term="bonus" label="보너스·페널티 설명" />
+          <select className="input" style={{ flex: 1, minWidth: 0 }} aria-label="난이도" value={difficulty ?? ""} onChange={(e) => setDifficulty((e.target.value || undefined) as RollOptions["difficulty"])}>
+            <option value="">난이도 없음</option>
+            <option value="regular">보통</option>
+            <option value="hard">어려움</option>
+            <option value="extreme">극단적</option>
+          </select>
+          <Hint term="difficulty" label="난이도 설명" />
+        </div>
+        {isKp && (
+          <label className="check" title="결과는 KP에게만 보여요. 한 번만 적용돼요.">
+            <input type="checkbox" aria-label="비밀 판정" checked={secret} onChange={(e) => setSecret(e.target.checked)} style={{ accentColor: "#7c86f7" }} />
+            비밀 판정
+          </label>
+        )}
+        <div className="stat-grid">
+          {CHARACTERISTIC_KEYS.map((k) => (
+            <button key={k} className="btn stat-btn" disabled={!canAct} onClick={() => roll(c.id, k, opts)} aria-label={`${k} 굴리기`}>
+              <span className="stat-key">{k}</span>
+              <span className="mono">{c.characteristics[k]}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {(c.weapons?.length ?? 0) > 0 && (
-        <div style={{ display: "grid", gap: 6 }} data-testid="weapons">
-          <strong>무기</strong>
+        <div className="sheet-sec" data-testid="weapons">
+          <div className="section-title">무기</div>
           {c.weapons!.map((w, i) => (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "center" }}>
+            <div key={i} className="line">
               <span>
                 {w.name} <span className="mono" style={{ color: "var(--muted)", fontSize: 12 }}>{w.skill} · {w.damage}</span>
               </span>
-              <button className="btn" style={{ height: 28, padding: "0 10px" }} disabled={!canAct} onClick={() => roll(c.id, w.skill, opts)} aria-label={`${w.name} 공격`}>공격</button>
-              <button className="btn" style={{ height: 28, padding: "0 10px" }} disabled={!canAct} onClick={() => onDamage(c.id, i)} aria-label={`${w.name} 피해`}>피해</button>
+              <button className="btn sm" disabled={!canAct} onClick={() => roll(c.id, w.skill, opts)} aria-label={`${w.name} 공격`}>공격</button>
+              <button className="btn sm" disabled={!canAct} onClick={() => onDamage(c.id, i)} aria-label={`${w.name} 피해`}>피해</button>
             </div>
           ))}
         </div>
       )}
 
-      <div style={{ display: "grid", gap: 6 }}>
+      <div className="sheet-sec">
+        <div className="section-title row">기능 <span className="count">{skills.length}</span></div>
         <input className="input" aria-label="기능 찾기" placeholder="기능 찾기" value={filter} onChange={(e) => setFilter(e.target.value)} />
         <div className="res-sub" style={{ display: "flex", alignItems: "center", gap: 6 }} data-testid="grown-legend">
           <span aria-hidden>☑</span> 체크한 기능은 세션이 끝나면 성장 굴림을 해요
           <Hint term="grown" />
         </div>
         {skills.map(([name, s]) => (
-          <div key={name} data-testid={`skill-${name}`} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 8, alignItems: "center" }}>
+          <div key={name} data-testid={`skill-${name}`} className="line skill-row">
             <input type="checkbox" title="이번 세션에서 성공했어요 (행운으로 성공한 건 제외). 세션 끝에 성장 굴림을 해요." aria-label={`${name} 성장 표시`} checked={s.grown} disabled={!canEdit} onChange={(e) => onPatch(c.id, [{ path: "skill", name, grown: e.target.checked }])} style={{ accentColor: "#7c86f7" }} />
             <span>{name}</span>
             <span className="mono" style={{ color: "var(--muted)" }}>{s.value} <span style={{ fontSize: 11 }}>({half(s.value)}/{fifth(s.value)})</span></span>
-            <button className="btn" style={{ height: 28, padding: "0 10px" }} disabled={!canAct} onClick={() => roll(c.id, name, opts)} aria-label={`${name} 굴리기`}>굴리기</button>
+            <button className="btn sm" disabled={!canAct} onClick={() => roll(c.id, name, opts)} aria-label={`${name} 굴리기`}>굴리기</button>
           </div>
         ))}
         {skills.length === 0 && <div style={{ color: "var(--muted)" }}>일치하는 기능이 없어요.</div>}
       </div>
 
-      <label style={{ display: "grid", gap: 4 }}>
-        소지품
+      <label className="sheet-sec">
+        <span className="section-title">소지품</span>
         <textarea
           key={`pos-${c.id}-${c.rev}`}
           className="input"
-          style={{ height: 64, padding: 12 }}
+          style={{ height: 64 }}
           defaultValue={c.possessions ?? ""}
           disabled={!canEditText}
           onBlur={(e) => e.currentTarget.value !== (c.possessions ?? "") && onPatch(c.id, [{ path: "possessions", value: e.currentTarget.value }])}
         />
       </label>
 
-      <label style={{ display: "grid", gap: 4 }}>
-        인물 배경
+      <label className="sheet-sec">
+        <span className="section-title">인물 배경</span>
         <textarea
           key={`bg-${c.id}-${c.rev}`}
           className="input"
-          style={{ height: 80, padding: 12 }}
+          style={{ height: 72 }}
           defaultValue={c.backstory ?? ""}
           disabled={!canEditText}
           onBlur={(e) => e.currentTarget.value !== (c.backstory ?? "") && onPatch(c.id, [{ path: "backstory", value: e.currentTarget.value }])}
         />
       </label>
 
-      <label style={{ display: "grid", gap: 4 }}>
-        메모
+      <label className="sheet-sec">
+        <span className="section-title">메모</span>
         <textarea
           key={`${c.id}-${c.rev}`}
           className="input"
-          style={{ height: 80, padding: 12 }}
+          style={{ height: 72 }}
           defaultValue={c.notes}
           disabled={!canEditText}
           onBlur={(e) => e.currentTarget.value !== c.notes && onPatch(c.id, [{ path: "notes", value: e.currentTarget.value }])}

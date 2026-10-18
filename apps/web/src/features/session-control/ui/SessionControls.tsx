@@ -17,7 +17,7 @@ export function SessionControls({ status, send, endingDefaults }: { status: Sess
       {status === "IDLE" && <button className="btn primary" onClick={cmd("session.start")}>세션 시작</button>}
       {status === "ACTIVE" && <button className="btn" onClick={cmd("session.pause")}>일시정지</button>}
       {status === "PAUSED" && <button className="btn primary" onClick={cmd("session.resume")}>이어하기</button>}
-      {status !== "IDLE" && <button className="btn danger" onClick={() => setEnding(true)}>세션 종료</button>}
+      {status !== "IDLE" && <button className="btn danger quiet" onClick={() => setEnding(true)}>세션 종료</button>}
       {ending && status !== "IDLE" && <EndDialog onClose={() => setEnding(false)} send={send} defaults={endingDefaults} />}
     </>
   );

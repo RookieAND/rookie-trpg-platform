@@ -27,20 +27,18 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
             </button>
           ))}
         </div>
-        <input className="input" style={{ width: 120, height: 26 }} aria-label="새 장면 이름" placeholder="+ 새 장면" value={name} disabled={!enabled} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} />
+        <input className="input" style={{ width: 112 }} aria-label="새 장면 이름" placeholder="+ 새 장면" value={name} disabled={!enabled} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} />
         <button className="btn sm" disabled={!enabled || !name.trim()} onClick={create}>추가</button>
       </div>
       {viewing && (
         <div className="scene-row tools">
           {!isActive && (
             <>
-              <button className="btn sm primary" disabled={!canActivate} onClick={() => send({ type: "scene.activate", data: { id: viewing.id, transition: "cut" } })}>바로 전환</button>
+              <button className="btn sm" disabled={!canActivate} onClick={() => send({ type: "scene.activate", data: { id: viewing.id, transition: "cut" } })}>바로 전환</button>
               <button className="btn sm" disabled={!canActivate} onClick={() => send({ type: "scene.activate", data: { id: viewing.id, transition: "fade" } })}>페이드 전환</button>
-              <span className="sep" />
-            </>
+              </>
           )}
-          <div style={{ flex: 1 }} />
-          <span className="scene-hint">보고 있는 장면: <b>{viewing.name}</b>{isActive ? " (진행 중)" : " (준비 중 — PL에게 안 보여요)"}</span>
+          {!isActive && <span className="scene-hint">준비 중 — PL에게 안 보여요</span>}
           <Menu label="장면 설정" title="이 장면의 시작 지정, 배경, 배경음, 이름, 삭제" align="right">
             {(close) => (
               <>

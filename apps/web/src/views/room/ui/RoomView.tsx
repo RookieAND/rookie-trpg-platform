@@ -246,7 +246,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
           ) : tab === "handout" ? (
             <HandoutPanel me={me} handouts={handoutList} isKp={isKp} canEdit={isKp || !paused} canShow={!paused} players={state.members} send={send} />
           ) : (
-            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            <div className="sheet-wrap">
               {characters.length > 0 && (
                 <SheetPanel
                   characters={characters}
@@ -274,7 +274,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                   }}
                 />
               )}
-              <div style={{ padding: 16, display: "grid", gap: 12, marginTop: characters.length > 0 ? "auto" : 0 }}>
+              <div className="sheet-foot">
                 {isKp && sheet && (
                   <button
                     className="btn"

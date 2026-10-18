@@ -73,7 +73,7 @@ export function AudioPanel({ me, library, bgm, enabled, send }: { me: Caller; li
             <input type="range" min={0} max={100} value={volume} aria-label="기본 볼륨" onChange={(e) => setVolume(Number(e.target.value))} style={{ accentColor: "#7c86f7" }} />
           </label>
         </div>
-        <button className="btn primary" disabled={!enabled || busy || library.length >= MAX_AUDIO_TRACKS} onClick={() => input.current?.click()}>
+        <button className="btn" disabled={!enabled || busy || library.length >= MAX_AUDIO_TRACKS} onClick={() => input.current?.click()}>
           {busy ? "올리는 중…" : "파일 고르기"}
         </button>
         <input ref={input} type="file" accept="audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/webm,audio/x-wav,audio/aac" aria-label="음원 파일" hidden onChange={(e) => pick(e.target.files?.[0])} />
