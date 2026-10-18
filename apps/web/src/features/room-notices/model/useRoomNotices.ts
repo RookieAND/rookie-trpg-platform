@@ -35,6 +35,8 @@ export function useRoomNotices({ lastError, sendFailed, reconnected, lastUndo }:
   useEffect(() => {
     if (lastUndo) push("info", `되돌렸어요 · ${lastUndo.label}`);
   }, [lastUndo, push]);
+
+  /** 화면에서 직접 띄우는 한 줄 안내 */
   const notify = useCallback((text: string) => push("info", text), [push]);
 
   return { toasts, dismiss, notify };

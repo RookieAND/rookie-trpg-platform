@@ -1,3 +1,4 @@
+import { PINGS_PER_SECOND, pingRecipients } from "./ping";
 import {
   BGM_STOP,
   MAX_SKILLS,
@@ -473,6 +474,8 @@ export class Room {
         return this.objectMove(who, command.data);
       case "object.update":
         return this.objectUpdate(who, command.data);
+      case "board.ping":
+        return this.boardPing(who, command.data);
       case "object.remove":
         return this.objectRemove(who, command.data.id);
       case "roll.request":
@@ -918,7 +921,7 @@ export class Room {
     if (denied) return denied;
     const entries: InitiativeEntry[] = [...this.characters.values()]
       .slice(0, MAX_INITIATIVE_ENTRIES)
-      .map((c) => ({ id: this.newId(), name: c.name, dex: c.characteristics.DEX, characterId: c.id }));
+      .map((c) => ({ id: this.newId(), name: c.name, dex: c.characteristics.DEX, characterId: c.id, ...(c.ownerId ? { ownerId: c.ownerId } : {}) }));
     this.initiative = { entries: sortByDex(entries), turn: 0, round: 1 };
     return this.initiativeOut();
   }
@@ -1306,6 +1309,17 @@ export class Room {
     cands.sort((a, b) => a.d - b.d);
     const hit = cands.find((c) => free(c.x, c.y));
     return hit ? { x: hit.x, y: hit.y } : { x, y };
+  }
+
+  /** 보드를 가리키는 일회성 신호. 저장·버퍼에 남기지 않는다. */
+  private boardPing(who: Actor, d: { sceneId: string; x: number; y: number }): Result {
+    if (who.role === "spectator") return fail("forbidden", "관전자는 가리킬 수 없어요.");
+    if (d.sceneId !== this.activeSceneId) return fail("bad_message", "지금 진행 중인 장면이 아니에요.");
+    if (this.tooMany(`ping:${who.userId}`, PINGS_PER_SECOND)) return fail("rate_limited", "너무 빨리 가리키고 있어요. 잠시 뒤에 다시 해 주세요.");
+    const x = Math.max(0, Math.min(1000, d.x));
+    const y = Math.max(0, Math.min(800, d.y));
+    const users = pingRecipients(this.members.values(), this.fogAreas(d.sceneId), x, y, who.userId);
+    return ok(this.emitTo({ type: "board.pinged", data: { id: this.newId(), userId: who.userId, userName: who.name, x, y, sceneId: d.sceneId, at: this.now() } }, { users }));
   }
 
   private objectMove(who: Actor, d: { id: string; x: number; y: number; rev: number }): Result {

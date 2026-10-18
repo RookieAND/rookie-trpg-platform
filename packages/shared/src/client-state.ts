@@ -8,6 +8,7 @@ import type {
   Initiative,
   MadnessResult,
   GameObject,
+  BoardPing,
   Scene,
   Transition,
   Handout,
@@ -65,6 +66,8 @@ export interface RoomState {
   /** 마지막 세션 종료 정산. 다음 세션이 시작되면 지운다. */
   lastEnd: EndSummary | null;
   hiddenRolls: Array<{ id: string; userName: string; at: number }>;
+  /** 최근 핑(최대 MAX_PINGS개). 화면이 몇 초 보여 주고 지운다. */
+  pings: BoardPing[];
   lastError: { code: string; message: string; requestId?: string } | null;
   /** 마지막으로 되돌린 동작. n이 바뀌면 새 되돌림이다. */
   lastUndo: { n: number; label: string } | null;
@@ -99,12 +102,14 @@ export const initialRoomState = (roomId = ""): RoomState => ({
   handouts: {},
   spotlight: null,
   hiddenRolls: [],
+  pings: [],
   lastEnd: null,
   lastError: null,
   lastUndo: null,
 });
 
 const MAX_ROLLS = 200;
+const MAX_PINGS = 8;
 
 /** 서버 메시지 하나를 적용해 새 상태를 돌려준다. 같은 이벤트를 두 번 받아도 결과가 같다. */
 export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomState {
@@ -141,6 +146,7 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       handouts: Object.fromEntries(d.handouts.map((h) => [h.id, h])),
       spotlight: null,
       hiddenRolls: [],
+      pings: [],
       lastEnd: null,
       lastError: null,
     };
@@ -162,6 +168,9 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       const { [ev.data.id]: _gone, ...rest } = state.objects;
       return { ...next, objects: rest };
     }
+    case "board.pinged":
+      if (state.pings.some((p) => p.id === ev.data.id)) return next;
+      return { ...next, pings: [...state.pings, ev.data].slice(-MAX_PINGS) };
     case "audio.library":
       return { ...next, audioLibrary: ev.data.tracks };
     case "audio.play":

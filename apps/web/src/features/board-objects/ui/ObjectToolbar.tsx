@@ -63,6 +63,13 @@ export function ObjectToolbar({
   const addAll = () => {
     for (const p of players) addToken(p.userId, "");
   };
+  // 전투 정리·컷신 때 PL 토큰을 한꺼번에 잠그거나 푼다. 하나씩 보내도 연결당 속도 제한(버스트 120)보다 훨씬 적다.
+  const plTokens = objects.filter((o) => o.kind === "token" && o.ownerId);
+  const allLocked = plTokens.length > 0 && plTokens.every((o) => o.locked);
+  const toggleLockAll = () => {
+    const locked = !allLocked;
+    for (const o of plTokens) if (Boolean(o.locked) !== locked) send({ type: "object.update", data: { id: o.id, locked } });
+  };
   const commitRename = () => {
     const v = rename.trim();
     if (selected && v && v !== selected.name) send({ type: "object.update", data: { id: selected.id, name: v.slice(0, 40) } });
@@ -110,6 +117,9 @@ export function ObjectToolbar({
       {players.length > 1 && (
         <button className="btn" disabled={!enabled} title="PL마다 그 사람 이름으로 토큰을 하나씩 놓아요" onClick={addAll}>PL 전원 토큰 만들기</button>
       )}
+      <button className="btn" data-testid="lock-all" aria-pressed={allLocked} disabled={!enabled || plTokens.length === 0} title={allLocked ? "PL 토큰의 잠금을 모두 풀어요" : "PL 토큰을 모두 잠가 움직이지 못하게 해요(전투 정리·컷신용)"} onClick={toggleLockAll}>
+        {allLocked ? "이동 풀기" : "이동 잠금"}
+      </button>
       <button className="btn" disabled={!enabled} title="가구·단서 같은 소품을 놓아요" onClick={() => add("prop", "object")}>+ 소품</button>
       <button className="btn" disabled={!enabled} title="PL에게 보이지 않는 메모용 오브젝트를 놓아요" onClick={() => add("prop", "gm")}>+ GM 전용</button>
     </div>

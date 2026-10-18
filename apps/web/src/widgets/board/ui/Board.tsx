@@ -1,13 +1,19 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import type { FogArea, GameObject, Role } from "@coc-vtt/shared";
+import type { BoardPing, FogArea, GameObject, Role } from "@coc-vtt/shared";
 import { imageUrl } from "@/shared/api";
+import { Pings } from "./Ping";
 
 const W = 1000;
 const H = 800;
 const R = 24;
 const MAX_ZOOM = 4;
 const KEY_STEP = 10;
+/** 격자 한 칸의 보드 단위 */
+const CELL = 40;
+/** 길게 누르면 핑이 되는 시간(ms)과, 이만큼(화면 px) 움직이면 길게 누르기가 아니다 */
+const LONG_PRESS_MS = 550;
+const LONG_PRESS_SLOP = 10;
 
 interface View {
   x: number;
@@ -37,14 +43,38 @@ interface Props {
   fog?: { areas: FogArea[]; preview: boolean; /** 한 번이라도 보였던 곳: 지금 안 보여도 배경은 어둡게 보인다 */ explored?: FogArea[] };
   /** 켜 두면 빈 곳을 눌렀을 때 선택 대신 그 좌표를 알린다(영역 밝히기). */
   onPick?: (x: number, y: number) => void;
+  /** 있으면 빈 곳·토큰을 길게 누르거나 Alt+클릭·더블클릭할 때 그 좌표를 알린다(핑). 지금 진행 중인 장면에서만 준다. */
+  onPing?: (x: number, y: number) => void;
+  /** 최근에 받은 핑과 지금 보는 장면. 그 장면의 핑만 그린다. */
+  pings?: BoardPing[];
+  sceneId?: string;
+  /** 지금 차례인 토큰들(전투 중). 점선 링과 '차례' 라벨로 강조한다. */
+  turnTokenIds?: string[];
+  /** 끌기를 시작할 때(내가 움직일 수 있는 토큰) */
+  onDragStart?: (obj: GameObject) => void;
+  /** 끄면(움직임 줄이기) 핑 파동을 그리지 않고 고정된 고리만 보여 준다. */
+  animate?: boolean;
 }
 
-export function Board({ objects, background, me, canInteract, onMove, selectedId, onSelect, fog, onPick }: Props) {
+export function Board({ objects, background, me, canInteract, onMove, selectedId, onSelect, fog, onPick, onPing, pings, sceneId, turnTokenIds, onDragStart, animate = true }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
   const [view, setView] = useState<View>(FULL);
   const pan = useRef<{ px: number; py: number; v: View } | null>(null);
   const kbTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const press = useRef<{ timer: ReturnType<typeof setTimeout>; cx: number; cy: number } | null>(null);
+  const cancelPress = () => {
+    if (press.current) clearTimeout(press.current.timer);
+    press.current = null;
+  };
+  useEffect(() => cancelPress, []);
+  /** 길게 누르면 그 자리를 핑한다. 많이 움직이거나 손을 떼면 취소된다. */
+  const startPress = (e: React.PointerEvent) => {
+    cancelPress();
+    if (!onPing || onPick) return;
+    const p = toBoard(e);
+    press.current = { cx: e.clientX, cy: e.clientY, timer: setTimeout(() => { press.current = null; onPing(Math.round(p.x), Math.round(p.y)); }, LONG_PRESS_MS) };
+  };
   const zoomed = view.w < W;
   const mineToken = objects.find((o) => o.kind === "token" && o.ownerId === me.userId);
 
@@ -83,7 +113,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
       width="100%"
       height="100%"
       role="application"
-      aria-label="게임 보드. 토큰을 고르고 방향키로 움직일 수 있어요. + − 키로 확대·축소해요."
+      aria-label="게임 보드. 토큰을 고르고 방향키로 움직일 수 있어요. + − 키로 확대·축소하고, P 키나 길게 누르기로 모두에게 가리킬 수 있어요."
       tabIndex={0}
       data-testid="board"
       onWheel={(e) => {
@@ -95,6 +125,10 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         if (e.key === "+" || e.key === "=") return void zoomAt(1.25);
         if (e.key === "-" || e.key === "_") return void zoomAt(0.8);
         if (e.key === "0") return void setView(FULL);
+        if ((e.key === "p" || e.key === "P") && onPing) {
+          const sel = objects.find((x) => x.id === selectedId);
+          return void (sel && onPing(Math.round(sel.x), Math.round(sel.y)));
+        }
         const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
         if (!dir) return;
         const o = objects.find((x) => x.id === selectedId);
@@ -112,8 +146,21 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
           kbTimer.current = undefined;
         }, 350);
       }}
+      onContextMenu={(e) => onPing && e.preventDefault()}
+      onDoubleClick={(e) => {
+        if (!onPing || onPick) return;
+        if (e.target !== svg.current && (e.target as Element).getAttribute("data-bg") === null) return;
+        const p = toBoard(e as unknown as React.PointerEvent);
+        onPing(Math.round(p.x), Math.round(p.y));
+      }}
       onPointerDown={(e) => {
         if (e.target !== svg.current && (e.target as Element).getAttribute("data-bg") === null) return;
+        if (e.altKey && onPing && !onPick) {
+          const p = toBoard(e);
+          onPing(Math.round(p.x), Math.round(p.y));
+          return;
+        }
+        startPress(e);
         if (onPick) {
           const p = toBoard(e);
           onPick(Math.round(p.x), Math.round(p.y));
@@ -126,6 +173,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         }
       }}
       onPointerMove={(e) => {
+        if (press.current && Math.hypot(e.clientX - press.current.cx, e.clientY - press.current.cy) > LONG_PRESS_SLOP) cancelPress();
         if (pan.current) {
           const el = svg.current!;
           const scale = Math.min(el.clientWidth / pan.current.v.w, el.clientHeight / pan.current.v.h);
@@ -134,7 +182,9 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         }
         if (drag && e.buttons) setDrag({ ...drag, ...toBoard(e) });
       }}
+      onPointerCancel={cancelPress}
       onPointerUp={() => {
+        cancelPress();
         if (pan.current) {
           pan.current = null;
           return;
@@ -195,8 +245,14 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
             style={{ cursor: canMove(o) ? "grab" : "default" }}
             onPointerDown={(e) => {
               e.stopPropagation();
+              if (e.altKey && onPing && !onPick) {
+                const p = toBoard(e);
+                return void onPing(Math.round(p.x), Math.round(p.y));
+              }
+              startPress(e);
               onSelect(o.id);
               if (canMove(o)) {
+                onDragStart?.(o);
                 (e.currentTarget as SVGGElement).ownerSVGElement?.setPointerCapture(e.pointerId);
                 setDrag({ id: o.id, x: o.x, y: o.y });
               }
@@ -204,6 +260,13 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
           >
             <circle className="tok-hit" cx={pos.x} cy={pos.y} r={44} />
             {mine && <circle cx={pos.x} cy={pos.y} r={R + 5} fill="none" stroke="#4cc38a" strokeWidth="1.5" opacity="0.55" data-testid="mine-ring" pointerEvents="none" />}
+            {turnTokenIds?.includes(o.id) && (
+              <g pointerEvents="none" data-testid="turn-ring">
+                <circle cx={pos.x} cy={pos.y} r={R + 13} fill="none" stroke="#f0b429" strokeWidth="2.5" strokeDasharray="5 4" />
+                <rect x={pos.x - 20} y={pos.y + R + 24} width="40" height="16" rx="8" fill="#f0b429" />
+                <text x={pos.x} y={pos.y + R + 36} textAnchor="middle" fill="#08090a" fontSize="11" fontWeight="700">차례</text>
+              </g>
+            )}
             {selectedId === o.id && <circle cx={pos.x} cy={pos.y} r={R + 8} fill="none" stroke="#7c86f7" strokeWidth="2" />}
             {o.image ? (
               <>
@@ -232,6 +295,15 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
               {hidden ? " · GM 전용" : ""}
               {o.locked ? " · 잠김" : ""}
             </text>
+            {drag?.id === o.id && Math.hypot(drag.x - o.x, drag.y - o.y) >= CELL / 8 && (
+              <g pointerEvents="none" data-testid="move-dist">
+                <line x1={o.x} y1={o.y} x2={drag.x} y2={drag.y} stroke="#b8c7ff" strokeWidth="1.5" strokeDasharray="4 4" opacity="0.7" />
+                <circle cx={o.x} cy={o.y} r={3} fill="#b8c7ff" opacity="0.7" />
+                <text x={drag.x + R + 10} y={drag.y + 5} fill="#e7e9ec" fontSize="14" fontWeight="600" stroke="#08090a" strokeWidth="3" paintOrder="stroke">
+                  {(Math.hypot(drag.x - o.x, drag.y - o.y) / CELL).toFixed(1)}칸
+                </text>
+              </g>
+            )}
             {mine && (
               <g pointerEvents="none" data-testid="mine-badge">
                 <rect x={pos.x + R - 12} y={pos.y - R - 6} width="22" height="16" rx="8" fill="#4cc38a" />
@@ -241,6 +313,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
           </g>
         );
       })}
+      {pings && sceneId !== undefined && <Pings pings={pings} sceneId={sceneId} animate={animate} />}
     </svg>
     <div className="zoom-ctl" role="group" aria-label="보드 확대·이동">
       <button type="button" className="btn sm" aria-label="확대" onClick={() => zoomAt(1.25)} disabled={view.w <= W / MAX_ZOOM + 0.5}>＋</button>

@@ -15,7 +15,7 @@ import { SoundControl, useAudioEngine, useAudioPreference } from "@/features/aud
 import { LoadCharacter } from "@/features/load-character";
 import { useRoom } from "@/features/room-realtime";
 import { UndoButton, useUndo } from "@/features/undo-last";
-import { ConnectionBanner, MyTurnBadge, Toasts, isMyTurn, useRoomNotices, useUnseen } from "@/features/room-notices";
+import { ConnectionBanner, MyTurnBadge, Toasts, findTurnTokens, isMyTurn, offTurnNotice, useRoomNotices, useUnseen } from "@/features/room-notices";
 import { MadnessResultCard } from "@/features/manage-madness";
 import { EndSummaryCard } from "@/features/session-control";
 import { SaveToVaultButton } from "@/features/save-to-vault";
@@ -116,6 +116,11 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   // 새로 받은 핸드아웃(PL만). 핸드아웃 탭을 보고 있으면 본 것으로 친다.
   const newHandouts = useUnseen(handoutIds, { ready: state.ready, viewing: tab === "handout", enabled: !isKp });
   const myTurn = isMyTurn(state.initiative, characters, me.userId);
+  // 전투 중 지금 차례인 PL의 토큰들(칸 → 캐릭터 주인 → 그 PL의 토큰). 연결이 없으면 빈 목록이라 강조하지 않는다.
+  const turnTokenIds = useMemo(() => findTurnTokens(state.initiative, characters, objects), [state.initiative, characters, objects]);
+  const lastOffTurn = useRef<string | null>(null); // 같은 차례에는 안내를 한 번만
+  const lastPing = useRef(0);
+  const canPing = role !== "spectator" && canEditBoard && shownSceneId === state.activeSceneId;
 
   if (authExpired) {
     return (
@@ -136,6 +141,19 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     );
   }
 
+  const ping = (x: number, y: number) => {
+    const t = Date.now();
+    if (t - lastPing.current < 600) return; // 서버 제한(초당 2회)에 걸리지 않게 화면에서 먼저 거른다
+    lastPing.current = t;
+    send({ type: "board.ping", data: { sceneId: shownSceneId, x, y } });
+  };
+  const onDragStart = (o: GameObject) => {
+    if (role !== "pl") return;
+    const n = offTurnNotice(state.initiative, characters, me.userId, o.id, turnTokenIds);
+    if (!n || lastOffTurn.current === n.turnKey) return;
+    lastOffTurn.current = n.turnKey;
+    notices.notify(n.text);
+  };
   const move = (o: GameObject, x: number, y: number) => send({ type: "object.move", data: { id: o.id, x, y, rev: o.rev } });
 
   return (
@@ -175,7 +193,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
             />
           )}
           {isKp && <SceneBar me={me} scenes={scenes} tracks={state.audioLibrary} activeId={state.activeSceneId} viewId={shownSceneId} onView={setViewSceneId} enabled canActivate={!paused} send={send} />}
-          <Board objects={objects} background={state.scenes[shownSceneId]?.background} me={{ userId: me.userId, role }} canInteract={canEditBoard} onMove={move} selectedId={selectedId} onSelect={setSelectedId} fog={fogView} onPick={isKp && fogPicking ? (x, y) => send({ type: "fog.reveal", data: { sceneId: shownSceneId, x, y, r: fogRadius } }) : undefined} />
+          <Board objects={objects} background={state.scenes[shownSceneId]?.background} me={{ userId: me.userId, role }} canInteract={canEditBoard} onMove={move} selectedId={selectedId} onSelect={setSelectedId} fog={fogView} onPing={canPing ? ping : undefined} pings={state.pings} sceneId={shownSceneId} turnTokenIds={turnTokenIds} onDragStart={onDragStart} animate={fx.enabled} onPick={isKp && fogPicking ? (x, y) => send({ type: "fog.reveal", data: { sceneId: shownSceneId, x, y, r: fogRadius } }) : undefined} />
           {isKp && (
             <StageCues roomId={roomId} enabled={state.sessionStatus !== "PAUSED"} send={send} source={cueSource} />
           )}
