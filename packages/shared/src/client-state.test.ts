@@ -29,6 +29,22 @@ const snap = (over: Partial<Snapshot> = {}): ServerMessage => ({
   },
 });
 
+describe("board.pinged", () => {
+  const ping = (id: string): ServerMessage => ({ seq: 5, event: { type: "board.pinged", data: { id, userId: "u", userName: "서하", x: 1, y: 2, sceneId: "main", at: 1 } } });
+  it("핑을 쌓되 같은 id는 한 번만, 최근 8개까지만 둔다", () => {
+    let s = applyServerMessage(initialRoomState("r"), ping("a"));
+    s = applyServerMessage(s, ping("a"));
+    expect(s.pings).toHaveLength(1);
+    for (let i = 0; i < 10; i++) s = applyServerMessage(s, ping(`p${i}`));
+    expect(s.pings).toHaveLength(8);
+    expect(s.pings.at(-1)?.id).toBe("p9");
+  });
+  it("새로 접속(snapshot)하면 핑이 비워진다", () => {
+    const s = applyServerMessage(applyServerMessage(initialRoomState("r"), ping("a")), snap());
+    expect(s.pings).toEqual([]);
+  });
+});
+
 describe("applyServerMessage", () => {
   it("snapshot으로 상태를 통째로 맞춘다", () => {
     const s = applyServerMessage(initialRoomState(), snap());

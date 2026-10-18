@@ -18,6 +18,8 @@ const ctx = async () => {
 const run = Date.now().toString(36);
 const ROOM = `안개 낀 저택 ${run}`;
 const CHAR = `윤서하 ${run}`;
+const SHOTS = process.env.SHOTS_DIR ?? "/tmp/shots-pltools";
+await (await import("node:fs/promises")).mkdir(SHOTS, { recursive: true });
 const step = (m) => console.log("✓", m);
 // 설정·장면 설정 메뉴 안의 항목은 메뉴를 먼저 열어야 보인다. 쓰고 나면 Esc로 닫아 아래 화면을 가리지 않게 한다.
 const openSettings = async (page) => { if (!(await page.getByRole("menu").count())) await page.getByTestId("settings-menu").click(); };
@@ -454,6 +456,21 @@ try {
   });
   step("PL이 끈 토큰이 KP 화면에서 움직임");
 
+  // 핑: PL이 Alt+클릭하면 KP 화면에 파동과 이름표가 잠시 뜬다(PL 화면에도 보인다)
+  {
+    const bb = await pl.getByTestId("board").boundingBox();
+    await pl.keyboard.down("Alt");
+    await pl.mouse.click(bb.x + bb.width * 0.75, bb.y + bb.height * 0.25);
+    await pl.keyboard.up("Alt");
+    await kp.getByTestId("ping").waitFor();
+    assert.match(await kp.getByTestId("ping").textContent(), /서하/);
+    await pl.getByTestId("ping").waitFor();
+    await pl.screenshot({ path: `${SHOTS}/ping-pl.png` });
+    await kp.screenshot({ path: `${SHOTS}/ping-kp.png` });
+    await kp.getByTestId("ping").waitFor({ state: "detached" });
+  }
+  step("PL이 Alt+클릭으로 가리키면 KP 화면에 이름표 달린 핑이 잠시 뜨고 사라짐");
+
   // GM 전용 오브젝트는 PL에게 안 보임
   await kp.getByRole("button", { name: "+ GM 전용" }).click();
   await kp.getByTestId("obj-숨김 소품2").waitFor();
@@ -633,9 +650,15 @@ try {
   step("슬롯 1에 등록한 장면 전환이 숫자 키 1로 실행됨");
 
   // 전투 순서: KP가 시작하고 NPC를 넣고 넘기면 PL 화면에 같은 순서와 차례가 보임
+  // 활성 장면(서재)에 서하 소유 토큰을 놓아 둔다: 차례 링과 이동 안내를 보려는 것
+  await kp2.getByLabel("새 토큰 이름").fill("전투서하");
+  await kp2.getByRole("button", { name: "+ 토큰" }).click();
+  await pl.getByTestId("obj-전투서하").waitFor();
   await kp2.getByRole("tab", { name: /^전투/ }).click();
   await kp2.getByRole("button", { name: "전투 시작" }).click();
-  await pl.getByTestId("my-turn").waitFor(); // 전투 탭을 안 봐도 내 차례면 보드 위에 표시
+  await pl.getByTestId("my-turn").waitFor();
+  await pl.getByTestId("obj-전투서하").getByTestId("turn-ring").waitFor();
+  await pl.screenshot({ path: `${SHOTS}/turn-ring-pl.png` }); // 전투 탭을 안 봐도 내 차례면 보드 위에 표시
   await pl.getByRole("tab", { name: /^전투/ }).click();
   await pl.getByTestId("initiative-entry").filter({ hasText: CHAR }).waitFor();
   await kp2.getByLabel("NPC 이름").fill("광신도");
@@ -649,6 +672,29 @@ try {
   await pl.getByTestId("initiative-entry").first().and(pl.locator("[aria-current=step]")).waitFor();
   assert.equal(await pl.getByRole("button", { name: "다음 차례" }).count(), 0);
   step("전투 순서: DEX 순으로 서고 NPC를 끼워 넣고 차례를 넘기면 PL 화면에 같은 순서가 보임");
+
+  // 차례가 아니면 링이 사라지고, 끌면 서버는 허용하되 한 줄 안내가 뜬다. 끄는 동안 거리가 보인다.
+  await pl.getByTestId("turn-ring").waitFor({ state: "detached" });
+  {
+    const b = await pl.getByTestId("obj-전투서하").locator("circle").first().boundingBox();
+    await pl.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await pl.mouse.down();
+    await pl.mouse.move(b.x + b.width / 2 + 90, b.y + b.height / 2, { steps: 6 });
+    await pl.getByTestId("move-dist").waitFor();
+    assert.match(await pl.getByTestId("move-dist").textContent(), /\d+\.\d칸/);
+    await pl.screenshot({ path: `${SHOTS}/move-dist-pl.png` });
+    await pl.mouse.up();
+    await pl.getByTestId("toast").getByText("지금은 광신도의 차례예요").waitFor();
+    await pl.getByTestId("move-dist").waitFor({ state: "detached" });
+  }
+  step("차례가 아닌 PL이 끌면 '지금은 광신도의 차례예요' 안내와 이동 거리가 뜨고 링은 차례 토큰에만 있음");
+
+  // 이동 잠금/풀기: PL 토큰을 한 번에 잠그고 푼다
+  await kp2.getByTestId("lock-all").click();
+  await pl.getByTestId("obj-전투서하").and(pl.locator('[data-locked="true"]')).waitFor();
+  await kp2.getByRole("button", { name: "이동 풀기" }).click();
+  await pl.getByTestId("obj-전투서하").and(pl.locator(":not([data-locked])")).waitFor();
+  step("KP의 '이동 잠금/이동 풀기'로 PL 토큰이 한꺼번에 잠기고 풀림");
   await kp2.getByRole("tab", { name: "굴림" }).click();
   await pl.getByRole("tab", { name: "굴림" }).click();
 

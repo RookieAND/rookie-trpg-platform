@@ -3,4 +3,4 @@ export { ConnectionBanner } from "./ui/ConnectionBanner";
 export { MyTurnBadge } from "./ui/MyTurnBadge";
 export { useRoomNotices } from "./model/useRoomNotices";
 export { useUnseen } from "./model/unseen";
-export { isMyTurn } from "./model/turn";
+export { isMyTurn, findTurnTokens, offTurnNotice } from "./model/turn";

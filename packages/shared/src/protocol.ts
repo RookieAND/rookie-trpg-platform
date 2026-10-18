@@ -142,6 +142,8 @@ export interface InitiativeEntry {
   name: string;
   dex: number;
   characterId?: string;
+  /** 캐릭터의 주인(PL). 다른 PL의 시트는 안 보여도 보드에서 차례 토큰을 찾을 수 있게 서버가 채운다. */
+  ownerId?: string;
 }
 
 /** 전투 순서(DEX 높은 순). turn은 지금 차례인 칸의 위치, round는 몇 라운드째인지. */
@@ -384,6 +386,8 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
       vision: z.number().int().min(0).max(FOG_MAX_RADIUS).optional(),
     }),
   }),
+  /** 보드의 한 곳을 모두에게 가리킨다(저장하지 않는 일회성 신호). sceneId는 보고 있는 장면이고 활성 장면과 같아야 한다. */
+  z.object({ type: z.literal("board.ping"), data: z.object({ sceneId: id, x: coord, y: coord }) }),
   z.object({ type: z.literal("scene.fog"), data: z.object({ id, enabled: z.boolean() }) }),
   z.object({ type: z.literal("fog.reveal"), data: z.object({ sceneId: id, x: coord, y: coord, r: z.number().int().min(10).max(FOG_MAX_RADIUS) }) }),
   z.object({ type: z.literal("fog.remove"), data: z.object({ sceneId: id, zoneId: id }) }),
@@ -621,11 +625,23 @@ export interface RollAsk {
   at: number;
 }
 
+export interface BoardPing {
+  id: string;
+  userId: string;
+  userName: string;
+  x: number;
+  y: number;
+  sceneId: string;
+  at: number;
+}
+
 export type ServerEvent =
   | { type: "snapshot"; data: Snapshot }
   | { type: "object.added"; data: GameObject }
   | { type: "object.updated"; data: GameObject }
   | { type: "object.removed"; data: { id: string } }
+  /** 누가 보드의 한 곳을 가리켰다. 저장·기록에 남지 않고, 그 자리가 보이는 사람에게만 간다. */
+  | { type: "board.pinged"; data: BoardPing }
   | { type: "settings.effects"; data: { effects: EffectSettings } }
   | { type: "settings.madness"; data: { entries: string[] } }
   | { type: "flow.updated"; data: { flow: Flow } }

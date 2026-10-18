@@ -30,5 +30,8 @@ export function useRoomNotices({ lastError, sendFailed, reconnected }: Input) {
     if (reconnected > 0) push("info", RECONNECTED_TEXT);
   }, [reconnected, push]);
 
-  return { toasts, dismiss };
+  /** 화면에서 직접 띄우는 한 줄 안내 */
+  const notify = useCallback((text: string) => push("info", text), [push]);
+
+  return { toasts, dismiss, notify };
 }
