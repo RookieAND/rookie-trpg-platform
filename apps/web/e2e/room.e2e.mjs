@@ -531,7 +531,7 @@ try {
   await undoTok.click();
   await kp.getByRole("button", { name: "삭제", exact: true }).click();
   await undoTok.waitFor({ state: "detached" });
-  await kp.getByTestId("toast").getByText(/되돌리려면 Ctrl\+Z/).waitFor();
+  await kp.getByTestId("toast").getByText(/되돌리려면 Ctrl\+Z/).first().waitFor();
   await kp.keyboard.press("Control+z");
   await undoTok.waitFor();
   await kp.getByTestId("toast").getByText(/되돌렸어요/).waitFor();
