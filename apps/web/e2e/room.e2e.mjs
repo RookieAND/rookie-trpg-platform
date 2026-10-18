@@ -936,6 +936,26 @@ try {
     await pls[2].screenshot({ path: `${SHOT}/pl3-board.png` });
   }
 
+  // 보드: 방향키로 내 토큰을 움직이고, 확대·축소와 '전체'로 보기 영역을 바꾼다
+  {
+    const tok = pl.locator('[data-mine="true"]').first();
+    await tok.waitFor();
+    const tid = await tok.getAttribute("data-testid");
+    await tok.click();
+    const x0 = Number(await tok.getAttribute("data-x"));
+    for (let i = 0; i < 3; i++) await pl.keyboard.press("ArrowRight");
+    await pl.waitForFunction(([t, x]) => Number(document.querySelector(`[data-testid="${t}"]`)?.getAttribute("data-x")) === x, [tid, x0 + 30]);
+    await kp2.waitForFunction(([t, x]) => Number(document.querySelector(`[data-testid="${t}"]`)?.getAttribute("data-x")) === x, [tid, x0 + 30]);
+    const vb = async (page) => (await page.getByTestId("board").getAttribute("viewBox")).split(" ").map(Number);
+    assert.equal((await vb(pl))[2], 1000);
+    await pl.getByRole("button", { name: "확대" }).click();
+    assert.ok((await vb(pl))[2] < 1000);
+    await pl.getByTestId("focus-mine").click();
+    await pl.getByRole("button", { name: "전체" }).click();
+    assert.equal((await vb(pl))[2], 1000);
+    step("보드: 방향키로 내 토큰이 움직여 KP에게도 보이고, 확대·내 토큰 보기·전체 보기가 동작함");
+  }
+
   // 룸 삭제: 로비 카드에서 두 번 눌러 지우면 목록에서 사라지고, 열려 있던 룸은 끊긴다
   await kp2.goto(WEB);
   const card = kp2.getByTestId("room-card").filter({ hasText: ROOM });

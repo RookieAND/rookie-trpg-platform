@@ -223,6 +223,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
    1280px 이상(데스크톱) 화면은 이 블록의 영향을 받지 않는다. */
 .side-toggle { display: none; }
 .tok-hit { fill: transparent; pointer-events: none; }
+.zoom-ctl { position: absolute; left: 12px; bottom: 64px; z-index: 2; display: flex; gap: 4px; }
+.board > svg:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
 
 @media (max-width: 768px) {
   .btn, .side .btn, .dialog .btn, .menu-panel .btn, .topbar .menu-panel .btn:not(.primary):not(.danger) { min-height: 36px; }

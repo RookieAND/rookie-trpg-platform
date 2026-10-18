@@ -1,11 +1,28 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FogArea, GameObject, Role } from "@coc-vtt/shared";
 import { imageUrl } from "@/shared/api";
 
 const W = 1000;
 const H = 800;
 const R = 24;
+const MAX_ZOOM = 4;
+const KEY_STEP = 10;
+
+interface View {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+const FULL: View = { x: 0, y: 0, w: W, h: H };
+
+/** 보기 영역을 보드 안에 가둔다. */
+const clampView = (v: View): View => {
+  const w = Math.min(W, Math.max(W / MAX_ZOOM, v.w));
+  const h = (w * H) / W;
+  return { w, h, x: Math.max(0, Math.min(W - w, v.x)), y: Math.max(0, Math.min(H - h, v.y)) };
+};
 
 interface Props {
   objects: GameObject[];
@@ -25,6 +42,25 @@ interface Props {
 export function Board({ objects, background, me, canInteract, onMove, selectedId, onSelect, fog, onPick }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [view, setView] = useState<View>(FULL);
+  const pan = useRef<{ px: number; py: number; v: View } | null>(null);
+  const kbTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const zoomed = view.w < W;
+  const mineToken = objects.find((o) => o.kind === "token" && o.ownerId === me.userId);
+
+  // 장면이 바뀌면(보이는 오브젝트의 장면이 달라지면) 전체 보기로 돌아간다.
+  const sceneKey = objects[0]?.sceneId ?? background ?? "";
+  useEffect(() => setView(FULL), [sceneKey]);
+
+  const zoomAt = (factor: number, cx = view.x + view.w / 2, cy = view.y + view.h / 2) => {
+    const w = Math.min(W, Math.max(W / MAX_ZOOM, view.w / factor));
+    const k = w / view.w;
+    setView(clampView({ x: cx - (cx - view.x) * k, y: cy - (cy - view.y) * k, w, h: (w * H) / W }));
+  };
+  const centerOn = (x: number, y: number) => {
+    const w = Math.min(view.w, W / 2);
+    setView(clampView({ x: x - w / 2, y: y - (w * H) / W / 2, w, h: (w * H) / W }));
+  };
 
   const canMove = (o: GameObject) =>
     canInteract && me.role !== "spectator" && (me.role === "kp" || (o.ownerId === me.userId && !o.locked));
@@ -39,24 +75,70 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
   };
 
   return (
+    <>
     <svg
       ref={svg}
-      viewBox={`0 0 ${W} ${H}`}
+      viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
       preserveAspectRatio="xMidYMid meet"
       width="100%"
       height="100%"
-      role="img"
-      aria-label="게임 보드"
+      role="application"
+      aria-label="게임 보드. 토큰을 고르고 방향키로 움직일 수 있어요. + − 키로 확대·축소해요."
+      tabIndex={0}
       data-testid="board"
+      onWheel={(e) => {
+        if (!e.ctrlKey && !e.metaKey && !e.altKey) return;
+        const p = toBoard(e as unknown as React.PointerEvent);
+        zoomAt(e.deltaY < 0 ? 1.25 : 0.8, p.x, p.y);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "+" || e.key === "=") return void zoomAt(1.25);
+        if (e.key === "-" || e.key === "_") return void zoomAt(0.8);
+        if (e.key === "0") return void setView(FULL);
+        const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+        if (!dir) return;
+        const o = objects.find((x) => x.id === selectedId);
+        if (!o || !canMove(o)) return;
+        e.preventDefault();
+        const step = e.shiftKey ? KEY_STEP * 5 : KEY_STEP;
+        const cur = drag?.id === o.id ? drag : { id: o.id, x: o.x, y: o.y };
+        const next = { id: o.id, x: Math.max(0, Math.min(W, cur.x + dir[0]! * step)), y: Math.max(0, Math.min(H, cur.y + dir[1]! * step)) };
+        setDrag(next);
+        // 키를 멈추면 한 번에 서버로 보낸다(연타가 오래된 위치 거절을 부르지 않게).
+        clearTimeout(kbTimer.current);
+        kbTimer.current = setTimeout(() => {
+          onMove(o, Math.round(next.x), Math.round(next.y));
+          setDrag(null);
+          kbTimer.current = undefined;
+        }, 350);
+      }}
       onPointerDown={(e) => {
-        if (e.target !== svg.current) return;
+        if (e.target !== svg.current && (e.target as Element).getAttribute("data-bg") === null) return;
         if (onPick) {
           const p = toBoard(e);
           onPick(Math.round(p.x), Math.round(p.y));
-        } else onSelect(null);
+          return;
+        }
+        onSelect(null);
+        if (zoomed) {
+          (e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId);
+          pan.current = { px: e.clientX, py: e.clientY, v: view };
+        }
       }}
-      onPointerMove={(e) => drag && setDrag({ ...drag, ...toBoard(e) })}
+      onPointerMove={(e) => {
+        if (pan.current) {
+          const el = svg.current!;
+          const scale = Math.min(el.clientWidth / pan.current.v.w, el.clientHeight / pan.current.v.h);
+          setView(clampView({ ...pan.current.v, x: pan.current.v.x - (e.clientX - pan.current.px) / scale, y: pan.current.v.y - (e.clientY - pan.current.py) / scale }));
+          return;
+        }
+        if (drag && e.buttons) setDrag({ ...drag, ...toBoard(e) });
+      }}
       onPointerUp={() => {
+        if (pan.current) {
+          pan.current = null;
+          return;
+        }
         if (!drag) return;
         const o = objects.find((x) => x.id === drag.id);
         if (o && (o.x !== drag.x || o.y !== drag.y)) onMove(o, Math.round(drag.x), Math.round(drag.y));
@@ -71,6 +153,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
       </defs>
       {background && <image href={imageUrl(background)} width={W} height={H} preserveAspectRatio="xMidYMid meet" data-testid="board-bg" pointerEvents="none" />}
       <rect width={W} height={H} fill="url(#grid)" pointerEvents="none" />
+      <rect data-bg="" width={W} height={H} fill="transparent" />
       {fog && (
         <g data-testid="fog" data-areas={fog.areas.length} pointerEvents="none">
           <mask id="fog-mask">
@@ -159,5 +242,12 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         );
       })}
     </svg>
+    <div className="zoom-ctl" role="group" aria-label="보드 확대·이동">
+      <button type="button" className="btn sm" aria-label="확대" onClick={() => zoomAt(1.25)} disabled={view.w <= W / MAX_ZOOM + 0.5}>＋</button>
+      <button type="button" className="btn sm" aria-label="축소" onClick={() => zoomAt(0.8)} disabled={!zoomed}>－</button>
+      {zoomed && <button type="button" className="btn sm" onClick={() => setView(FULL)}>전체</button>}
+      {mineToken && <button type="button" className="btn sm" data-testid="focus-mine" onClick={() => centerOn(mineToken.x, mineToken.y)}>내 토큰</button>}
+    </div>
+    </>
   );
 }
