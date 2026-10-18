@@ -1,1 +1,1 @@
-export { useRoom, type Connection } from "./model/useRoom";
+export { useRoom, type Connection, type RetryInfo, type TokenRefresh } from "./model/useRoom";

@@ -43,19 +43,21 @@ const decodePayload = (jwt: string): Record<string, unknown> | null => {
   }
 };
 
-/**
- * 로그인 뒤 주소의 `#access_token=…`에서 세션을 만든다. 서명은 서버가 검증하므로
- * 여기서는 화면에 쓸 이름과 만료 시각만 읽는다.
- */
-export function sessionFromCallbackHash(hash: string): Identity | null {
-  const q = new URLSearchParams(hash.replace(/^#/, ""));
-  const token = q.get("access_token");
-  if (!token) return null;
+/** 액세스 토큰(과 갱신 토큰)에서 화면에 쓸 신원을 만든다. 서명은 서버가 검증하므로 이름과 만료 시각만 읽는다. */
+export function sessionFromTokens(token: string, refreshToken?: string | null): Identity | null {
   const claims = decodePayload(token);
   const sub = typeof claims?.sub === "string" ? claims.sub : null;
   if (!sub) return null;
   const meta = (claims?.user_metadata ?? {}) as { full_name?: string; name?: string; custom_claims?: { global_name?: string } };
   const name = meta.custom_claims?.global_name ?? meta.full_name ?? meta.name ?? "이름 없음";
   const exp = typeof claims?.exp === "number" ? claims.exp : undefined;
-  return { userId: sub, name: name.slice(0, 40), token, expiresAt: exp };
+  return { userId: sub, name: name.slice(0, 40), token, expiresAt: exp, ...(refreshToken ? { refreshToken } : {}) };
+}
+
+/** 로그인 뒤 주소의 `#access_token=…&refresh_token=…`에서 세션을 만든다. */
+export function sessionFromCallbackHash(hash: string): Identity | null {
+  const q = new URLSearchParams(hash.replace(/^#/, ""));
+  const token = q.get("access_token");
+  if (!token) return null;
+  return sessionFromTokens(token, q.get("refresh_token"));
 }

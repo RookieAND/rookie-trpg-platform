@@ -12,7 +12,7 @@ export function useOccupations(me: Caller) {
 
   const add = useCallback(
     (input: Omit<Occupation, "id">): AddOccupationResult => {
-      if (!library) return { ok: false, message: "서재를 불러오는 중이에요. 잠시 뒤에 다시 해 주세요." };
+      if (!library) return { ok: false, message: "저장해 둔 목록을 불러오는 중이에요. 잠시 뒤에 다시 해 주세요." };
       const r = addOccupation(library.occupations, input, () => Math.random().toString(36).slice(2, 10));
       if (r.ok) update({ ...library, occupations: r.occupations });
       return r;
@@ -27,7 +27,7 @@ export function useOccupations(me: Caller) {
   );
   const edit = useCallback(
     (id: string, input: Omit<Occupation, "id">): AddOccupationResult => {
-      if (!library) return { ok: false, message: "서재를 불러오는 중이에요. 잠시 뒤에 다시 해 주세요." };
+      if (!library) return { ok: false, message: "저장해 둔 목록을 불러오는 중이에요. 잠시 뒤에 다시 해 주세요." };
       const r = updateOccupation(library.occupations, id, input);
       if (r.ok) update({ ...library, occupations: r.occupations });
       return r;
@@ -37,7 +37,7 @@ export function useOccupations(me: Caller) {
   const exportText = useCallback(() => exportOccupations(occupations), [occupations]);
   const importText = useCallback(
     (text: string): ImportResult => {
-      if (!library) return { ok: false, message: "서재를 불러오는 중이에요. 잠시 뒤에 다시 해 주세요." };
+      if (!library) return { ok: false, message: "저장해 둔 목록을 불러오는 중이에요. 잠시 뒤에 다시 해 주세요." };
       const r = importOccupations(library.occupations, text, () => Math.random().toString(36).slice(2, 10));
       if (r.ok && r.added > 0) update({ ...library, occupations: r.occupations });
       return r;

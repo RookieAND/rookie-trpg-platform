@@ -39,8 +39,7 @@ export function MadnessTableButton({ entries, send }: { entries: string[]; send:
               className="btn primary"
               disabled={tooMany}
               onClick={() => {
-                send({ type: "settings.madness", data: { entries: lines.map((l) => l.slice(0, 120)) } });
-                setOpen(false);
+                if (send({ type: "settings.madness", data: { entries: lines.map((l) => l.slice(0, 120)) } }) !== false) setOpen(false);
               }}
             >
               저장

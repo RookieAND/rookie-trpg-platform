@@ -35,11 +35,11 @@ function EndDialog({ onClose, send, defaults }: { onClose: () => void; send: (c:
   }, [onClose]);
 
   const submit = () => {
-    send({
+    const ok = send({
       type: "session.end",
       data: { growth, ...(ending.trim() ? { ending: ending.trim() } : {}), ...(san.trim() ? { sanReward: san.trim() } : {}) },
     });
-    onClose();
+    if (ok !== false) onClose();
   };
 
   return (

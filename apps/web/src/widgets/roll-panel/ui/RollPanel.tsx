@@ -14,7 +14,8 @@ interface Props {
   isKp: boolean;
   disabled: boolean;
   error: string | null;
-  onRoll: (expr: string, secret: boolean) => void;
+  /** false를 돌려주면 보내지 못한 것이라 식을 지우지 않는다. */
+  onRoll: (expr: string, secret: boolean) => unknown;
   onPush: (rollId: string) => void;
   onLuck: (rollId: string) => void;
 }
@@ -26,8 +27,7 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
 
   const submit = () => {
     if (!expr.trim() || disabled) return;
-    onRoll(expr.trim(), secret);
-    setExpr("");
+    if (onRoll(expr.trim(), secret) !== false) setExpr("");
   };
 
   // 실패한 시트 판정에는 굴린 사람(또는 KP)이 푸시하거나 행운을 쓸 수 있다.
