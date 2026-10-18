@@ -1,5 +1,5 @@
 import { describeOutcome } from "./describe";
-import type { RollLogEntry } from "./protocol";
+import type { RollLogEntry, RollRow } from "./protocol";
 
 export interface RollLogExportOptions {
   /** 본문 첫 줄에 쓸 제목(룸 이름 등) */
@@ -12,7 +12,7 @@ export interface RollLogExportOptions {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-const clock = (at: number, timeZone?: string) => {
+export const clock = (at: number, timeZone?: string) => {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     month: "2-digit",
@@ -24,6 +24,17 @@ const clock = (at: number, timeZone?: string) => {
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? pad(0);
   return `${get("month")}/${get("day")} ${get("hour")}:${get("minute")}`;
 };
+
+/** 굴림 한 줄을 글로 풀어 낸 모양. 굴림 기록 내보내기와 세션 기록이 같은 풀이를 쓴다. */
+export function rollRow(r: RollLogEntry): RollRow {
+  return {
+    at: r.at,
+    who: r.label ? `${r.userName} · ${r.label}` : r.userName,
+    expr: r.expr,
+    result: describeOutcome(r.outcome),
+    tags: [r.secret ? "비밀" : "", r.pushOf ? "푸시" : "", r.luckOf ? "행운" : ""].filter(Boolean),
+  };
+}
 
 /**
  * 굴림 기록을 사람이 읽을 수 있는 마크다운으로 만든다. 세션마다 묶고 오래된 굴림이 위에 온다.
@@ -44,9 +55,8 @@ export function formatRollLog(rolls: readonly RollLogEntry[], opts: RollLogExpor
       if (lines[lines.length - 1] !== "") lines.push("");
       lines.push(r.session > 0 ? `## 세션 ${r.session}` : "## 세션 시작 전", "");
     }
-    const tags = [r.secret ? "비밀" : "", r.pushOf ? "푸시" : "", r.luckOf ? "행운" : ""].filter(Boolean);
-    const who = r.label ? `${r.userName} · ${r.label}` : r.userName;
-    lines.push(`- ${clock(r.at, opts.timeZone)} **${who}** \`${r.expr}\` — ${describeOutcome(r.outcome)}${tags.length ? ` (${tags.join(", ")})` : ""}`);
+    const row = rollRow(r);
+    lines.push(`- ${clock(row.at, opts.timeZone)} **${row.who}** \`${row.expr}\` — ${row.result}${row.tags.length ? ` (${row.tags.join(", ")})` : ""}`);
   }
   return lines.join("\n") + "\n";
 }

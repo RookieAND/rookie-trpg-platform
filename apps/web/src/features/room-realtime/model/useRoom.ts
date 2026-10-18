@@ -4,6 +4,7 @@ import { REALTIME_URL } from "@/shared/config";
 import {
   applyServerMessage,
   initialRoomState,
+  type ChatMessage,
   type ClientCommand,
   type RoomState,
   type ServerMessage,
@@ -147,5 +148,8 @@ export function useRoom({ roomId, user, name, token: initialToken, invite, refre
     return true;
   }, []);
 
-  return { state, connection, closeCode, send, retry, reconnected, sendFailed, authExpired };
+  /** HTTP로 받은 이전 대화를 같은 reducer로 합친다(id가 같으면 건너뛴다). */
+  const addChatHistory = useCallback((messages: ChatMessage[]) => dispatch({ seq: 0, event: { type: "chat.history", data: { messages, last: false } } }), []);
+
+  return { state, connection, closeCode, send, retry, reconnected, sendFailed, authExpired, addChatHistory };
 }

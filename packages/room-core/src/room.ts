@@ -47,6 +47,28 @@ import {
   MAX_MADNESS_ENTRIES,
   applyLuck,
   josa,
+  BEAT_KIND_LABEL_KO,
+  CHAT_KEEP,
+  CHAT_HISTORY_ON_JOIN,
+  CHAT_MAX_LENGTH,
+  CHAT_PAGE_MAX,
+  DEFAULT_CHAT_SETTINGS,
+  LOG_KEEP,
+  canSeeChat,
+  describeOutcome,
+  normalizeChatText,
+  parseChatInput,
+  queryLog,
+  rollRow,
+  type ChatMessage,
+  type ChatSettings,
+  type ChatTarget,
+  type LogEntry,
+  type LogKind,
+  type LogPage,
+  type LogQuery,
+  type LogViewer,
+  type RollRow,
   classifyRef,
   countScenario,
   defaultSkillValues,
@@ -82,6 +104,7 @@ import {
   type Visibility,
 } from "@coc-vtt/shared";
 import { UndoLog } from "./undo";
+import { ROOM_SCHEMA_VERSION, migrateRoomData } from "./persist";
 
 /**
  * 룸 엔진. 네트워크를 모르는 순수 로직이다.
@@ -122,6 +145,9 @@ export interface RoomOptions {
 const ALL_ROLES: Role[] = ["kp", "pl", "spectator"];
 const MAX_ROLL_LOG = 200;
 const SHEET_PATCHES_PER_SECOND = 10;
+/** 한 사람이 1초에 보낼 수 있는 대화 수 */
+export const CHATS_PER_SECOND = 3;
+const DAMAGE_KIND_KO: Record<string, string> = { wounded: "부상", major: "중상", unconscious: "기절", dying: "빈사", dead: "사망" };
 
 export function canSeeHandout(h: Pick<Handout, "visibleTo" | "kpOnly">, viewer: Pick<Member, "userId" | "role">): boolean {
   if (viewer.role === "kp") return true;
@@ -179,6 +205,13 @@ export interface RoomData {
   handouts?: Handout[];
   /** 이미 적용한 피해(굴림 id → 캐릭터 id들). 이전 버전에서 저장한 데이터에는 없을 수 있다. */
   damageApplied?: Record<string, string[]>;
+  /** 저장 모양 번호(persist.ts). 번호가 없으면 1(대화·세션 기록이 생기기 전)이다. */
+  schemaVersion?: number;
+  /** 대화(귓속말 포함, 최근 CHAT_KEEP개). 이전 버전에서 저장한 데이터에는 없을 수 있다. */
+  chat?: ChatMessage[];
+  chatSettings?: ChatSettings;
+  /** 세션 기록(최근 LOG_KEEP개). 이전 버전에서 저장한 데이터에는 없을 수 있다. */
+  log?: LogEntry[];
 }
 
 /**
@@ -276,6 +309,10 @@ export class Room {
   private vitalsSig = new Map<string, string>();
   /** 방금 가져온 시나리오가 만든 것들(되돌리기용). 메모리에만 둔다. */
   private lastImport: ImportRecord | null = null;
+  private chat: ChatMessage[] = [];
+  private chatSettings: ChatSettings = { ...DEFAULT_CHAT_SETTINGS };
+  private log: LogEntry[] = [];
+  private logN = 0;
 
   private readonly rng: Rng;
   private readonly now: () => number;
@@ -314,6 +351,10 @@ export class Room {
       characters: [...this.characters.values()].map(cloneCharacter),
       handouts: [...this.handouts.values()].map((h) => cloneHandout(h)),
       damageApplied: Object.fromEntries([...this.damageApplied].map(([k, v]) => [k, [...v]])),
+      schemaVersion: ROOM_SCHEMA_VERSION,
+      chat: this.chat.map(cloneChat),
+      chatSettings: { ...this.chatSettings },
+      log: this.log.map(cloneLog),
     };
   }
 
@@ -322,7 +363,8 @@ export class Room {
    * 진행 중이던 세션은 자동 정지(kp_disconnected)로 두고, GM이 들어오면 자동 재개한다.
    * 저장 때 이미 정지였다면 사유를 그대로 따른다(옛 데이터는 GM이 누른 정지로 본다).
    */
-  static fromData(data: RoomData, opts: RoomOptions = {}): Room {
+  static fromData(stored: RoomData, opts: RoomOptions = {}): Room {
+    const data = migrateRoomData(stored);
     const room = new Room(data.roomId, { ...opts, sessionNumber: data.sessionNumber });
     room.seq = data.seq;
     room.status = data.status === "ACTIVE" ? "PAUSED" : data.status;
@@ -344,6 +386,10 @@ export class Room {
     for (const c of data.characters ?? []) room.characters.set(c.id, cloneCharacter(c));
     for (const h of data.handouts ?? []) room.handouts.set(h.id, cloneHandout(h));
     for (const [k, v] of Object.entries(data.damageApplied ?? {})) room.damageApplied.set(k, new Set(v));
+    room.chat = (data.chat ?? []).map(cloneChat);
+    room.chatSettings = { ...DEFAULT_CHAT_SETTINGS, ...data.chatSettings };
+    room.log = (data.log ?? []).map(cloneLog);
+    room.logN = room.log.reduce((m, e) => Math.max(m, e.n), 0);
     return room;
   }
 
@@ -376,6 +422,7 @@ export class Room {
       if (this.status === "PAUSED" && this.pauseReason === "kp_disconnected") {
         this.status = "ACTIVE";
         this.pauseReason = null;
+        this.record("session", "resume", "GM이 돌아와서 세션을 이어가요.");
         out.push(this.emit({ type: "session.resumed", data: {} }, { roles: ALL_ROLES }));
       }
     }
@@ -405,6 +452,7 @@ export class Room {
     if (this.status !== "ACTIVE" || this.kpOnline()) return [];
     this.status = "PAUSED";
     this.pauseReason = "kp_disconnected";
+    this.record("session", "pause", "일시정지 (GM 연결이 끊겼어요)");
     return [this.emit({ type: "session.paused", data: { reason: "kp_disconnected" } }, { roles: ALL_ROLES })];
   }
 
@@ -441,6 +489,7 @@ export class Room {
       characters: [...this.characters.values()].filter((c) => canSeeCharacter(c, viewer)).map(cloneCharacter),
       handouts: [...this.handouts.values()].filter((h) => canSeeHandout(h, viewer)).map((h) => cloneHandout(h)),
       damageApplied: viewer.role === "kp" ? Object.fromEntries([...this.damageApplied].map(([k, v]) => [k, [...v]])) : {},
+      chatSettings: { ...this.chatSettings },
     };
   }
 
@@ -503,6 +552,9 @@ export class Room {
         return this.sessionResume(who);
       case "session.end":
         return this.sessionEnd(who, command.data);
+      // 대화는 세션 전·일시정지 중에도 할 수 있다(대화 안의 주사위만 진행 중에 굴린다).
+      case "chat.send":
+        return this.chatSend(who, command.data);
     }
 
     if (this.status === "PAUSED") {
@@ -521,6 +573,8 @@ export class Room {
     switch (command.type) {
       case "settings.effects":
         return this.setEffect(who, command.data);
+      case "settings.chat":
+        return this.setChatSettings(who, command.data);
       case "scene.create":
         return this.sceneCreate(who, command.data.name);
       case "scene.setStart":
@@ -650,6 +704,7 @@ export class Room {
     this.sessionNumber += 1;
     this.status = "ACTIVE";
     this.pauseReason = null;
+    this.record("session", "start", `세션 ${this.sessionNumber} 시작`);
     const started = this.emit({ type: "session.started", data: { number: this.sessionNumber } }, { roles: ALL_ROLES });
     // 시작 비트가 있으면 그 큐를 실행하고 현재 비트로 둔다.
     const startBeat = this.flow.beats.find((b) => b.kind === "start");
@@ -668,6 +723,7 @@ export class Room {
     if (this.status !== "ACTIVE") return fail("bad_message", "진행 중인 세션이 아니에요.");
     this.status = "PAUSED";
     this.pauseReason = "kp_request";
+    this.record("session", "pause", "일시정지 (GM이 멈췄어요)");
     return ok(this.emit({ type: "session.paused", data: { reason: "kp_request" } }, { roles: ALL_ROLES }));
   }
 
@@ -676,6 +732,7 @@ export class Room {
     if (this.status !== "PAUSED") return fail("bad_message", "일시정지 중인 세션이 없어요.");
     this.status = "ACTIVE";
     this.pauseReason = null;
+    this.record("session", "resume", "이어하기 (GM이 이어갔어요)");
     return ok(this.emit({ type: "session.resumed", data: {} }, { roles: ALL_ROLES }));
   }
 
@@ -735,6 +792,7 @@ export class Room {
     this.status = "IDLE";
     this.pauseReason = null;
     this.kpAwaySince = null;
+    this.record("session", "end", `세션 ${this.sessionNumber} 종료${d.ending ? ` · 엔딩: ${d.ending}` : ""}`);
     // NPC 시트의 보상·성장 기록은 GM에게만 보여 준다.
     const forPl: EndSummary = { ...summary };
     const isNpc = (id: string) => {
@@ -857,6 +915,7 @@ export class Room {
 
   /** 비트에 들어간다: 현재 위치를 옮기고 제안을 비운다. */
   private enterBeat(beat: Beat) {
+    this.record("beat", "goto", `비트 이동: ${beat.name} (${BEAT_KIND_LABEL_KO[beat.kind]})`, { audience: "gm" });
     this.flow.current = beat.id;
     this.flow.suggestions = [];
     this.dismissed.clear();
@@ -1059,6 +1118,7 @@ export class Room {
       .slice(0, MAX_INITIATIVE_ENTRIES)
       .map((c) => ({ id: this.newId(), name: c.name, dex: c.characteristics.DEX, characterId: c.id, ...(c.ownerId ? { ownerId: c.ownerId } : {}) }));
     this.initiative = { entries: sortByDex(entries), turn: 0, round: 1 };
+    this.record("combat", "start", `전투 시작 · ${entries.length}명`);
     return this.initiativeOut();
   }
 
@@ -1115,6 +1175,12 @@ export class Room {
       wrapped = true;
     }
     const ticks = wrapped ? this.tickDying() : [];
+    const cur = init.entries[init.turn];
+    if (cur) {
+      // 참가자에게는 GM만 쓰는 시트(NPC)의 이름을 가려서 남긴다.
+      const shown = this.initiativeFor({ role: "pl", userId: "" })?.entries[init.turn];
+      this.record("combat", "turn", `라운드 ${init.round} · ${cur.name} 차례`, shown && shown.name !== cur.name ? { plText: `라운드 ${init.round} · ${shown.name} 차례` } : {});
+    }
     const out = this.initiativeOut();
     return out.ok ? ok(...ticks, ...out.out) : out;
   }
@@ -1137,6 +1203,7 @@ export class Room {
     const denied = this.initiativeGuard(who);
     if (denied) return denied;
     if (!this.initiative) return fail("bad_message", "진행 중인 전투가 없어요.");
+    this.record("combat", "end", `전투 종료 · ${this.initiative.round}라운드`);
     this.initiative = null;
     return this.initiativeOut();
   }
@@ -1410,6 +1477,7 @@ export class Room {
   private activateScene(scene: Scene, transition: Transition, bringParty = true): Out[] {
     const out: Out[] = bringParty ? this.bringPartyTokens(scene) : [];
     this.activeSceneId = scene.id;
+    this.record("scene", "activate", `장면 전환: ${scene.name}${transition === "fade" ? " (페이드)" : ""}`);
     for (const m of this.members.values()) {
       const data: Extract<Out["event"], { type: "scene.activated" }>["data"] = { scene: this.sceneFor(scene, m.role === "kp"), transition };
       if (m.role !== "kp") {
@@ -2104,9 +2172,9 @@ export class Room {
     return ok(this.emit({ type: "roll.asked", data: ask }, { roles: ALL_ROLES }));
   }
 
-  private rollRequest(who: Actor, d: Extract<ClientCommand, { type: "roll.request" }>["data"]): Result {
+  private rollRequest(who: Actor, d: Extract<ClientCommand, { type: "roll.request" }>["data"], allowSecret = false): Result {
     if (who.role === "spectator") return fail("forbidden", "관전자는 굴릴 수 없어요.");
-    if (d.secret && who.role !== "kp") return fail("forbidden", "비밀 굴림은 GM만 쓸 수 있어요.");
+    if (d.secret && who.role !== "kp" && !allowSecret) return fail("forbidden", "비밀 굴림은 GM만 쓸 수 있어요.");
     if (this.tooMany(`roll:${who.userId}`, this.rollsPerSecond)) return fail("rate_limited", "너무 빨리 굴리고 있어요. 잠시 뒤에 다시 해 주세요.");
 
     let expr = d.expr ?? "";
@@ -2158,6 +2226,8 @@ export class Room {
     };
     this.rolls.push(entry);
     if (this.rolls.length > MAX_ROLL_LOG) this.rolls.shift();
+    // 세션 기록에는 모두에게 공개된 굴림만 남긴다(비밀 굴림은 어떤 경우에도 남기지 않는다).
+    if (!secret) this.recordRoll(entry);
 
     if (!secret) return ok(this.emit({ type: "roll.result", data: entry }, { roles: ALL_ROLES }), ...extra);
     return ok(
@@ -2355,6 +2425,7 @@ export class Room {
       conRoll: r.conRoll,
     };
     const aud = this.characterAudience(next);
+    this.record("damage", "apply", `${c.name} 피해 ${r.dealt} (HP ${r.hpBefore} → ${r.hp})${DAMAGE_KIND_KO[r.kind] ? ` · ${DAMAGE_KIND_KO[r.kind]}` : ""}`, { audience: this.sheetAudience(c) });
     return ok(
       ...(next.rev !== c.rev ? [this.emit({ type: "character.updated", data: cloneCharacter(next) }, aud)] : []),
       this.emit({ type: "damage.applied", data: result }, aud),
@@ -2376,6 +2447,7 @@ export class Room {
     if (r.hp === c.hp && JSON.stringify(next.conditions) === JSON.stringify(c.conditions)) return ok();
     next.rev = c.rev + 1;
     this.characters.set(c.id, next);
+    this.record("damage", "heal", `${c.name} 회복 +${next.hp - c.hp} (HP ${c.hp} → ${next.hp})`, { audience: this.sheetAudience(c) });
     return ok(this.emit({ type: "character.updated", data: cloneCharacter(next) }, this.characterAudience(next)), ...this.initiativeRefresh(next));
   }
 
@@ -2471,6 +2543,7 @@ export class Room {
     if (this.madnessTable.length === 0) return fail("bad_message", "광기 증상표가 비어 있어요. 먼저 증상을 적어 주세요.");
     const index = rollDie(this.rng, this.madnessTable.length) - 1;
     const duration = rollDie(this.rng, 10);
+    this.record("sanity", "madness", `${c.name} 광기 증상: ${this.madnessTable[index]} (${duration}${d.mode === "realtime" ? "라운드" : "시간"})`, { audience: this.sheetAudience(c) });
     return ok(
       this.emit(
         { type: "madness.result", data: { characterId: c.id, name: c.name, mode: d.mode, duration, index, symptom: this.madnessTable[index] as string } },
@@ -2567,6 +2640,8 @@ export class Room {
     // 한 번 쓰고 사라지는 연출이라 버퍼에는 남기지 않는다(늦게 들어온 사람에게 다시 띄우지 않는다).
     // 누른 GM 화면은 가리지 않는다.
     const users = [...this.members.values()].filter((m) => m.role !== "kp" && canSeeHandout(h, m)).map((m) => m.userId);
+    // 방금 공개한 경우는 공개 기록이 이미 남았으니 펼침은 따로 남기지 않는다.
+    if (outs.length === 0 && users.length > 0) this.record("handout", "show", `핸드아웃 펼침: 「${h.title}」`, { audience: users });
     outs.push(this.emitTo({ type: "handout.shown", data: { id } }, { users }));
     return ok(...outs);
   }
@@ -2584,6 +2659,13 @@ export class Room {
       else if (was && !now) removed.push(m.userId);
     }
     const out: Out[] = [];
+    // 처음 보게 된 참가자가 있으면 공개로 기록한다(제목만. 본문은 남기지 않는다).
+    const seers = after ? added.filter((u) => this.members.get(u)?.role !== "kp") : [];
+    if (after && seers.length > 0) {
+      const everyone = [...this.members.values()].filter((m) => m.role !== "kp").length;
+      const names = seers.map((u) => this.members.get(u)?.name ?? "?").join(", ");
+      this.record("handout", "reveal", `핸드아웃 공개: 「${after.title}」${seers.length < everyone ? ` → ${names}` : ""}`, { audience: seers, plText: `핸드아웃 공개: 「${after.title}」` });
+    }
     if (after && added.length) out.push(this.emit({ type: "handout.added", data: cloneHandout(after) }, { users: added }));
     if (after && updated.length) out.push(this.emit({ type: "handout.updated", data: cloneHandout(after) }, { users: updated }));
     const gone = before ?? after;
@@ -2754,6 +2836,148 @@ export class Room {
     if (kind && rank[kind] > rank[next.madness ?? "none"]) next.madness = kind;
   }
 
+  // ── 대화 ───────────────────────────────────────────────
+
+  /** 귓속말로 부를 수 있는 사람들. 캐릭터 이름으로 부르는 것은 GM만 쓴다(PL의 시트 이름이 새지 않게). */
+  private chatTargets(who: Actor): ChatTarget[] {
+    const out: ChatTarget[] = [];
+    for (const m of this.members.values()) {
+      if (m.userId === who.userId || m.role === "spectator") continue;
+      const names = [m.name];
+      if (m.role === "kp") names.push("GM");
+      else if (who.role === "kp") for (const c of this.characters.values()) if (c.ownerId === m.userId) names.push(c.name);
+      out.push({ userId: m.userId, names });
+    }
+    return out;
+  }
+
+  /** "캐릭터로 말하기"를 풀어 화면에 보일 이름을 정한다. PL은 자기 시트만, GM은 아무 시트나 "GM"으로 말할 수 있다. */
+  private chatSpeaker(who: Actor, sp: Extract<ClientCommand, { type: "chat.send" }>["data"]["speaker"]): { name: string; character?: Character } | { error: Result } {
+    if (!sp) return { name: who.name };
+    if ("gm" in sp) return who.role === "kp" ? { name: "GM" } : { error: fail("forbidden", "GM만 GM으로 말할 수 있어요.") };
+    if (who.role === "spectator") return { error: fail("forbidden", "관전자는 캐릭터로 말할 수 없어요.") };
+    const c = this.characters.get(sp.characterId);
+    if (!c) return { error: fail("not_found", "캐릭터를 찾을 수 없어요.") };
+    if (who.role === "pl" && c.ownerId !== who.userId) return { error: fail("forbidden", "내 캐릭터로만 말할 수 있어요.") };
+    return { name: c.name, character: c };
+  }
+
+  private setChatSettings(who: Actor, d: { plWhisper: boolean }): Result {
+    if (who.role !== "kp") return fail("forbidden", "GM만 대화 설정을 바꿀 수 있어요.");
+    this.chatSettings = { ...this.chatSettings, plWhisper: d.plWhisper };
+    return ok(this.emit({ type: "settings.chat", data: { ...this.chatSettings } }, { roles: ALL_ROLES }));
+  }
+
+  /**
+   * 대화 보내기. 글을 읽어 말·굴림(/r)·비밀 굴림(/hr)·귓속말(/w 또는 받는 사람 지정)로 나눈다.
+   * 공개 범위는 여기서 정한다: 말·굴림은 모두, 귓속말은 보낸 사람과 받는 사람, 비밀 굴림은 GM과 굴린 사람.
+   * GM도 자기와 무관한 PL끼리의 귓속말은 받지 못한다.
+   */
+  private chatSend(who: Actor, d: Extract<ClientCommand, { type: "chat.send" }>["data"]): Result {
+    const text = normalizeChatText(d.text);
+    if (!text) return fail("bad_message", "보낼 내용을 적어 주세요.");
+    if (text.length > CHAT_MAX_LENGTH) return fail("bad_message", `대화는 ${CHAT_MAX_LENGTH}자까지 보낼 수 있어요.`);
+    if (this.tooMany(`chat:${who.userId}`, CHATS_PER_SECOND)) return fail("rate_limited", "너무 빨리 보내고 있어요. 잠시 뒤에 다시 해 주세요.");
+    const input = d.to !== undefined ? ({ type: "whisper", to: d.to, text } as const) : parseChatInput(text, this.chatTargets(who));
+    if (input.type === "error") return fail("bad_message", input.message);
+    if (input.type === "help") return fail("bad_message", "도움말은 대화창의 ? 버튼에서 볼 수 있어요.");
+    const sp = this.chatSpeaker(who, d.speaker);
+    if ("error" in sp) return sp.error;
+
+    const base = { session: this.sessionNumber, at: this.now(), userId: who.userId, name: sp.name, role: who.role } as const;
+    const make = (m: Pick<ChatMessage, "kind" | "text"> & Partial<ChatMessage>): ChatMessage => {
+      const seq = this.seq + 1;
+      return { id: `m${seq}`, seq, ...base, ...m };
+    };
+    const post = (m: ChatMessage, audience: Audience): Out => {
+      const out = this.emit({ type: "chat.posted", data: m }, audience);
+      this.chat.push(cloneChat(m));
+      if (this.chat.length > CHAT_KEEP) this.chat.splice(0, this.chat.length - CHAT_KEEP);
+      return out;
+    };
+
+    if (input.type === "say") {
+      const m = make({ kind: "say", text: input.text });
+      // 세션 기록에는 모두에게 보이는 말만 남긴다.
+      this.record("chat", "say", `${sp.name}: ${input.text}`, { chat: { name: sp.name, text: input.text } });
+      return ok(post(m, { roles: ALL_ROLES }));
+    }
+
+    if (input.type === "whisper") {
+      if (who.role === "spectator") return fail("forbidden", "관전자는 귓속말을 보낼 수 없어요.");
+      const to = this.members.get(input.to);
+      if (!to || to.role === "spectator") return fail("not_found", "받는 사람을 찾을 수 없어요.");
+      if (to.userId === who.userId) return fail("bad_message", "나에게는 귓속말을 보낼 수 없어요.");
+      if (who.role === "pl" && to.role === "pl" && !this.chatSettings.plWhisper) return fail("forbidden", "PL끼리 귓속말은 지금 꺼져 있어요. GM이 켜면 보낼 수 있어요.");
+      const m = make({ kind: "whisper", text: input.text, to: { userId: to.userId, name: to.name } });
+      return ok(post(m, { users: [who.userId, to.userId] }));
+    }
+
+    // 굴림
+    if (who.role === "spectator") return fail("forbidden", "관전자는 굴릴 수 없어요.");
+    if (this.status !== "ACTIVE") return fail(this.status === "IDLE" ? "idle" : "paused", this.status === "IDLE" ? "세션을 시작한 뒤에 굴릴 수 있어요." : "일시정지 중에는 굴릴 수 없어요.");
+    const rolled = this.rollRequest(who, { expr: input.expr, secret: input.secret, ...(sp.character ? { characterId: sp.character.id } : {}) }, true);
+    if (!rolled.ok) return rolled;
+    const entry = this.rolls[this.rolls.length - 1] as RollLogEntry;
+    const m = make({ kind: input.secret ? "secret" : "roll", text: entry.expr, roll: { rollId: entry.id, expr: entry.expr, result: describeOutcome(entry.outcome) } });
+    return ok(...rolled.out, post(m, input.secret ? { roles: ["kp"], users: [who.userId] } : { roles: ALL_ROLES }));
+  }
+
+  /** 접속할 때 줄 최근 대화(이 사람이 볼 수 있는 것만) */
+  chatHistory(viewer: Pick<Member, "userId" | "role">, limit = CHAT_HISTORY_ON_JOIN): ChatMessage[] {
+    return this.chat.filter((m) => canSeeChat(m, viewer)).slice(-limit).map(cloneChat);
+  }
+
+  /** 이전 대화 더 보기: seq가 before보다 앞인 것 중 최근 limit개(오래된 순) */
+  chatPage(viewer: Pick<Member, "userId" | "role">, before: number, limit = 50): { messages: ChatMessage[]; hasMore: boolean } {
+    const older = this.chat.filter((m) => m.seq < before && canSeeChat(m, viewer));
+    const n = Math.min(Math.max(1, Math.floor(limit)), CHAT_PAGE_MAX);
+    const page = older.slice(Math.max(0, older.length - n));
+    return { messages: page.map(cloneChat), hasMore: older.length > page.length };
+  }
+
+  /** 이 사용자의 룸 안 역할(참가한 적이 없으면 null) */
+  roleOf(userId: string): Role | null {
+    return this.members.get(userId)?.role ?? null;
+  }
+
+  // ── 세션 기록 ───────────────────────────────────────────
+
+  /** 보는 사람이 볼 수 있는 세션 기록을 조건에 맞게 돌려준다. */
+  logFor(viewer: LogViewer, q: LogQuery = {}): LogPage {
+    return queryLog(this.log, viewer, q);
+  }
+
+  private record(kind: LogKind, type: string, text: string, opts: { plText?: string; audience?: LogEntry["audience"]; roll?: RollRow; chat?: { name: string; text: string } } = {}): void {
+    const scene = this.scenes.get(this.activeSceneId)?.name;
+    const e: LogEntry = {
+      n: ++this.logN,
+      at: this.now(),
+      session: this.sessionNumber,
+      kind,
+      type,
+      text,
+      audience: opts.audience ?? "all",
+      ...(opts.plText !== undefined ? { plText: opts.plText } : {}),
+      ...(scene ? { scene } : {}),
+      ...(opts.roll ? { roll: opts.roll } : {}),
+      ...(opts.chat ? { chat: opts.chat } : {}),
+    };
+    this.log.push(e);
+    if (this.log.length > LOG_KEEP) this.log.splice(0, this.log.length - LOG_KEEP);
+  }
+
+  private recordRoll(entry: RollLogEntry): void {
+    const row = rollRow(entry);
+    if (entry.outcome.kind === "san") this.record("sanity", "san", `${row.who}: ${row.result}`, { roll: row });
+    else this.record("roll", "roll", `${row.who} ${row.expr} → ${row.result}`, { roll: row });
+  }
+
+  /** 시트에 얽힌 기록을 볼 수 있는 사람: PL의 시트면 그 주인(과 GM), GM의 시트(NPC)면 GM뿐 */
+  private sheetAudience(c: Pick<Character, "ownerId">): LogEntry["audience"] {
+    return this.isNpcSheet(c) ? "gm" : [c.ownerId];
+  }
+
   // ── 내부 ───────────────────────────────────────────────
 
   private memberList(): Member[] {
@@ -2798,6 +3022,15 @@ const publicScene = (s: Scene): Scene => {
   const { start: _start, bgmTrackId: _bgm, fog: _fog, fogAreas: _areas, fogExplored: _explored, ...rest } = s;
   return rest;
 };
+
+const cloneChat = (m: ChatMessage): ChatMessage => ({ ...m, ...(m.to ? { to: { ...m.to } } : {}), ...(m.roll ? { roll: { ...m.roll } } : {}) });
+
+const cloneLog = (e: LogEntry): LogEntry => ({
+  ...e,
+  audience: Array.isArray(e.audience) ? [...e.audience] : e.audience,
+  ...(e.roll ? { roll: { ...e.roll, tags: [...e.roll.tags] } } : {}),
+  ...(e.chat ? { chat: { ...e.chat } } : {}),
+});
 
 const cloneHandout = (h: Handout): Handout => ({ ...h, visibleTo: Array.isArray(h.visibleTo) ? [...h.visibleTo] : h.visibleTo });
 

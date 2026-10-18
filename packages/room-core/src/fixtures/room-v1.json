@@ -1,0 +1,150 @@
+{
+  "roomId": "fixture-room",
+  "seq": 10,
+  "status": "ACTIVE",
+  "sessionNumber": 1,
+  "objects": [],
+  "scenes": [
+    {
+      "id": "main",
+      "name": "장면 1"
+    },
+    {
+      "id": "id-4",
+      "name": "지하실"
+    }
+  ],
+  "activeSceneId": "main",
+  "effects": {
+    "critical": {
+      "enabled": true,
+      "intensity": 3
+    },
+    "extreme": {
+      "enabled": true,
+      "intensity": 2
+    },
+    "hard": {
+      "enabled": false,
+      "intensity": 1
+    },
+    "fumble": {
+      "enabled": true,
+      "intensity": 3
+    }
+  },
+  "madnessTable": [],
+  "initiative": null,
+  "flow": {
+    "beats": [],
+    "branches": [],
+    "current": null,
+    "suggestions": []
+  },
+  "audio": [],
+  "bgm": null,
+  "members": [
+    {
+      "userId": "kp1",
+      "name": "하늘",
+      "role": "kp",
+      "online": true
+    },
+    {
+      "userId": "pl1",
+      "name": "서하",
+      "role": "pl",
+      "online": true
+    }
+  ],
+  "rolls": [
+    {
+      "id": "id-5",
+      "userId": "pl1",
+      "userName": "서하",
+      "expr": "1d100",
+      "outcome": {
+        "kind": "dice",
+        "expr": "1d100",
+        "rolls": [
+          51
+        ],
+        "modifier": 0,
+        "total": 51
+      },
+      "session": 1,
+      "secret": false,
+      "at": 1700000002000
+    },
+    {
+      "id": "id-6",
+      "userId": "kp1",
+      "userName": "하늘",
+      "expr": "1d6",
+      "outcome": {
+        "kind": "dice",
+        "expr": "1d6",
+        "rolls": [
+          4
+        ],
+        "modifier": 0,
+        "total": 4
+      },
+      "session": 1,
+      "secret": true,
+      "at": 1700000004000
+    }
+  ],
+  "characters": [
+    {
+      "id": "id-1",
+      "ownerId": "pl1",
+      "name": "윤서하",
+      "age": 27,
+      "occupation": "기자",
+      "characteristics": {
+        "STR": 50,
+        "CON": 60,
+        "SIZ": 55,
+        "DEX": 65,
+        "APP": 50,
+        "INT": 70,
+        "POW": 60,
+        "EDU": 75
+      },
+      "luck": 55,
+      "hp": 11,
+      "mp": 12,
+      "san": 60,
+      "skills": {
+        "도서관 사용": {
+          "value": 60,
+          "grown": false
+        }
+      },
+      "notes": "",
+      "backstory": "",
+      "possessions": "",
+      "weapons": [],
+      "rev": 0
+    }
+  ],
+  "handouts": [
+    {
+      "id": "id-2",
+      "title": "찢어진 편지",
+      "body": "본문",
+      "visibleTo": "all",
+      "rev": 0
+    },
+    {
+      "id": "id-3",
+      "title": "GM 메모",
+      "body": "비밀",
+      "visibleTo": "gm",
+      "rev": 0,
+      "kpOnly": true
+    }
+  ],
+  "damageApplied": {}
+}

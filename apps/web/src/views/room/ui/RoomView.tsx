@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { countsLine, type GameObject, type Role } from "@coc-vtt/shared";
 import { SheetCsvImport } from "@/entities/character";
 import { beginDiscordLogin, refreshStoredSession, useIdentity, type Identity } from "@/entities/user";
-import { getRoom, type ScenarioImportResult } from "@/entities/room";
+import { getChatPage, getRoom, type ScenarioImportResult } from "@/entities/room";
 import { SERVICE_NAME, SUPABASE_URL } from "@/shared/config";
 import { roomTitle, useDocumentTitle } from "@/shared/lib";
 import { ObjectToolbar, uniqueName, useBoardInteractions } from "@/features/board-objects";
@@ -24,7 +24,10 @@ import { ConnectionBanner, MyTurnBadge, Toasts, findTurnTokens, isMyTurn, offTur
 import { MadnessResultCard } from "@/features/manage-madness";
 import { EndSummaryCard } from "@/features/session-control";
 import { SaveToVaultButton } from "@/features/save-to-vault";
+import { useChatUnread } from "@/features/chat-unread";
 import { AudioPanel } from "@/widgets/audio-panel";
+import { ChatPanel } from "@/widgets/chat-panel";
+import { LogPanel } from "@/widgets/log-panel";
 import { Board } from "@/widgets/board";
 import { HandoutPanel } from "@/widgets/handout-panel";
 import { FlowPanel } from "@/widgets/flow-panel";
@@ -62,7 +65,7 @@ export function RoomView({ roomId, invite }: { roomId: string; invite?: string }
 }
 
 function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: string }) {
-  const { state, connection, closeCode, send, retry, reconnected, sendFailed, authExpired } = useRoom({ roomId, user: me.userId, name: me.name, token: me.token, invite, refresh: me.token && SUPABASE_URL ? refreshStoredSession : undefined });
+  const { state, connection, closeCode, send, retry, reconnected, sendFailed, authExpired, addChatHistory } = useRoom({ roomId, user: me.userId, name: me.name, token: me.token, invite, refresh: me.token && SUPABASE_URL ? refreshStoredSession : undefined });
   const sheetRollAt = useRef(0); // 시트에서 굴린 시각. 그 결과를 토스트로 보여 준다.
   const notices = useRoomNotices({ lastError: state.lastError, sendFailed, reconnected, lastUndo: state.lastUndo });
   const { undo, sendWithHint } = useUndo({ enabled: (state.members.find((m) => m.userId === me.userId)?.role ?? "pl") === "kp", send, notify: notices.notify });
@@ -77,7 +80,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     if (reconnected > 0) reconnectedAt.current = Date.now();
   }, [reconnected]);
   const sound = useAudioPreference();
-  const [tab, setTab] = useState<"roll" | "sheet" | "handout" | "combat" | "flow" | "sound">("roll");
+  const [tab, setTab] = useState<"roll" | "chat" | "sheet" | "handout" | "combat" | "flow" | "sound" | "log">("roll");
   const [sheetId, setSheetId] = useState<string | null>(null);
   const [dismissedN, setDismissedN] = useState(0);
   const [viewSceneId, setViewSceneId] = useState<string | null>(null);
@@ -158,6 +161,14 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   const handoutIds = useMemo(() => handoutList.map((h) => h.id), [handoutList]);
   // 새로 받은 핸드아웃(PL만). 핸드아웃 탭을 보고 있으면 본 것으로 친다.
   const newHandouts = useUnseen(handoutIds, { ready: state.ready, viewing: tab === "handout", enabled: !isKp });
+  const chatUnread = useChatUnread(state.chat, { ready: state.ready && state.chatLoaded, viewing: tab === "chat" && panelOpen, meId: me.userId });
+  const speakable = useMemo(() => characters.filter((c) => (isKp ? npcIds.has(c.id) : c.ownerId === me.userId)).map((c) => ({ id: c.id, name: c.name })), [characters, isKp, npcIds, me.userId]);
+  const loadOlderChat = async (before: number) => {
+    const page = await getChatPage(me, roomId, before, 50);
+    addChatHistory(page.messages);
+    return page.hasMore;
+  };
+  const logVersion = `${state.rolls.length}:${state.chat.at(-1)?.seq ?? 0}:${state.sessionStatus}:${state.sessionNumber}:${state.activeSceneId}:${state.initiative?.round ?? 0}:${state.flow?.current ?? ""}:${handoutList.length}`;
   const myTurn = isMyTurn(state.initiative, characters, me.userId);
   // 전투 중 지금 차례인 PL의 토큰들(칸 → 캐릭터 주인 → 그 PL의 토큰). 연결이 없으면 빈 목록이라 강조하지 않는다.
   const turnTokenIds = useMemo(() => findTurnTokens(state.initiative, characters, objects), [state.initiative, characters, objects]);
@@ -315,9 +326,10 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
         </main>
 
         <aside className={`side${panelOpen ? "" : " collapsed"}`}>
-          <button type="button" className="side-toggle" aria-expanded={panelOpen} onClick={() => setPanelOpen((o) => !o)}>{panelOpen ? "패널 접기" : "패널 펴기"}</button>
+          <button type="button" className="side-toggle" aria-expanded={panelOpen} onClick={() => setPanelOpen((o) => !o)}>{panelOpen ? "패널 접기" : "패널 펴기"}{!panelOpen && chatUnread > 0 && <span className="tab-dot" data-testid="chat-unread-toggle" aria-label={`안 읽은 대화 ${chatUnread}개`}>{chatUnread > 99 ? "99+" : chatUnread}</span>}</button>
           <div className="tabs" role="tablist" aria-label="패널" onKeyDown={onTabListKeyDown}>
             <button role="tab" aria-selected={tab === "roll"} onClick={() => setTab("roll")}>굴림</button>
+            <button role="tab" aria-selected={tab === "chat"} data-testid="tab-chat" onClick={() => setTab("chat")}>대화{chatUnread > 0 && <span className="tab-dot" data-testid="chat-unread" aria-label={`안 읽은 대화 ${chatUnread}개`}>{chatUnread > 99 ? "99+" : chatUnread}</span>}</button>
             <button role="tab" aria-selected={tab === "sheet"} onClick={() => setTab("sheet")}>시트</button>
             <button role="tab" aria-selected={tab === "handout"} onClick={() => setTab("handout")}>핸드아웃{newHandouts.length > 0 && <span className="tab-dot" data-testid="handout-new" aria-label={`새 핸드아웃 ${newHandouts.length}개`}>{newHandouts.length}</span>}</button>
             {isKp && state.flow && (
@@ -327,8 +339,26 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               <button role="tab" aria-selected={tab === "sound"} onClick={() => setTab("sound")}>음향{state.bgm ? " ♪" : ""}</button>
             )}
             <button role="tab" aria-selected={tab === "combat"} onClick={() => setTab("combat")}>전투{myTurn ? <span className="tab-dot turn" data-testid="combat-my-turn" aria-label="내 차례">▶</span> : state.initiative ? " ●" : ""}</button>
+            <button role="tab" aria-selected={tab === "log"} data-testid="tab-log" onClick={() => setTab("log")}>기록</button>
           </div>
-          {tab === "roll" ? (
+          <ChatPanel
+            messages={state.chat}
+            members={state.members}
+            meId={me.userId}
+            meName={me.name}
+            role={role}
+            speakable={speakable}
+            characters={characters}
+            plWhisper={state.chatSettings.plWhisper}
+            rollWhy={rollBlockReason(role, state.sessionStatus)}
+            visible={tab === "chat"}
+            ready={state.ready && state.chatLoaded}
+            send={send}
+            onSetPlWhisper={(on) => send({ type: "settings.chat", data: { plWhisper: on } })}
+            onLoadOlder={loadOlderChat}
+          />
+          <LogPanel me={me} roomId={roomId} roomTitle={roomName ?? "세션 기록"} isKp={isKp} sessionCount={state.sessionNumber} visible={tab === "log"} version={logVersion} />
+          {tab === "chat" || tab === "log" ? null : tab === "roll" ? (
             <RollPanel
               me={me}
               rolls={state.rolls}

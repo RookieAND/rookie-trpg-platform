@@ -20,7 +20,7 @@ import {
 } from "@nestjs/common";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
-import { parseScenarioText, type ScenarioDoc } from "@coc-vtt/shared";
+import { CHAT_PAGE_MAX, LOG_KINDS, LOG_PAGE_MAX, isLogKind, parseScenarioText, type LogKind, type LogQuery, type Role, type ScenarioDoc } from "@coc-vtt/shared";
 import { AuthService } from "../../../identity/application/auth.service";
 import { readBody } from "../../../platform/read-body";
 import { DiscordNotifier } from "../../application/discord-notifier";
@@ -130,6 +130,66 @@ export class RoomsController {
           }
         : {}),
     };
+  }
+
+  /** 이 사용자가 이 룸에서 어떤 역할로 기록을 볼 수 있는지. 룸 주인은 GM이고, 참가한 적 없는 사람은 볼 수 없다. */
+  private async viewerOf(me: { userId: string }, roomId: string) {
+    const entry = await this.registry.get(roomId);
+    if (!entry) throw new NotFoundException("룸을 찾을 수 없어요.");
+    const role: Role | null = entry.meta.ownerId === me.userId ? "kp" : entry.room.roleOf(me.userId);
+    if (!role) throw new ForbiddenException("이 룸의 참가자만 볼 수 있어요.");
+    return { entry, viewer: { userId: me.userId, role } };
+  }
+
+  private intParam(v: string | undefined, name: string): number | undefined {
+    if (v === undefined || v === "") return undefined;
+    const n = Number(v);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) throw new BadRequestException(`${name} 값이 올바르지 않아요.`);
+    return n;
+  }
+
+  /** 이전 대화 더 보기. before(seq) 앞의 대화를 최근 것부터 limit개 돌려준다. 귓속말은 보낸 사람과 받는 사람에게만 간다. */
+  @Get("rooms/:roomId/chat")
+  async chatPage(@Req() req: IncomingMessage, @Param("roomId") roomId: string, @Query("before") before?: string, @Query("limit") limit?: string) {
+    const me = this.who(req);
+    const { entry, viewer } = await this.viewerOf(me, roomId);
+    const b = this.intParam(before, "before") ?? Number.MAX_SAFE_INTEGER;
+    const l = Math.min(this.intParam(limit, "limit") ?? 50, CHAT_PAGE_MAX);
+    return entry.room.chatPage(viewer, b, l);
+  }
+
+  /**
+   * 세션 기록. 보는 사람이 볼 수 있는 것만 오고(참가자는 공개된 기록만), 오래된 순으로 최근 limit개다.
+   * kinds=roll,chat / since,until=ms / session=번호 / before=기록 번호(이전 쪽). view=public이면 GM도 참가자용으로 걸러서 받는다.
+   */
+  @Get("rooms/:roomId/log")
+  async sessionLog(
+    @Req() req: IncomingMessage,
+    @Param("roomId") roomId: string,
+    @Query("kinds") kinds?: string,
+    @Query("since") since?: string,
+    @Query("until") until?: string,
+    @Query("session") session?: string,
+    @Query("before") before?: string,
+    @Query("limit") limit?: string,
+    @Query("view") view?: string,
+  ) {
+    const me = this.who(req);
+    const { entry, viewer } = await this.viewerOf(me, roomId);
+    const kindList = (kinds ?? "").split(",").map((k) => k.trim()).filter(Boolean);
+    if (kindList.some((k) => !isLogKind(k))) throw new BadRequestException(`종류는 ${LOG_KINDS.join(", ")} 중에서 골라 주세요.`);
+    const q: LogQuery = { kinds: kindList as LogKind[], limit: Math.min(this.intParam(limit, "limit") ?? 200, LOG_PAGE_MAX) };
+    const s = this.intParam(since, "since");
+    const u = this.intParam(until, "until");
+    const n = this.intParam(session, "session");
+    const b = this.intParam(before, "before");
+    if (s !== undefined) q.since = s;
+    if (u !== undefined) q.until = u;
+    if (n !== undefined) q.session = n;
+    if (b !== undefined) q.before = b;
+    // 참가자용으로 보기: 사용자 없는 PL 시점이라 모두에게 공개된 기록만 온다.
+    const asPublic = view === "public" && viewer.role === "kp";
+    return { ...entry.room.logFor(asPublic ? { userId: "", role: "pl" } : viewer, q), audience: asPublic || viewer.role !== "kp" ? "public" : "gm" };
   }
 
   @Post("rooms/:roomId/invite")

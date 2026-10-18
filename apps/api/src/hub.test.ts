@@ -7,7 +7,8 @@ import { Test } from "@nestjs/testing";
 import { WsAdapter } from "@nestjs/platform-ws";
 import { AppModule, type AppOptions } from "./app.module";
 import { FileRoomRepository } from "./room/infrastructure/file-room.repository";
-import { mkdtempSync, rmSync } from "node:fs";
+import { RoomRegistry } from "./room/application/room-registry";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -483,3 +484,219 @@ describe("저장과 복원", () => {
     }
   });
 });
+
+const SPEC: Who = { user: "sp1", name: "구경꾼", role: "spectator" };
+const bytes = (m: unknown) => Buffer.byteLength(JSON.stringify(m));
+const chatOf = (c: Client) => c.messages.flatMap((m) => (m.event.type === "chat.posted" ? [m.event.data] : []));
+
+describe("대화", () => {
+  it("PL의 말이 GM과 다른 PL, 관전자에게 전달된다", async () => {
+    const { room, kp } = await startedRoom();
+    const pl = await connect(room, SEO);
+    const han = await connect(room, HAN);
+    const spec = await connect(room, SPEC);
+    pl.cmd("chat.send", { text: "  안녕하세요 " });
+    for (const c of [kp, han, spec, pl]) {
+      const m = await c.waitFor(isType("chat.posted"));
+      expect(m.event.type === "chat.posted" && m.event.data).toMatchObject({ kind: "say", name: "윤서하", text: "안녕하세요" });
+    }
+  });
+
+  it("귓속말은 받는 사람에게만 가고, 다른 PL·관전자는 프레임으로도 새 접속의 기록으로도 받지 못한다", async () => {
+    const { room, kp } = await startedRoom();
+    const pl = await connect(room, SEO);
+    const han = await connect(room, HAN);
+    const spec = await connect(room, SPEC);
+    kp.cmd("chat.send", { text: "/w 윤서하 문 뒤에 누가 있어요" });
+    await pl.waitFor(isType("chat.posted"));
+    kp.cmd("chat.send", { text: "모두에게 하는 말이에요" });
+    for (const c of [pl, han, spec]) await c.waitFor((m) => m.event.type === "chat.posted" && m.event.data.kind === "say");
+    for (const c of [han, spec]) {
+      expect(JSON.stringify(c.messages)).not.toContain("문 뒤에");
+      expect(chatOf(c).map((m) => m.kind)).toEqual(["say"]);
+    }
+    expect(chatOf(pl).map((m) => m.kind)).toEqual(["whisper", "say"]);
+    // 나중에 들어오는 사람의 기록과 다시 붙는 연결에도 새지 않는다
+    const han2 = await connect(room, HAN);
+    await han2.waitFor((m) => m.event.type === "chat.history" && m.event.data.last);
+    expect(JSON.stringify(han2.messages)).not.toContain("문 뒤에");
+    const pl2 = await connect(room, SEO);
+    await pl2.waitFor((m) => m.event.type === "chat.history" && m.event.data.last);
+    expect(JSON.stringify(pl2.messages)).toContain("문 뒤에");
+  });
+
+  it("PL끼리의 귓속말은 기본으로 막혀 있고, 켜면 GM도 받지 못한다", async () => {
+    const { room, kp } = await startedRoom();
+    const pl = await connect(room, SEO);
+    const han = await connect(room, HAN);
+    pl.cmd("chat.send", { text: "/w 한도윤 몰래 말해요" }, "w1");
+    const err = await pl.waitFor((m) => m.event.type === "error");
+    expect(err.event.type === "error" && err.event.data.code).toBe("forbidden");
+    kp.cmd("settings.chat", { plWhisper: true });
+    await han.waitFor((m) => m.event.type === "settings.chat" && m.event.data.plWhisper);
+    pl.cmd("chat.send", { text: "/w 한도윤 몰래 말해요" });
+    await han.waitFor(isType("chat.posted"));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(JSON.stringify(kp.messages)).not.toContain("몰래 말해요");
+  });
+
+  it("속도 제한: 한 사람이 1초에 3번을 넘기면 rate_limited", async () => {
+    const { room } = await startedRoom();
+    const pl = await connect(room, SEO);
+    for (let i = 0; i < 6; i++) pl.cmd("chat.send", { text: `연타 ${i}` }, `c${i}`);
+    const err = await pl.waitFor((m) => m.event.type === "error" && m.event.data.code === "rate_limited");
+    expect(err.event.type === "error" && err.event.data.requestId).toBeDefined();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(chatOf(pl).length).toBeLessThanOrEqual(3);
+  });
+
+  it("/r은 대화와 굴림 기록에 함께 남고, /hr은 다른 PL에게 결과가 가지 않는다", async () => {
+    const { room, kp } = await startedRoom();
+    const pl = await connect(room, SEO);
+    const han = await connect(room, HAN);
+    pl.cmd("chat.send", { text: "/r 1d100" });
+    await han.waitFor(isType("roll.result"));
+    const chat = await han.waitFor(isType("chat.posted"));
+    expect(chat.event.type === "chat.posted" && chat.event.data).toMatchObject({ kind: "roll", roll: { expr: "1d100" } });
+    pl.cmd("chat.send", { text: "/hr 3d6+31" });
+    await kp.waitFor((m) => m.event.type === "chat.posted" && m.event.data.kind === "secret");
+    await new Promise((r) => setTimeout(r, 100));
+    expect(JSON.stringify(han.messages)).not.toContain("3d6+31");
+  });
+
+  it("접속하면 최근 100개의 대화가 16KB 안쪽의 조각으로 나뉘어 오고, 이전 대화는 HTTP로 받는다", async () => {
+    await app.close();
+    ({ app, port } = await boot({ registry: { now: () => clock, saveDebounceMs: 20, room: { now: () => clock } } }));
+    base = `http://127.0.0.1:${port}`;
+    const { room, kp } = await startedRoom();
+    const pl = await connect(room, SEO);
+    const reg = app.get(RoomRegistry);
+    const entry = (await reg.get(room.id))!;
+    const actor = { userId: "pl1", name: "윤서하", role: "pl" as const };
+    for (let i = 0; i < 130; i++) {
+      clock += 400;
+      const r = entry.room.handle(actor, { type: "chat.send", data: { text: `${String(i).padStart(3, "0")} ${"가".repeat(480)}` } });
+      if (!r.ok) throw new Error(r.message);
+    }
+    const han = await connect(room, HAN);
+    await han.waitFor((m) => m.event.type === "chat.history" && m.event.data.last);
+    const frames = han.messages.filter(isType("chat.history"));
+    expect(frames.length).toBeGreaterThan(5);
+    for (const f of frames) expect(bytes(f)).toBeLessThan(16 * 1024);
+    const got = frames.flatMap((f) => (f.event.type === "chat.history" ? f.event.data.messages : []));
+    expect(got).toHaveLength(100);
+    expect(got[0]!.text.startsWith("030 ")).toBe(true);
+    expect(got.at(-1)!.text.startsWith("129 ")).toBe(true);
+    // 이전 대화
+    const first = got[0]!;
+    const page = await api("GET", `/rooms/${room.id}/chat?before=${first.seq}&limit=20`, "pl2");
+    expect(page.status).toBe(200);
+    expect(page.json.messages).toHaveLength(20);
+    expect(page.json.messages.at(-1).text.startsWith("029 ")).toBe(true);
+    expect(page.json.hasMore).toBe(true);
+    expect((await api("GET", `/rooms/${room.id}/chat?before=abc`, "pl2")).status).toBe(400);
+    void kp;
+    void pl;
+  });
+});
+
+describe("세션 기록(HTTP)", () => {
+  it("참가자가 아니면 볼 수 없다", async () => {
+    const { room } = await startedRoom();
+    expect((await api("GET", `/rooms/${room.id}/log`, "stranger")).status).toBe(403);
+    expect((await api("GET", `/rooms/${room.id}/chat`, "stranger")).status).toBe(403);
+    expect((await api("GET", `/rooms/nope/log`, "kp1")).status).toBe(404);
+  });
+
+  it("GM은 숨은 기록까지 보고, PL은 공개된 기록만 본다. 비밀 굴림·초안·귓속말은 어느 쪽에도 없다", async () => {
+    const { room, kp } = await startedRoom();
+    const pl = await connect(room, SEO);
+    kp.cmd("handout.create", { title: "초안 편지", body: "초안 본문", visibleTo: "gm" });
+    kp.cmd("handout.create", { title: "찢어진 편지", body: "본문", visibleTo: "all" });
+    await pl.waitFor(isType("handout.added"));
+    kp.cmd("flow.beat.upsert", { name: "비밀 단계", kind: "progress", memo: "", handoutIds: [] });
+    kp.cmd("roll.request", { expr: "1d6+99", secret: true });
+    await new Promise((r) => setTimeout(r, 400));
+    pl.cmd("roll.request", { expr: "1d100" });
+    await pl.waitFor(isType("roll.result"));
+    await new Promise((r) => setTimeout(r, 400));
+    kp.cmd("chat.send", { text: "/w 윤서하 귓속말 단서" });
+    await pl.waitFor(isType("chat.posted"));
+
+    const gm = await api("GET", `/rooms/${room.id}/log`, "kp1");
+    const mine = await api("GET", `/rooms/${room.id}/log`, "pl1");
+    expect(gm.status).toBe(200);
+    expect(gm.json.audience).toBe("gm");
+    expect(mine.json.audience).toBe("public");
+    const types = (r: typeof gm) => r.json.entries.map((e: { kind: string }) => e.kind);
+    expect(types(gm)).toEqual(expect.arrayContaining(["session", "handout", "roll"]));
+    expect(types(mine)).toEqual(expect.arrayContaining(["session", "handout", "roll"]));
+    for (const r of [gm, mine]) {
+      const j = JSON.stringify(r.json);
+      expect(j).not.toContain("1d6+99");
+      expect(j).not.toContain("초안");
+      expect(j).not.toContain("귓속말 단서");
+    }
+    // 참가자용으로 보기(GM): 사용자 없는 시점
+    const pub = await api("GET", `/rooms/${room.id}/log?view=public`, "kp1");
+    expect(pub.json.audience).toBe("public");
+    // 종류 필터와 잘못된 값
+    const rolls = await api("GET", `/rooms/${room.id}/log?kinds=roll`, "pl1");
+    expect(rolls.json.entries.every((e: { kind: string }) => e.kind === "roll")).toBe(true);
+    expect((await api("GET", `/rooms/${room.id}/log?kinds=zzz`, "pl1")).status).toBe(400);
+    expect((await api("GET", `/rooms/${room.id}/log?limit=-1`, "pl1")).status).toBe(400);
+    // GM의 비트 이동은 PL 쪽에 없다 (기록에 GM만 보이는 줄이 따로 있다)
+    kp.cmd("flow.goto", { beatId: (await (async () => { const s = kp.messages.filter(isType("flow.updated")).at(-1); return s && s.event.type === "flow.updated" ? s.event.data.flow.beats[0]!.id : ""; })()) });
+    await new Promise((r) => setTimeout(r, 200));
+    const gm2 = await api("GET", `/rooms/${room.id}/log?kinds=beat`, "kp1");
+    const pl2 = await api("GET", `/rooms/${room.id}/log?kinds=beat`, "pl1");
+    expect(gm2.json.entries).toHaveLength(1);
+    expect(pl2.json.entries).toHaveLength(0);
+  });
+});
+
+describe("대화·기록 저장", () => {
+  it("서버를 다시 켜도 대화·귓속말·기록·설정이 남고 파일에 schemaVersion이 적힌다", async () => {
+    await app.close();
+    const dir = mkdtempSync(join(tmpdir(), "coc-vtt-"));
+    try {
+      const store = new FileRoomRepository(dir);
+      ({ app, port } = await boot({ store }));
+      base = `http://127.0.0.1:${port}`;
+      const room = await makeRoom("대화 룸");
+      const kp = await connect(room, GM);
+      const pl = await connect(room, SEO);
+      kp.cmd("session.start", {});
+      await kp.waitFor(isType("session.started"));
+      kp.cmd("settings.chat", { plWhisper: true });
+      pl.cmd("chat.send", { text: "저장될 말" });
+      await kp.waitFor(isType("chat.posted"));
+      await new Promise((r) => setTimeout(r, 450));
+      kp.cmd("chat.send", { text: "저장될 귓속말", to: "pl1" });
+      await pl.waitFor((m) => m.event.type === "chat.posted" && m.event.data.kind === "whisper");
+      await app.close();
+
+      const raw = JSON.parse(readFileSync(join(dir, `${room.id}.json`), "utf8"));
+      expect(raw.data.schemaVersion).toBe(2);
+      expect(raw.data.chat.map((m: { text: string }) => m.text)).toEqual(["저장될 말", "저장될 귓속말"]);
+      expect(raw.data.chatSettings).toEqual({ plWhisper: true });
+      expect(raw.data.log.map((e: { type: string }) => e.type)).toEqual(expect.arrayContaining(["start", "say"]));
+
+      ({ app, port } = await boot({ store: new FileRoomRepository(dir) }));
+      base = `http://127.0.0.1:${port}`;
+      const pl2 = await connect({ id: room.id, invite: "" }, SEO);
+      await pl2.waitFor((m) => m.event.type === "chat.history" && m.event.data.last);
+      expect(chatHistory(pl2).map((m) => m.text)).toEqual(["저장될 말", "저장될 귓속말"]);
+      const han = await connect({ id: room.id, invite: room.invite }, HAN);
+      await han.waitFor((m) => m.event.type === "chat.history" && m.event.data.last);
+      expect(chatHistory(han).map((m) => m.text)).toEqual(["저장될 말"]);
+      const snap = han.messages.find(isType("snapshot"));
+      expect(snap?.event.type === "snapshot" && snap.event.data.chatSettings).toEqual({ plWhisper: true });
+    } finally {
+      await app.close().catch(() => {});
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+const chatHistory = (c: Client) => c.messages.flatMap((m) => (m.event.type === "chat.history" ? m.event.data.messages : []));

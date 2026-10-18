@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import type { RawData, WebSocket } from "ws";
-import { clientEnvelopeSchema, joinSchema, type ErrorCode, type ServerMessage } from "@coc-vtt/shared";
+import { chunkChatHistory, clientEnvelopeSchema, joinSchema, type ErrorCode, type ServerMessage } from "@coc-vtt/shared";
 import { inAudience, type Actor, type Out } from "@coc-vtt/room-core";
 import type { AuthService } from "../../../identity/application/auth.service";
 import type { DiscordNotifier } from "../../application/discord-notifier";
@@ -256,6 +256,10 @@ export class RoomHub {
       // 새로 접속한 연결에는 snapshot(또는 놓친 구간)을 먼저 주고, 접속 알림은 그 뒤에 퍼뜨린다.
       if (missed === null) {
         this.send(ws, { seq: 0, event: { type: "snapshot", data: entry.room.snapshot(actor) } });
+        // 최근 대화는 snapshot에 싣지 않고 이어서 나눠 보낸다(한 프레임이 16KB를 넘지 않게). 이 사람이 볼 수 있는 것만 담긴다.
+        const chunks = chunkChatHistory(entry.room.chatHistory(actor));
+        if (chunks.length === 0) this.send(ws, { seq: 0, event: { type: "chat.history", data: { messages: [], last: true } } });
+        chunks.forEach((messages, i) => this.send(ws, { seq: 0, event: { type: "chat.history", data: { messages, last: i === chunks.length - 1 } } }));
       } else {
         for (const m of missed) this.send(ws, { seq: m.seq, event: m.event } as ServerMessage);
       }

@@ -160,6 +160,113 @@ export interface Member {
   online: boolean;
 }
 
+// ── 대화와 세션 기록 ───────────────────────────────────────
+
+/** 한 번에 보낼 수 있는 대화 글자 수 */
+export const CHAT_MAX_LENGTH = 500;
+/** 룸이 기억하는 대화 수(넘치면 오래된 것부터 버린다) */
+export const CHAT_KEEP = 500;
+/** 접속할 때 받는 최근 대화 수 */
+export const CHAT_HISTORY_ON_JOIN = 100;
+/** 이전 대화를 한 번에 가져오는 수의 상한 */
+export const CHAT_PAGE_MAX = 100;
+/** 룸이 기억하는 세션 기록 수(넘치면 오래된 것부터 버린다) */
+export const LOG_KEEP = 2000;
+/** 웹소켓 한 프레임에 담는 대화 기록의 최대 바이트(프레임 한도 16KB보다 작게) */
+export const CHAT_CHUNK_BYTES = 12_000;
+
+/**
+ * say: 모두에게 보이는 말. roll: 대화창에서 굴린 공개 굴림. whisper: 보낸 사람과 받는 사람만 보는 귓속말.
+ * secret: 대화창에서 굴린 비밀 굴림(GM과 굴린 사람만 본다).
+ */
+export type ChatKind = "say" | "roll" | "whisper" | "secret";
+
+export interface ChatMessage {
+  id: string;
+  /** 룸 전체에서 1씩 오르는 번호. 순서와 안 읽은 대화를 세는 데 쓴다. */
+  seq: number;
+  at: number;
+  session: number;
+  kind: ChatKind;
+  /** 보낸 사람 */
+  userId: string;
+  /** 화면에 보일 이름: "캐릭터로 말하기"를 골랐으면 캐릭터 이름, 아니면 사용자 이름 */
+  name: string;
+  role: Role;
+  text: string;
+  /** 귓속말 받는 사람 */
+  to?: { userId: string; name: string };
+  /** 대화창에서 굴린 굴림. 굴림 기록의 같은 항목을 rollId로 가리킨다. */
+  roll?: { rollId: string; expr: string; result: string };
+}
+
+/** 대화 설정(GM이 정한다). */
+export interface ChatSettings {
+  /** PL끼리 귓속말을 할 수 있게 한다. 이 귓속말은 GM도 볼 수 없다. */
+  plWhisper: boolean;
+}
+
+export const DEFAULT_CHAT_SETTINGS: ChatSettings = { plWhisper: false };
+
+export const LOG_KINDS = ["session", "scene", "handout", "beat", "combat", "roll", "damage", "sanity", "chat"] as const;
+export type LogKind = (typeof LOG_KINDS)[number];
+export const LOG_KIND_LABEL_KO: Record<LogKind, string> = {
+  session: "세션",
+  scene: "장면",
+  handout: "핸드아웃",
+  beat: "비트",
+  combat: "전투",
+  roll: "굴림",
+  damage: "피해",
+  sanity: "SAN",
+  chat: "대화",
+};
+
+/** 굴림 한 줄(기록용으로 글만 남긴 모양). 비밀 굴림은 기록에 넣지 않는다. */
+export interface RollRow {
+  at: number;
+  /** "이름" 또는 "이름 · 캐릭터 · 기능" */
+  who: string;
+  expr: string;
+  /** describeOutcome이 만든 결과 글 */
+  result: string;
+  tags: string[];
+}
+
+/** 룸이 저장하는 세션 기록 한 줄. audience가 목록이면 그 사용자들(과 GM)만 본다. */
+export interface LogEntry {
+  /** 기록 번호(1부터 오른다) */
+  n: number;
+  at: number;
+  session: number;
+  kind: LogKind;
+  type: string;
+  /** GM에게 보이는 한 줄 */
+  text: string;
+  /** GM이 아닌 사람에게 보이는 한 줄(가려야 할 이름이 있을 때만) */
+  plText?: string;
+  audience: "all" | "gm" | string[];
+  /** 그때 진행 중이던 장면 이름 */
+  scene?: string;
+  roll?: RollRow;
+  chat?: { name: string; text: string };
+}
+
+/** 보는 사람에게 내보내는 기록 한 줄. 공개 범위와 가린 글은 이미 반영돼 있다. */
+export interface LogEntryView {
+  n: number;
+  at: number;
+  session: number;
+  kind: LogKind;
+  type: string;
+  text: string;
+  scene?: string;
+  roll?: RollRow;
+  chat?: { name: string; text: string };
+  /** GM에게만: 모두에게 보이지 않는 기록 */
+  scope?: "gm" | "some";
+}
+
 /** 전투 순서의 한 칸. 시트가 있는 캐릭터는 characterId로 이어지고, NPC는 이름과 DEX만 둔다. */
 export interface InitiativeEntry {
   id: string;
@@ -290,6 +397,8 @@ export interface Snapshot {
   bgm: BgmState | null;
   /** 이미 적용한 피해: 굴림 id → 적용한 캐릭터 id들. GM에게만 담아 보낸다(다른 사람은 비어 있다). */
   damageApplied?: Record<string, string[]>;
+  /** 대화 설정. 옛 서버가 보낸 snapshot에는 없을 수 있다. */
+  chatSettings?: ChatSettings;
   /** 서버의 현재 시각(ms). 클라이언트가 시계 차이를 맞추는 데 쓴다. */
   now: number;
 }
@@ -643,6 +752,20 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("madness.roll"), data: z.object({ characterId: id, mode: z.enum(["realtime", "summary"]).default("realtime") }) }),
   /** 하루가 지났다고 기록한다(GM 전용). characterId를 생략하면 모두. */
   z.object({ type: z.literal("san.newDay"), data: z.object({ characterId: id.optional() }).default({}) }),
+  /**
+   * 대화를 보낸다. 글이 /r, /hr, /w로 시작하면 서버가 명령으로 읽는다. to를 주면 그 사람에게만 가는 귓속말이다(명령으로 읽지 않는다).
+   * speaker: 내 캐릭터(GM은 아무 시트나)로 말하거나, GM이 "GM"으로 말한다.
+   */
+  z.object({
+    type: z.literal("chat.send"),
+    data: z.object({
+      text: z.string().min(1).max(CHAT_MAX_LENGTH + 200),
+      to: id.optional(),
+      speaker: z.union([z.object({ characterId: id }), z.object({ gm: z.literal(true) })]).optional(),
+    }),
+  }),
+  /** 대화 설정(GM 전용) */
+  z.object({ type: z.literal("settings.chat"), data: z.object({ plWhisper: z.boolean() }) }),
   z.object({ type: z.literal("session.start"), data: z.object({}).default({}) }),
   z.object({ type: z.literal("session.pause"), data: z.object({}).default({}) }),
   z.object({ type: z.literal("session.resume"), data: z.object({}).default({}) }),
@@ -785,6 +908,11 @@ export type ServerEvent =
   /** 다른 사람의 비밀 굴림. 결과는 담지 않는다. */
   | { type: "roll.hidden"; data: { id: string; userId: string; userName: string; at: number } }
   | { type: "presence"; data: { members: Member[] } }
+  /** 새 대화. 귓속말·비밀 굴림은 받을 사람에게만 간다. */
+  | { type: "chat.posted"; data: ChatMessage }
+  /** 접속 직후 받는 최근 대화. 프레임 크기를 지키려고 나눠서 보내고, 마지막 조각은 last가 true다. 저장·버퍼에 남기지 않는다. */
+  | { type: "chat.history"; data: { messages: ChatMessage[]; last: boolean } }
+  | { type: "settings.chat"; data: ChatSettings }
   | { type: "session.started"; data: { number: number } }
   | { type: "session.paused"; data: { reason: PauseReason } }
   /** GM의 마지막 연결이 닫혀 유예가 시작됨. 아직 정지는 아니다. */

@@ -1,4 +1,5 @@
-import { DEFAULT_EFFECTS, DEFAULT_SCENE_ID, type EffectSettings } from "./protocol";
+import { CHAT_KEEP, DEFAULT_CHAT_SETTINGS, DEFAULT_EFFECTS, DEFAULT_SCENE_ID, type ChatMessage, type ChatSettings, type EffectSettings } from "./protocol";
+import { mergeChat } from "./chat";
 import type { Character } from "./sheet";
 import type {
   EndSummary,
@@ -57,6 +58,11 @@ export interface RoomState {
   transition: { kind: Transition; n: number } | null;
   members: Member[];
   rolls: RollLogEntry[];
+  /** 내가 볼 수 있는 대화(오래된 순, 최근 CHAT_KEEP개). 접속하면 최근 대화가 나뉘어 도착한다. */
+  chat: ChatMessage[];
+  /** 접속 직후의 최근 대화를 다 받았는가(옛 서버에는 없는 이벤트라 snapshot에서 false로 시작한다) */
+  chatLoaded: boolean;
+  chatSettings: ChatSettings;
   /** GM이 요청한 판정(최근 것부터 5개). 화면에서 내게 온 것만 골라 쓴다. */
   rollAsks: RollAsk[];
   characters: Record<string, Character>;
@@ -104,6 +110,9 @@ export const initialRoomState = (roomId = ""): RoomState => ({
   transition: null,
   members: [],
   rolls: [],
+  chat: [],
+  chatLoaded: false,
+  chatSettings: DEFAULT_CHAT_SETTINGS,
   rollAsks: [],
   characters: {},
   handouts: {},
@@ -151,6 +160,9 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       transition: null,
       members: d.members,
       rolls: d.rolls,
+      // 대화는 이어서 둔다(다시 접속하면 같은 대화가 또 오지만 id로 걸러진다).
+      chatLoaded: false,
+      chatSettings: d.chatSettings ?? DEFAULT_CHAT_SETTINGS,
       rollAsks: [],
       characters: Object.fromEntries(d.characters.map((c) => [c.id, c])),
       handouts: Object.fromEntries(d.handouts.map((h) => [h.id, h])),
@@ -270,6 +282,12 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
         hiddenRolls: [...state.hiddenRolls, { id: ev.data.id, userName: ev.data.userName, at: ev.data.at }].slice(-50),
       };
     }
+    case "chat.posted":
+      return { ...next, chat: mergeChat(state.chat, [ev.data], CHAT_KEEP) };
+    case "chat.history":
+      return { ...next, chat: mergeChat(state.chat, ev.data.messages, CHAT_KEEP), chatLoaded: state.chatLoaded || ev.data.last };
+    case "settings.chat":
+      return { ...next, chatSettings: ev.data };
     case "presence":
       return { ...next, members: ev.data.members };
     case "session.started":

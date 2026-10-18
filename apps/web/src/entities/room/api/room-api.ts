@@ -1,5 +1,5 @@
 import { http, httpDownload, httpText, type Caller } from "@/shared/api";
-import type { ScenarioCounts } from "@coc-vtt/shared";
+import type { ChatMessage, LogEntryView, LogKind, ScenarioCounts } from "@coc-vtt/shared";
 import type { DiscordSettings, Invite, RoomListItem, RoomPreview } from "../model/types";
 
 export const listRooms = (me: Caller) => http<RoomListItem[]>(me, "GET", "/rooms");
@@ -50,3 +50,36 @@ export const importNewRoom = (me: Caller, text: string, name?: string) =>
 /** 룸 주인 전용. 룸을 시나리오 파일(scenario) 또는 설정까지 담은 백업(backup)으로 받는다. */
 export const exportRoom = (me: Caller, id: string, format: "scenario" | "backup", sheets: boolean) =>
   httpDownload(me, `/rooms/${encodeURIComponent(id)}/export?format=${format}${sheets ? "&sheets=1" : ""}`);
+
+/** 이전 대화 더 보기: seq가 before보다 앞인 대화를 최근 것부터 limit개(오래된 순). 내가 볼 수 있는 것만 온다. */
+export const getChatPage = (me: Caller, id: string, before: number, limit = 50) =>
+  http<{ messages: ChatMessage[]; hasMore: boolean }>(me, "GET", `/rooms/${encodeURIComponent(id)}/chat?before=${before}&limit=${limit}`);
+
+export interface SessionLogQuery {
+  kinds?: LogKind[];
+  since?: number;
+  until?: number;
+  session?: number;
+  before?: number;
+  limit?: number;
+  /** GM이 참가자용 기록을 미리 보거나 내보낼 때 */
+  view?: "public";
+}
+
+export interface SessionLogPage {
+  entries: LogEntryView[];
+  total: number;
+  hasMore: boolean;
+  /** gm: 숨은 기록까지, public: 참가자에게 보이는 기록만 */
+  audience: "gm" | "public";
+}
+
+/** 세션 기록. 보는 사람이 볼 수 있는 것만 온다(서버가 거른다). */
+export const getSessionLog = (me: Caller, id: string, q: SessionLogQuery = {}) => {
+  const p = new URLSearchParams();
+  if (q.kinds && q.kinds.length > 0) p.set("kinds", q.kinds.join(","));
+  for (const k of ["since", "until", "session", "before", "limit"] as const) if (q[k] !== undefined) p.set(k, String(q[k]));
+  if (q.view) p.set("view", q.view);
+  const qs = p.toString();
+  return http<SessionLogPage>(me, "GET", `/rooms/${encodeURIComponent(id)}/log${qs ? `?${qs}` : ""}`);
+};

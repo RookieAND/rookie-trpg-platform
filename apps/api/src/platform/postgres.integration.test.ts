@@ -45,6 +45,29 @@ describe.skipIf(!url)("Postgres 어댑터", () => {
     expect((await db.query("select count(*)::int as n from rooms")).rows[0]).toEqual({ n: 1 });
   });
 
+  it("대화·귓속말·세션 기록·설정과 schemaVersion을 잃지 않고 읽는다(jsonb 왕복)", async () => {
+    const repo = new PostgresRoomRepository(db);
+    let t = 1_700_000_000_000;
+    const room = new Room("r-chat", { newId: () => "x", rng: () => 0.5, now: () => (t += 1000) });
+    room.join({ userId: "kp", name: "하늘", role: "kp" });
+    room.join({ userId: "pl1", name: "서하", role: "pl" });
+    room.handle({ userId: "kp", name: "하늘", role: "kp" }, { type: "session.start", data: {} });
+    room.handle({ userId: "kp", name: "하늘", role: "kp" }, { type: "settings.chat", data: { plWhisper: true } });
+    room.handle({ userId: "pl1", name: "서하", role: "pl" }, { type: "chat.send", data: { text: "한글 \"따옴표\" 와 이모지 🎲" } });
+    t += 2000;
+    room.handle({ userId: "kp", name: "하늘", role: "kp" }, { type: "chat.send", data: { text: "귓속말이에요", to: "pl1" } });
+    const a: StoredRoom = { meta: { id: "r-chat", name: "룸", ownerId: "kp", createdAt: 1, invite: { code: "abc", expiresAt: null, maxMembers: 6 } }, data: room.toData() };
+    await repo.save(a);
+    const back = (await repo.load("r-chat"))!;
+    expect(back).toEqual(JSON.parse(JSON.stringify(a)));
+    expect(back.data?.schemaVersion).toBe(2);
+    expect(back.data?.chat?.map((m) => m.kind)).toEqual(["say", "whisper"]);
+    expect(back.data?.chatSettings).toEqual({ plWhisper: true });
+    expect(back.data?.log?.length).toBeGreaterThan(0);
+    // 저장본으로 룸을 다시 열면 같은 대화가 보인다
+    expect(Room.fromData(back.data!).chatHistory({ userId: "pl1", role: "pl" })).toHaveLength(2);
+  });
+
   it("데이터가 아직 없는 룸(메타만)도 저장한다", async () => {
     const repo = new PostgresRoomRepository(db);
     const a = stored("r2", "kp", []);
