@@ -70,7 +70,7 @@ try {
   const kp = await (await ctx()).newPage();
   await login(kp, "하늘");
   await kp.getByLabel("새 룸 이름").fill(ROOM);
-  await kp.getByRole("button", { name: "새 룸 만들기" }).click();
+  await kp.getByRole("button", { name: "새 룸 만들기", exact: true }).click();
   await kp.waitForURL(/\/room\//);
   const roomUrl = kp.url();
   await kp.getByTestId("connection").getByText("연결됨").waitFor();
@@ -1680,7 +1680,7 @@ try {
     const kpT = await (await ctx()).newPage();
     await login(kpT, "하늘" + run);
     await kpT.getByLabel("새 룸 이름").fill("토큰방 " + run);
-    await kpT.getByRole("button", { name: "새 룸 만들기" }).click();
+    await kpT.getByRole("button", { name: "새 룸 만들기", exact: true }).click();
     await kpT.waitForURL(/\/room\//);
     await kpT.getByTestId("connection").getByText("연결됨").waitFor();
     await kpT.getByRole("button", { name: "초대", exact: true }).click();
@@ -1823,6 +1823,263 @@ try {
     assert.equal(await pl.getByLabel("캐릭터 선택").count(), 0, "PL은 GM이 등록한 NPC 시트를 받지 않음");
   }
   step("룸 시트: CSV 내보내기, 수정한 기능만 보기·묶음 접기가 동작하고, GM은 CSV로 시트를 룸에 등록함(PL은 이미 있으면 가져오기 버튼이 없음)");
+
+  // 준비 도구 1: 토큰↔시트 연결(HP 막대·상태 칩, 눌러서 시트 열기), HP 공개, 시트 연결 고르기
+  const NPC = "CSV 조수 " + run;
+  const hpBar = (page, name) => page.getByTestId(`obj-${name}`).locator('[data-testid^="hp-"]');
+  const tabOn = (page, name) => page.locator('[role="tab"][aria-selected="true"]').filter({ hasText: name });
+  {
+    await kp2.getByRole("tab", { name: /진행 중/ }).click(); // GM이 PL과 같은 장면을 보게 한다
+    await kp2.getByRole("tab", { name: "시트" }).click();
+    // 1) PL의 시트를 이은 토큰: 그 PL에게 HP 막대가 보이고, 시트의 HP와 같음
+    await kp2.getByLabel("캐릭터 선택").selectOption({ label: CHAR });
+    await kp2.getByRole("button", { name: "토큰으로 놓기" }).click();
+    const linked = pl.locator('[data-mine="true"][data-linked="true"]').first();
+    await linked.waitFor();
+    const linkedName = (await linked.getAttribute("data-testid")).slice(4);
+    const bar = hpBar(pl, linkedName);
+    await bar.waitFor({ state: "attached" });
+    await pl.getByRole("tab", { name: "시트" }).click();
+    const [hp, max] = (await pl.getByTestId("stat-hp").innerText()).split("/").map(Number);
+    assert.equal(Number(await bar.getAttribute("data-hp")), hp);
+    assert.equal(Number(await bar.getAttribute("data-max")), max);
+    // 2) 토큰을 누르면(끌지 않고) 그 시트가 시트 탭에 열림 — PL은 자기 토큰만
+    await pl.getByRole("tab", { name: "굴림" }).click();
+    await linked.click();
+    await tabOn(pl, "시트").waitFor();
+    step("토큰↔시트 연결: PL 자신의 연결 토큰 아래에 시트와 같은 HP 막대가 보이고, 토큰을 누르면 시트 탭이 열림");
+
+    // 3) NPC 시트를 이은 토큰: GM에게는 HP가 보이고 PL에게는 'HP 공개'를 켤 때까지 안 보임
+    await kp2.getByRole("tab", { name: "시트" }).click();
+    await kp2.getByLabel("캐릭터 선택").selectOption({ label: NPC });
+    await kp2.getByTestId("npc-badge").waitFor();
+    await kp2.getByRole("button", { name: "토큰으로 놓기" }).click();
+    await pl.getByTestId(`obj-${NPC}`).waitFor();
+    await hpBar(kp2, NPC).waitFor({ state: "attached" });
+    assert.equal(Number(await hpBar(kp2, NPC).getAttribute("data-max")), 10);
+    assert.equal(await hpBar(pl, NPC).count(), 0, "NPC의 HP는 PL에게 숨김");
+    await kp2.getByTestId(`pick-${NPC}`).dispatchEvent("click");
+    await kp2.getByTestId("hp-public").click();
+    await hpBar(pl, NPC).waitFor({ state: "attached" });
+    await kp2.getByTestId("hp-public").click();
+    await hpBar(pl, NPC).waitFor({ state: "detached" });
+    // PL은 NPC 토큰을 눌러도 NPC 시트를 열지 못한다
+    await pl.getByRole("tab", { name: "굴림" }).click();
+    await pl.getByTestId(`obj-${NPC}`).click();
+    assert.equal(await pl.getByRole("tab", { name: "시트" }).getAttribute("aria-selected"), "false");
+    // GM이 토큰을 누르면 시트가 열림
+    await kp2.getByRole("tab", { name: "굴림" }).click();
+    await kp2.getByTestId(`obj-${NPC}`).click();
+    await tabOn(kp2, "시트").waitFor();
+    assert.equal(await kp2.getByLabel("캐릭터 선택").locator("option:checked").innerText(), NPC);
+    step("NPC 토큰의 HP는 GM에게만 보이고 'HP 공개'로 PL에게 열고 닫을 수 있으며, GM이 토큰을 누르면 그 NPC 시트가 열림");
+
+    // 4) 이어지지 않은 토큰에 시트 연결 고르기 → HP 막대, 연결 해제 → 막대 사라짐
+    const plain = "연결시험 " + run;
+    await kp2.getByLabel("새 토큰 이름").fill(plain);
+    await kp2.getByRole("button", { name: "+ 토큰" }).click();
+    await kp2.getByTestId(`pick-${plain}`).dispatchEvent("click");
+    await kp2.getByLabel("시트 연결").selectOption({ label: NPC });
+    await hpBar(kp2, plain).waitFor({ state: "attached" });
+    await kp2.getByLabel("시트 연결").selectOption({ label: "시트 연결 없음" });
+    await hpBar(kp2, plain).waitFor({ state: "detached" });
+    step("선택 막대의 '시트 연결'로 토큰에 시트를 잇고 풀 수 있음(잇는 동안만 HP 막대)");
+  }
+
+  // 준비 도구 2: NPC 시트 만들기(빠른 NPC) → 무기·기능 고치기 → 피해 → 토큰 HP 막대 → 시트를 빼면 연결이 풀림
+  {
+    const N = "불량배 " + run;
+    await kp2.getByRole("tab", { name: "시트" }).click();
+    await kp2.getByTestId("npc-new").click();
+    await kp2.getByTestId("npc-name").fill(N);
+    await kp2.getByTestId("npc-preset").selectOption({ label: "불량배" });
+    assert.match(await kp2.getByTestId("npc-db").innerText(), /피해 보너스/);
+    await kp2.getByTestId("npc-create").click();
+    await kp2.getByTestId("npc-dialog").waitFor({ state: "detached" });
+    await kp2.getByTestId("npc-badge").waitFor();
+    await kp2.waitForFunction((n) => document.querySelector('select[aria-label="캐릭터 선택"]')?.selectedOptions[0]?.textContent === n, N);
+    await kp2.getByTestId("stat-hp").getByText("12/12").waitFor();
+    await kp2.getByTestId("weapon-곤봉").waitFor();
+    await hpBar(kp2, N).waitFor({ state: "attached" }); // '토큰도 같이 놓기' 기본값
+    assert.equal(Number(await hpBar(kp2, N).getAttribute("data-max")), 12);
+    // PL에게는 시트도 HP 막대도 가지 않음
+    await pl.getByTestId(`obj-${N}`).waitFor();
+    assert.equal(await hpBar(pl, N).count(), 0);
+    assert.equal(await pl.getByLabel("캐릭터 선택").count(), 0);
+    // 무기·기능 고치기(GM)
+    await kp2.getByLabel("새 무기 이름").fill("단검");
+    await kp2.getByLabel("새 무기 피해").fill("1d4+db");
+    await kp2.getByRole("button", { name: "무기 넣기" }).click();
+    await kp2.getByTestId("weapon-단검").waitFor();
+    await kp2.getByLabel("새 무기 이름").fill("엉터리");
+    await kp2.getByLabel("새 무기 피해").fill("엉터리");
+    await kp2.getByRole("alert").filter({ hasText: "주사위 식" }).waitFor();
+    await kp2.getByLabel("새 무기 이름").fill("");
+    await kp2.getByLabel("새 무기 피해").fill("1d6+db");
+    await kp2.getByLabel("회피 값 고치기").fill("70");
+    await kp2.getByLabel("회피 값 고치기").press("Enter");
+    await kp2.waitForFunction(() => document.querySelector('[aria-label="회피 값 고치기"]')?.value === "70");
+    await kp2.getByLabel("새 기능 이름").fill("크툴루 신화");
+    await kp2.getByLabel("새 기능 값").fill("5");
+    await kp2.getByRole("button", { name: "기능 넣기" }).click();
+    await kp2.waitForFunction(() => document.querySelector('[aria-label="크툴루 신화 값 고치기"]')?.value === "5");
+    // 피해가 시트와 토큰 막대에 함께 적용됨
+    await kp2.getByLabel("적용할 피해").fill("4");
+    await kp2.getByTestId("sheet-apply-damage").click();
+    await kp2.getByTestId("stat-hp").getByText("8/12").waitFor();
+    await kp2.waitForFunction((n) => document.querySelector(`[data-testid="obj-${n}"] [data-testid^="hp-"]`)?.getAttribute("data-hp") === "8", N);
+    step("NPC 시트 만들기: 빠른 NPC 예시로 HP·무기가 들어가고 토큰이 이어지며, 무기·기능을 고치고 피해를 적용하면 토큰 HP 막대도 줄고, PL에게는 보이지 않음");
+    // 시트를 빼면 토큰의 연결이 풀림(토큰은 남음)
+    await kp2.getByRole("button", { name: "이 캐릭터 빼기" }).click();
+    await confirmAsk(kp2);
+    await hpBar(kp2, N).waitFor({ state: "detached" });
+    await kp2.getByTestId(`obj-${N}`).waitFor();
+    step("시트를 룸에서 빼면 그 시트를 이은 토큰의 연결이 풀리고 토큰은 남음");
+  }
+
+  // 준비 도구 3: 시나리오 가져오기(문서 예시) — 미리보기, 적용, 되돌리기
+  const fsx = await import("node:fs/promises");
+  const doc = await fsx.readFile(new URL("../../../docs/scenario-format.md", import.meta.url), "utf8");
+  const SAMPLE = doc.match(/```json\n([\s\S]*?)\n```/)[1];
+  const sceneTabs = () => kp2.getByRole("tablist", { name: "장면" }).getByRole("tab");
+  const sceneNames = async () => (await sceneTabs().allInnerTexts()).map((t) => t.replace(/^[●▶\s]+/, "").trim());
+  const waitNames = async (ok) => {
+    for (let i = 0; i < 60; i++) {
+      const n = await sceneNames();
+      if (ok(n)) return n;
+      await kp2.waitForTimeout(100);
+    }
+    throw new Error("장면 목록이 기대대로 바뀌지 않았어요: " + (await sceneNames()).join(","));
+  };
+  const homeTab = () => sceneTabs().filter({ hasText: /^[●▶\s]*현관$/ }).first();
+  {
+    const before = await sceneNames();
+    await openSettings(kp2);
+    await kp2.getByTestId("menu-import").click();
+    const dlg = kp2.getByTestId("import-dialog");
+    // 깨진 글은 위치와 이유를 알려 주고 가져오기가 막힘
+    await dlg.getByTestId("import-text").fill('{"format":"roll-and-call-scenario","version":2,"roomName":"X","scenes":[{"key":"a","name":"방"}],"tokens":[{"scene":"없는장면","kind":"prop","name":"상자","x":1,"y":1}]}');
+    await dlg.getByTestId("import-errors").getByText(/없는장면/).waitFor();
+    assert.equal(await dlg.getByTestId("import-apply").isDisabled(), true);
+    // 예시 받기
+    const [sampleDl] = await Promise.all([kp2.waitForEvent("download"), dlg.getByTestId("import-sample").click()]);
+    const sampleFile = JSON.parse((await fsx.readFile(await sampleDl.path())).toString("utf8"));
+    assert.equal(sampleFile.format, "roll-and-call-scenario");
+    // 문서의 예시를 파일로 고르면 미리보기에 개수가 나옴
+    await dlg.getByTestId("import-file").setInputFiles({ name: "예시.json", mimeType: "application/json", buffer: Buffer.from(SAMPLE) });
+    await dlg.getByTestId("import-counts").waitFor();
+    const countsText = await dlg.getByTestId("import-counts").innerText();
+    assert.match(countsText, /장면 2/);
+    assert.match(countsText, /토큰·소품 4/);
+    assert.match(countsText, /핸드아웃 3/);
+    assert.match(countsText, /이미지 1/);
+    assert.equal(await dlg.getByTestId("import-errors").count(), 0);
+    await dlg.getByTestId("import-apply").click();
+    await dlg.waitFor({ state: "detached" });
+    const after = await waitNames((n) => n.includes("지하실"));
+    assert.ok(after.includes("현관"));
+    assert.equal(after.length, before.length + 2, "장면 2개가 더해짐");
+    const toast = kp2.getByTestId("toast").filter({ hasText: "가져왔어요" });
+    await toast.waitFor();
+    // PL: 공개 핸드아웃은 받고 GM 전용 노트·NPC 시트는 받지 않음
+    await pl.getByRole("tab", { name: /^핸드아웃/ }).click();
+    await pl.getByText("찢어진 쪽지").waitFor();
+    assert.equal(await pl.getByText("관리인의 비밀").count(), 0);
+    assert.equal(await pl.getByLabel("캐릭터 선택").count(), 0);
+    // 되돌리기 토스트
+    await toast.getByTestId("toast-action").click();
+    await waitNames((n) => !n.includes("지하실"));
+    assert.equal((await sceneNames()).length, before.length);
+    step("시나리오 가져오기: 깨진 글은 위치와 함께 막히고, 문서 예시는 개수 미리보기 뒤 적용되며(PL은 공개 핸드아웃만 받음) '되돌리기' 토스트로 지워짐");
+
+    // 다시 가져와서 아래 단계에 쓴다(붙여넣기로)
+    await openSettings(kp2);
+    await kp2.getByTestId("menu-import").click();
+    await kp2.getByTestId("import-text").fill(SAMPLE);
+    await kp2.getByTestId("import-counts").waitFor();
+    await kp2.getByTestId("import-apply").click();
+    await waitNames((n) => n.includes("지하실"));
+    step("글을 붙여 넣어도 같은 미리보기·적용이 됨");
+  }
+
+  // 준비 도구 4: 장면 복제·순서·이름 바꾸기·삭제(화면 안 대화상자)
+  {
+    const orig = await sceneNames();
+    await homeTab().click();
+    await kp2.getByTestId("obj-낡은 상자").waitFor();
+    await kp2.getByTestId("scene-duplicate").click();
+    await sceneTabs().filter({ hasText: "현관 복사" }).waitFor();
+    await kp2.waitForFunction(() => [...document.querySelectorAll('[role="tab"]')].some((t) => t.textContent.includes("현관 복사") && t.getAttribute("aria-selected") === "true"));
+    await kp2.getByTestId("obj-낡은 상자").waitFor(); // 오브젝트도 복사됨
+    let names = await sceneNames();
+    assert.equal(names.indexOf("현관 복사"), names.indexOf("현관") + 1, "원본 바로 뒤에 놓임");
+    // 순서: 앞으로 → 원본 앞, 뒤로 → 다시 뒤
+    await kp2.getByTestId("scene-move-up").click();
+    names = await waitNames((n) => n.indexOf("현관 복사") < n.indexOf("현관"));
+    await kp2.getByTestId("scene-move-down").click();
+    names = await waitNames((n) => n.indexOf("현관 복사") > n.indexOf("현관"));
+    // 이름 바꾸기(화면 안 대화상자)
+    const NEW = "현관홀 " + run;
+    await openSceneMenu(kp2);
+    await kp2.getByRole("button", { name: "이름 변경" }).click();
+    const ask = kp2.getByTestId("ask-dialog");
+    await ask.getByLabel("장면 이름").fill(NEW);
+    await ask.locator('button[type="submit"]').click();
+    await waitNames((n) => n.includes(NEW));
+    // 삭제(활성이 아닌 장면): 확인 창 → 사라짐
+    await openSceneMenu(kp2);
+    await kp2.getByRole("button", { name: "장면 삭제" }).click();
+    await confirmAsk(kp2);
+    await waitNames((n) => !n.includes(NEW));
+    assert.deepEqual(await sceneNames(), orig);
+    step("장면 복제(오브젝트까지)·앞으로/뒤로 순서·이름 변경·삭제가 화면 안 대화상자로 동작함");
+  }
+
+  // 준비 도구 5: 룸 내보내기(백업) → 로비에서 백업으로 새 룸 만들기
+  {
+    await openSettings(kp2);
+    await kp2.getByTestId("export-sheets").check();
+    const [dl] = await Promise.all([kp2.waitForEvent("download"), kp2.getByTestId("menu-export-backup").click()]);
+    const backupText = (await fsx.readFile(await dl.path())).toString("utf8");
+    await kp2.keyboard.press("Escape");
+    const backup = JSON.parse(backupText);
+    assert.equal(backup.format, "roll-and-call-backup");
+    assert.ok(backup.scenes.some((sc) => sc.name === "현관") && backup.scenes.some((sc) => sc.name === "지하실"));
+    assert.ok(backup.characters.length >= 2, "시트 포함을 켜면 시트가 담김");
+    assert.ok(!backupText.includes("abcdefghijklmnopqrstuvwxyz"), "웹훅 주소는 담기지 않음");
+    assert.ok(!backupText.includes("하늘"), "접속한 사람의 정보는 담기지 않음");
+    const secret = backup.handouts.find((h) => h.title.includes("관리인의 비밀"));
+    assert.ok(secret && secret.visibleTo === "gm", "GM 전용 노트는 GM 전용으로 남음");
+    // 로비: 백업에서 새 룸 만들기
+    const home = await (await ctx()).newPage();
+    await login(home, "하늘");
+    await home.getByTestId("import-room").click();
+    const rd = home.getByTestId("import-room-dialog");
+    await rd.getByTestId("import-room-file").setInputFiles({ name: "백업.json", mimeType: "application/json", buffer: Buffer.from(backupText) });
+    await rd.getByTestId("import-room-counts").getByText(/장면/).waitFor();
+    await rd.getByLabel("새 룸 이름").fill(`복원 룸 ${run}`);
+    await rd.getByTestId("import-room-apply").click();
+    await home.waitForURL((u) => /\/room\//.test(u.toString()) && u.toString() !== roomUrl);
+    await home.getByTestId("connection").getByText("연결됨").waitFor();
+    await home.getByRole("tablist", { name: "장면" }).getByRole("tab", { name: "지하실" }).waitFor();
+    await home.getByRole("tab", { name: /^[●▶\s]*현관$/ }).first().click();
+    await home.getByTestId("obj-낡은 상자").waitFor();
+    await home.getByText("세션 시작 전이에요").waitFor();
+    // 원래 룸은 그대로
+    assert.ok((await sceneNames()).includes("현관"));
+    step("룸 내보내기: 시트까지 담은 백업(웹훅·접속자 정보 없음, GM 노트는 GM 전용)을 로비의 '백업에서 새 룸 만들기'로 새 룸에 되살리고 원래 룸은 그대로");
+  }
+
+  // 룸 이름 바꾸기(주인) → 탭 제목에 반영
+  {
+    await openSettings(kp2);
+    await kp2.getByTestId("menu-rename-room").click();
+    const ask = kp2.getByTestId("ask-dialog");
+    await ask.getByLabel("룸 이름").fill(`${ROOM} 개정`);
+    await ask.locator('button[type="submit"]').click();
+    await kp2.waitForFunction((n) => document.title.includes(n), `${ROOM} 개정`);
+    step("룸 주인이 룸 이름을 바꾸면 탭 제목이 바뀜");
+  }
 
   // 룸 삭제: 로비 카드에서 두 번 눌러 지우면 목록에서 사라지고, 열려 있던 룸은 끊긴다
   await kp2.goto(WEB);

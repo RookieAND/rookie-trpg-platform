@@ -87,7 +87,14 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, rollWhy, 
         <div className="sheet-head">
           {characters.length > 1 ? (
             <select className="input" aria-label="캐릭터 선택" value={c.id} onChange={(e) => onSelect(e.target.value)}>
-              {characters.map((x) => <option key={x.id} value={x.id}>{x.name}{npcIds?.has(x.id) ? " (NPC)" : ""}</option>)}
+              {npcIds && npcIds.size > 0 && characters.some((x) => !npcIds.has(x.id)) ? (
+                <>
+                  <optgroup label="PL 시트">{characters.filter((x) => !npcIds.has(x.id)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
+                  <optgroup label="NPC 시트 (PL에게 안 보여요)">{characters.filter((x) => npcIds.has(x.id)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
+                </>
+              ) : (
+                characters.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)
+              )}
             </select>
           ) : (
             <strong style={{ fontSize: 15 }}>{c.name}</strong>
