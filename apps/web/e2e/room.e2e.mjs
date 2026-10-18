@@ -202,7 +202,7 @@ try {
   await lobby.getByLabel("신용도 최대").fill("45");
   await lobby.getByRole("button", { name: "수정 저장" }).click();
   await lobby.getByTestId("occupation-item").filter({ hasText: JOB }).filter({ hasText: "20~45" }).waitFor();
-  const [jobDl] = await Promise.all([lobby.waitForEvent("download"), lobby.getByRole("button", { name: "내보내기" }).click()]);
+  const [jobDl] = await Promise.all([lobby.waitForEvent("download"), lobby.getByRole("button", { name: "내보내기", exact: true }).click()]);
   const jobFile = await (await import("node:fs/promises")).readFile(await jobDl.path(), "utf8");
   assert.ok(jobFile.includes(JOB) && !jobFile.includes('"id"'));
   await lobby.getByRole("button", { name: `${JOB} 직업 삭제` }).click();
@@ -213,6 +213,75 @@ try {
   await lobby.getByRole("button", { name: `${JOB} 직업 삭제` }).click();
   await lobby.getByTestId("occupation-item").filter({ hasText: JOB }).waitFor({ state: "detached" });
   step("직업 정의: 직업 기능에만 직업 포인트를 쓰고 신용도 범위를 지켜야 만들어지며, 정의는 고치고·내보내고·가져오고·지울 수 있음");
+  // CSV: 보관함 카드에서 내보내고, 그 파일을 다시 가져와 미리보기 → 폼에 적용
+  {
+    const fs = await import("node:fs/promises");
+    const [dl] = await Promise.all([lobby.waitForEvent("download"), lobby.getByRole("button", { name: `${CHAR} CSV로 내보내기` }).click()]);
+    const raw = await fs.readFile(await dl.path());
+    assert.deepEqual([...raw.subarray(0, 3)], [0xef, 0xbb, 0xbf], "UTF-8 BOM으로 시작해야 함");
+    const csvText = raw.toString("utf8");
+    for (const h of ["[기본 정보]", "[특성치]", "[파생 수치]", "[기능]", "[무기]", "[소지품]", "[비고]"]) assert.ok(csvText.includes(h), h);
+    assert.ok(csvText.includes(CHAR) && csvText.includes("주먹,맨손 격투,1d3+db") && csvText.includes("손전등"));
+    await lobby.getByRole("button", { name: "CSV로 가져오기" }).click();
+    await lobby.getByText("구글 시트와 계속 이어지지 않고").waitFor();
+    // 잘못된 글은 오류를 보이고 적용할 수 없다
+    await lobby.getByLabel("CSV 붙여넣기").fill("아무 글");
+    await lobby.getByTestId("csv-errors").waitFor();
+    assert.equal(await lobby.getByTestId("csv-apply").isDisabled(), true);
+    // 일부 행이 틀리면 건너뛰고 알린다
+    const broken = csvText.replace(/관찰력,25,/, "관찰력,250,").replace("외국어,1,", "외국어,abc,");
+    await lobby.getByLabel("CSV 파일").setInputFiles({ name: "broken.csv", mimeType: "text/csv", buffer: Buffer.from(broken) });
+    await lobby.getByTestId("csv-warnings").getByText(/건너뛴 행 2개/).waitFor();
+    assert.match(await lobby.getByTestId("csv-warnings").innerText(), /관찰력/);
+    // 올바른 파일은 미리보기를 거쳐 새 폼에 적용된다
+    await lobby.getByLabel("CSV 파일").setInputFiles({ name: "ok.csv", mimeType: "text/csv", buffer: raw });
+    await lobby.getByTestId("csv-preview").getByText(CHAR).waitFor();
+    assert.equal(await lobby.getByTestId("csv-errors").count(), 0);
+    await lobby.getByTestId("csv-apply").click();
+    assert.equal(await lobby.getByLabel("이름", { exact: true }).inputValue(), CHAR);
+    assert.equal(await lobby.getByLabel("기능 값 6").inputValue(), "60");
+    assert.equal(await lobby.getByLabel("소지품").inputValue(), "손전등");
+    assert.equal(await lobby.getByLabel("무기 이름 1").inputValue(), "주먹");
+    assert.match(await lobby.getByTestId("derived").innerText(), /HP 10 · MP 10 · SAN 50/);
+    // 시트 UI: 묶음 접기, 기능 찾기, 수정한 기능만 보기
+    const total = await lobby.getByLabel(/^기능 이름 /).count();
+    assert.ok(total > 30);
+    await lobby.getByLabel("기능 찾기").fill("도서");
+    assert.equal(await lobby.getByLabel(/^기능 이름 /).count(), 1);
+    await lobby.getByLabel("기능 찾기").fill("");
+    await lobby.getByLabel("수정한 기능만 보기").check();
+    assert.equal(await lobby.getByLabel(/^기능 이름 /).count(), 1, "수정한 기능은 도서관 이용(60) 하나");
+    assert.equal(await lobby.getByLabel("기능 이름 6").inputValue(), "도서관 이용");
+    await lobby.getByLabel("수정한 기능만 보기").uncheck();
+    assert.equal(await lobby.getByLabel(/^기능 이름 /).count(), total);
+    const skillToggle = lobby.getByTestId("cf-skills").getByRole("button", { name: /^기능/ }).first();
+    await skillToggle.click();
+    assert.equal(await lobby.getByLabel("기능 이름 6").isVisible(), false);
+    await skillToggle.click();
+    assert.equal(await lobby.getByLabel("기능 이름 6").isVisible(), true);
+    // 양식 받기: 이름이 비어 있어 그대로는 가져와지지 않는다
+    const [tpl] = await Promise.all([lobby.waitForEvent("download"), lobby.getByRole("button", { name: "양식 받기" }).click()]);
+    const tplRaw = await fs.readFile(await tpl.path());
+    assert.deepEqual([...tplRaw.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
+    await lobby.getByRole("button", { name: "CSV로 가져오기" }).click();
+    await lobby.getByLabel("CSV 파일").setInputFiles({ name: "양식.csv", mimeType: "text/csv", buffer: tplRaw });
+    await lobby.getByTestId("csv-errors").getByText(/이름이 없어요/).waitFor();
+    // 이름만 채운 양식은 가져와진다
+    await lobby.getByLabel("CSV 붙여넣기").fill(tplRaw.toString("utf8").replace("이름,\r\n", "이름,양식 조사자\r\n"));
+    await lobby.getByTestId("csv-preview").getByText("양식 조사자").waitFor();
+    // 구글 시트 링크: 주소 모양이 아니면 서버에 묻지 않고 알려 준다
+    await lobby.getByLabel("구글 시트 링크").fill("https://evil.example/spreadsheets/d/abc");
+    await lobby.getByRole("button", { name: "링크로 읽기" }).click();
+    await lobby.getByTestId("csv-problem").getByText(/구글 시트 링크가 아니에요/).waitFor();
+    // 서버도 같은 주소를 거절한다(로그인 필요, 허용 목록 밖은 400)
+    const h = { "content-type": "application/json", "x-dev-user": encodeURIComponent("서하"), "x-dev-name": encodeURIComponent("서하") };
+    const bad = await fetch(`${API}/sheet-import/google`, { method: "POST", headers: h, body: JSON.stringify({ url: "http://127.0.0.1:8787/spreadsheets/d/abc" }) });
+    assert.equal(bad.status, 400);
+    const anon = await fetch(`${API}/sheet-import/google`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    assert.equal(anon.status, 401);
+    await lobby.getByRole("button", { name: "취소" }).click();
+  }
+  step("CSV: 보관함 카드에서 내보낸 파일(BOM)을 다시 가져오면 미리보기 뒤 폼에 그대로 적용되고, 틀린 행은 건너뛰며, 양식·구글 링크 검사·기능 찾기·접기가 동작함");
   await lobby.context().close();
   step("PL이 보관함에 캐릭터를 만듦 (파생 수치 미리보기 포함)");
 
@@ -1114,6 +1183,43 @@ try {
     assert.equal((await vb(pl))[2], 1000);
     step("보드: 방향키로 내 토큰이 움직여 KP에게도 보이고, 확대·내 토큰 보기·전체 보기가 동작함");
   }
+
+  // 룸 시트: CSV로 내보내기, 수정한 기능만 보기, 묶음 접기. KP는 CSV로 NPC를 룸에 등록한다
+  {
+    const fs = await import("node:fs/promises");
+    await pl.getByRole("tab", { name: "시트" }).click();
+    const [dl] = await Promise.all([pl.waitForEvent("download"), pl.getByRole("button", { name: "CSV로 내보내기" }).click()]);
+    const raw = await fs.readFile(await dl.path());
+    const text = raw.toString("utf8");
+    assert.ok(text.includes(CHAR) && text.includes("[파생 수치]") && text.includes("도서관 이용,60,"));
+    assert.equal(await pl.getByRole("button", { name: "CSV로 가져오기" }).count(), 0, "이미 캐릭터가 있는 PL은 룸에서 가져올 수 없음");
+    const sheet = pl.getByTestId("sheet");
+    const all = await sheet.locator('[data-testid^="skill-"]').count();
+    assert.ok(all > 30);
+    await sheet.getByLabel("수정한 기능만 보기").check();
+    const edited = await sheet.locator('[data-testid^="skill-"]').count();
+    assert.ok(edited >= 1 && edited < all);
+    await sheet.getByTestId("skill-도서관 이용").waitFor();
+    await sheet.getByLabel("수정한 기능만 보기").uncheck();
+    assert.equal(await sheet.locator('[data-testid^="skill-"]').count(), all);
+    const toggle = sheet.getByTestId("sheet-skills").getByRole("button", { name: /^기능/ }).first();
+    await toggle.click();
+    assert.equal(await sheet.getByTestId("skill-도서관 이용").isVisible(), false);
+    await toggle.click();
+    await sheet.getByTestId("skill-도서관 이용").waitFor();
+
+    const NPC = "CSV 조수 " + run;
+    await kp2.getByRole("tab", { name: "시트" }).click();
+    await kp2.getByRole("button", { name: "CSV로 가져오기" }).click();
+    await kp2.getByLabel("CSV 붙여넣기").fill(text.replace(CHAR, NPC));
+    await kp2.getByTestId("csv-preview").getByText(NPC).waitFor();
+    await kp2.getByTestId("csv-apply").click();
+    await kp2.getByLabel("캐릭터 선택").selectOption({ label: NPC });
+    assert.equal(await kp2.getByLabel("캐릭터 선택").locator("option:checked").innerText(), NPC);
+    await kp2.getByTestId("stat-hp").getByText("9/10").waitFor();
+    assert.equal(await pl.getByLabel("캐릭터 선택").count(), 0, "PL은 KP가 등록한 NPC 시트를 받지 않음");
+  }
+  step("룸 시트: CSV 내보내기, 수정한 기능만 보기·묶음 접기가 동작하고, KP는 CSV로 시트를 룸에 등록함(PL은 이미 있으면 가져오기 버튼이 없음)");
 
   // 룸 삭제: 로비 카드에서 두 번 눌러 지우면 목록에서 사라지고, 열려 있던 룸은 끊긴다
   await kp2.goto(WEB);

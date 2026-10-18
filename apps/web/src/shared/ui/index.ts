@@ -4,3 +4,4 @@ export { Menu, MenuLabel } from "./Menu";
 export { Hint } from "./Hint";
 export { GLOSSARY, type GlossaryKey } from "./glossary";
 export { Dialog } from "./Dialog";
+export { Group } from "./Group";

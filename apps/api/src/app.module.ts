@@ -25,6 +25,9 @@ import { RoomGateway } from "./room/interface/ws/room.gateway";
 import { RoomHub, type HubOptions } from "./room/interface/ws/room.hub";
 import { ClientIpResolver } from "./identity/application/client-ip";
 import { collectMediaIds } from "./media-refs";
+import { SheetImportService, type SheetImportOptions } from "./sheet-import/application/sheet-import.service";
+import type { SheetFetch } from "./sheet-import/domain/sheet-import";
+import { SheetImportController } from "./sheet-import/interface/http/sheet-import.controller";
 
 export interface AppOptions {
   store?: RoomRepository;
@@ -38,6 +41,8 @@ export interface AppOptions {
   discord?: { gateway?: DiscordGateway; notifier?: NotifierOptions };
   joinTimeoutMs?: number;
   hub?: HubOptions;
+  /** 구글 시트 가져오기. 테스트에서 바깥 요청(fetch)과 한도를 바꿔 끼운다. */
+  sheetImport?: { fetch?: SheetFetch; options?: SheetImportOptions };
   /** 프록시 겹 수. 0이면 X-Forwarded-For를 믿지 않는다. */
   trustProxyHops?: number;
   /** KP 연결이 끊긴 뒤 자동 정지까지의 유예(ms). 기본 30초 */
@@ -63,7 +68,7 @@ export class AppModule {
   static register(options: AppOptions = {}): DynamicModule {
     return {
       module: AppModule,
-      controllers: [RoomsController, CharactersController, LibraryController, ImagesController, AudioController],
+      controllers: [RoomsController, CharactersController, LibraryController, ImagesController, AudioController, SheetImportController],
       providers: [
         { provide: AuthService, useFactory: () => new AuthService(options.authenticate ?? devAuthenticate) },
         { provide: ClientIpResolver, useFactory: () => new ClientIpResolver(options.trustProxyHops ?? 0) },
@@ -94,6 +99,7 @@ export class AppModule {
         { provide: VaultService, useFactory: () => new VaultService(options.vault ?? new MemoryVaultRepository()) },
         { provide: LibraryService, useFactory: () => new LibraryService(options.library ?? new MemoryLibraryRepository()) },
         { provide: ImageService, useFactory: () => new ImageService(options.images ?? new MemoryImageStorage(), options.imageOptions) },
+        { provide: SheetImportService, useFactory: () => new SheetImportService(options.sheetImport?.fetch ?? ((url, init) => fetch(url, init)), options.sheetImport?.options) },
         RoomGateway,
         Lifecycle,
       ],

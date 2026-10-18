@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { CharacterInput } from "@coc-vtt/shared";
-import { createCharacter, deleteCharacter, listCharacters, updateCharacter, type VaultCharacter } from "@/entities/character";
+import { SheetCsvImport, createCharacter, deleteCharacter, downloadCharacterCsv, listCharacters, updateCharacter, type VaultCharacter } from "@/entities/character";
 import { useIdentity, type Identity } from "@/entities/user";
 import { CharacterForm, CharacterWizard } from "@/features/edit-character";
 import { OccupationManager, useOccupations } from "@/features/manage-occupations";
@@ -20,7 +20,7 @@ export function CharactersView() {
   return <Vault me={identity} />;
 }
 
-type Editing = { mode: "new" } | { mode: "wizard" } | { mode: "edit"; character: VaultCharacter } | null;
+type Editing = { mode: "new"; initial?: CharacterInput } | { mode: "wizard" } | { mode: "edit"; character: VaultCharacter } | null;
 
 function Vault({ me }: { me: Identity }) {
   const [items, setItems] = useState<VaultCharacter[] | null>(null);
@@ -70,12 +70,16 @@ function Vault({ me }: { me: Identity }) {
           {!editing && <button className="btn" onClick={() => setEditing({ mode: "wizard" })}>마법사로 만들기</button>}
           {!editing && <button className="btn primary" onClick={() => setEditing({ mode: "new" })}>새 캐릭터</button>}
         </div>
+        {!editing && (
+          <SheetCsvImport me={me} applyLabel="새 캐릭터 폼으로 열기" onApply={(data) => { setError(null); setEditing({ mode: "new", initial: data }); }} />
+        )}
         {error && <div className="err" role="alert">{error}</div>}
 
         {editing?.mode === "wizard" && <CharacterWizard occupations={jobs.occupations} onSubmit={save} onCancel={() => setEditing(null)} />}
         {editing && editing.mode !== "wizard" && (
           <CharacterForm
-            initial={editing.mode === "edit" ? { ...editing.character } : undefined}
+            me={me}
+            initial={editing.mode === "edit" ? { ...editing.character } : editing.initial}
             onSubmit={save}
             onCancel={() => setEditing(null)}
           />
@@ -92,6 +96,7 @@ function Vault({ me }: { me: Identity }) {
                 <div style={{ color: "var(--muted)", fontSize: 12.5 }}>{c.occupation || "직업 없음"} · {c.age}세 · 기능 {c.skills.length}개</div>
               </div>
               <button className="btn" onClick={() => setEditing({ mode: "edit", character: c })}>편집</button>
+              <button className="btn" aria-label={`${c.name} CSV로 내보내기`} onClick={() => downloadCharacterCsv(c)}>CSV</button>
               <button className="btn danger" onClick={() => remove(c)}>삭제</button>
             </article>
           ))}

@@ -174,3 +174,15 @@ export function rollCharacteristics(rng: () => number): { characteristics: Recor
     luck: three(),
   };
 }
+
+// ── 기능 목록 보조 ────────────────────────────────────────
+
+/** 특성치에 따른 기능 초기값 표(이름 → 값). 회피와 모국어는 DEX·EDU로 계산한다. */
+export function skillBaseValues(c: Pick<Character, "characteristics">): Map<string, number> {
+  return new Map(defaultSkillValues(c).map((s) => [s.name, s.value]));
+}
+
+/** 초기값에서 손댄 기능인가(값이 다르거나, 목록에 없는 기능이거나, 성장 표시가 있다). */
+export function isSkillEdited(base: ReadonlyMap<string, number>, name: string, entry: { value: number; grown?: boolean }): boolean {
+  return entry.grown === true || !base.has(name) || base.get(name) !== entry.value;
+}

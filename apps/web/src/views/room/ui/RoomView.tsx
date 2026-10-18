@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameObject, Role } from "@coc-vtt/shared";
+import { SheetCsvImport } from "@/entities/character";
 import { beginDiscordLogin, refreshStoredSession, useIdentity, type Identity } from "@/entities/user";
 import { SUPABASE_URL } from "@/shared/config";
 import { ObjectToolbar, uniqueName } from "@/features/board-objects";
@@ -323,6 +324,9 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                   </button>
                 )}
                 {role !== "spectator" && (isKp || !hasOwn) && <LoadCharacter me={me} send={send} disabled={paused && !isKp} />}
+                {role !== "spectator" && (isKp || !hasOwn) && (
+                  <SheetCsvImport me={me} applyLabel="룸에 등록" disabled={paused && !isKp} onApply={(data) => send({ type: "character.add", data })} />
+                )}
                 {characters.length === 0 && <SheetEmpty role={role} canLoad={!hasOwn} />}
                 {state.sessionStatus === "IDLE" && state.sessionNumber > 0 && sheet && sheet.ownerId === me.userId && <SaveToVaultButton key={`${sheet.id}-${sheet.rev}`} me={me} character={sheet} />}
               </div>

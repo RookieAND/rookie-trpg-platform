@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHARACTERISTIC_KEYS, defaultSkillValues, rollCharacteristics } from "./sheet";
+import { CHARACTERISTIC_KEYS, defaultSkillValues, isSkillEdited, rollCharacteristics, skillBaseValues } from "./sheet";
 
 describe("rollCharacteristics", () => {
   it("모든 주사위가 1이면 최소값, 6이면 최대값이다", () => {
@@ -34,5 +34,20 @@ describe("defaultSkillValues", () => {
   it("이름이 겹치지 않는다", () => {
     const names = defaultSkillValues({ characteristics: stats }).map((s) => s.name);
     expect(new Set(names).size).toBe(names.length);
+  });
+});
+
+describe("isSkillEdited", () => {
+  const base = skillBaseValues({ characteristics: { STR: 50, CON: 50, SIZ: 50, DEX: 60, APP: 50, INT: 50, POW: 50, EDU: 70 } });
+  it("초기값 그대로면 손대지 않은 기능이다 (회피는 DEX 절반, 모국어는 EDU)", () => {
+    expect(isSkillEdited(base, "관찰력", { value: 25 })).toBe(false);
+    expect(isSkillEdited(base, "회피", { value: 30 })).toBe(false);
+    expect(isSkillEdited(base, "모국어", { value: 70, grown: false })).toBe(false);
+  });
+  it("값이 다르거나 성장 표시가 있거나 목록에 없으면 손댄 기능이다", () => {
+    expect(isSkillEdited(base, "관찰력", { value: 26 })).toBe(true);
+    expect(isSkillEdited(base, "관찰력", { value: 25, grown: true })).toBe(true);
+    expect(isSkillEdited(base, "새 기능", { value: 1 })).toBe(true);
+    expect(isSkillEdited(base, "", { value: 20 })).toBe(true);
   });
 });
