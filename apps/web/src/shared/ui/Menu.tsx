@@ -15,7 +15,11 @@ export function Menu({ label, title, testId, align = "right", children }: { labe
     const onDown = (e: MouseEvent) => {
       if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault(); // 같은 키를 다른 단축키(선택 해제 등)가 또 쓰지 않게
+      setOpen(false);
+    };
     document.addEventListener("mousedown", onDown);
     window.addEventListener("keydown", onKey);
     return () => {

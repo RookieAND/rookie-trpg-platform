@@ -5,9 +5,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameObject, Role } from "@coc-vtt/shared";
 import { beginDiscordLogin, refreshStoredSession, useIdentity, type Identity } from "@/entities/user";
 import { SUPABASE_URL } from "@/shared/config";
-import { ObjectToolbar, uniqueName } from "@/features/board-objects";
+import { ObjectToolbar, uniqueName, useBoardInteractions } from "@/features/board-objects";
 import { FogToolbar } from "@/features/manage-fog";
-import { Hint, onTabListKeyDown } from "@/shared/ui";
+import { Hint, ImageLibraryProvider, onTabListKeyDown, roomImageIds, useImageLibraryStore } from "@/shared/ui";
 import { SceneBar } from "@/features/manage-scenes";
 import { StageCues } from "@/features/stage-cues";
 import { useEffectPreference } from "@/features/effect-preference";
@@ -126,6 +126,12 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   const lastPing = useRef(0);
   const canPing = role !== "spectator" && canEditBoard && shownSceneId === state.activeSceneId;
 
+  // 이미지 고르기 목록: 이 룸에서 이미 쓴 이미지(배경·토큰·핸드아웃)와 내가 올린 이미지
+  const usedImages = useMemo(() => roomImageIds({ scenes, objects: Object.values(state.objects), handouts: handoutList }), [scenes, state.objects, handoutList]);
+  const library = useImageLibraryStore(roomId, usedImages);
+  // 키보드(지우기·복제·선택 이동), 오른쪽 클릭 메뉴, 이미지 끌어놓기·붙여넣기
+  const interactions = useBoardInteractions({ me, isKp, sceneId: shownSceneId, objects, selectedId, onSelect: setSelectedId, send: sendWithHint, notify: notices.notify, remember: library.remember });
+
   if (authExpired) {
     return (
       <main className="login">
@@ -161,6 +167,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   const move = (o: GameObject, x: number, y: number) => send({ type: "object.move", data: { id: o.id, x, y, rev: o.rev } });
 
   return (
+    <ImageLibraryProvider value={library}>
     <div className="room">
       <a
         href="#game-board"
@@ -209,7 +216,8 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
             />
           )}
           {isKp && <SceneBar me={me} scenes={scenes} tracks={state.audioLibrary} activeId={state.activeSceneId} viewId={shownSceneId} onView={setViewSceneId} enabled canActivate={!paused} send={send} />}
-          <Board objects={board.objects} background={board.background} me={{ userId: me.userId, role }} canInteract={canEditBoard} onMove={move} selectedId={selectedId} onSelect={setSelectedId} fog={board.fog} onPing={canPing ? ping : undefined} pings={state.pings} sceneId={board.sceneId} turnTokenIds={turnTokenIds} onDragStart={onDragStart} animate={fx.enabled} onPick={isKp && fogPicking ? (x, y) => send({ type: "fog.reveal", data: { sceneId: shownSceneId, x, y, r: fogRadius } }) : undefined} />
+          <Board objects={board.objects} background={board.background} me={{ userId: me.userId, role }} canInteract={canEditBoard} onMove={move} selectedId={selectedId} onSelect={setSelectedId} fog={board.fog} onPing={canPing ? ping : undefined} pings={state.pings} sceneId={board.sceneId} turnTokenIds={turnTokenIds} onDragStart={onDragStart} animate={fx.enabled} onPick={isKp && fogPicking ? (x, y) => send({ type: "fog.reveal", data: { sceneId: shownSceneId, x, y, r: fogRadius } }) : undefined} {...interactions.boardProps} {...(isKp && !board.background ? { hint: "이미지를 끌어다 놓아 배경을 정해요" } : {})} />
+          {interactions.ui}
           {isKp && (
             <StageCues roomId={roomId} enabled={state.sessionStatus !== "PAUSED"} send={send} source={cueSource} />
           )}
@@ -331,5 +339,6 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
         </aside>
       </div>
     </div>
+    </ImageLibraryProvider>
   );
 }

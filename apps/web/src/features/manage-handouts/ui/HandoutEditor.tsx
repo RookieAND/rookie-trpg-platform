@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
 import type { Member, Visibility } from "@coc-vtt/shared";
-import { imageUrl, type Caller } from "@/shared/api";
-import { ImageUploadButton } from "@/shared/ui";
+import { firstImageFile, imageUrl, type Caller } from "@/shared/api";
+import { ImageUploadButton, useFileDrop, useImageUpload } from "@/shared/ui";
 
 export interface HandoutDraft {
   title: string;
@@ -24,6 +24,11 @@ export function HandoutEditor({ me, initial, players, onSave, onCancel }: { me: 
   const [mode, setMode] = useState<Mode>(initial?.kpOnly ? "note" : Array.isArray(initial?.visibleTo) ? "pick" : (initial?.visibleTo ?? "gm"));
   const [picked, setPicked] = useState<string[]>(Array.isArray(initial?.visibleTo) ? initial.visibleTo : []);
 
+  // 이미지 칸에 파일을 끌어다 놓아도 넣을 수 있다.
+  const drop = useImageUpload(me, setImage);
+  // 이미지가 아닌 파일이면 올리기 단계에서 형식 안내가 뜬다.
+  const zone = useFileDrop((files) => void drop.upload(firstImageFile(files) ?? files[0]));
+
   const visibleTo: Visibility = mode === "pick" ? picked : mode === "note" ? "gm" : mode;
   const valid = title.trim().length > 0 && (mode !== "pick" || picked.length > 0);
 
@@ -31,10 +36,12 @@ export function HandoutEditor({ me, initial, players, onSave, onCancel }: { me: 
     <div style={{ display: "grid", gap: 10 }}>
       <input className="input" aria-label="핸드아웃 제목" placeholder="제목" value={title} onChange={(e) => setTitle(e.target.value)} />
       <textarea className="input" style={{ height: 120 }} aria-label="핸드아웃 내용" placeholder="내용" value={body} onChange={(e) => setBody(e.target.value)} />
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <div className={`img-drop${zone.over ? " over" : ""}`} data-testid="handout-image-drop" {...zone.props}>
         {image && <img src={imageUrl(image)} alt="핸드아웃 이미지 미리보기" style={{ height: 56, borderRadius: 6, border: "1px solid var(--line-2)" }} />}
-        <ImageUploadButton me={me} label={image ? "이미지 바꾸기" : "이미지 넣기"} onUploaded={setImage} />
+        <ImageUploadButton me={me} label={image ? "이미지 바꾸기" : "이미지 넣기"} current={image} onUploaded={setImage} />
         {image && <button type="button" className="btn" onClick={() => setImage(null)}>이미지 떼기</button>}
+        {!image && <span className="img-drop-hint">{drop.busy ? "올리는 중…" : "여기에 이미지를 끌어다 놓아도 돼요"}</span>}
+        {drop.error && <span role="alert" style={{ color: "var(--danger)", fontSize: 12 }}>{drop.error}</span>}
       </div>
       <select className="input" aria-label="공개 범위" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
         <option value="note">KP 전용 노트 (공개할 수 없어요)</option>

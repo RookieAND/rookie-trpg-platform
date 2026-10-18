@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { BoardPing, FogArea, GameObject, Role } from "@coc-vtt/shared";
 import { imageUrl } from "@/shared/api";
+import { dragHasFiles } from "@/shared/ui";
+import { objectAt } from "../model/drop-target";
 import { Pings } from "./Ping";
 
 const W = 1000;
@@ -54,14 +56,23 @@ interface Props {
   onDragStart?: (obj: GameObject) => void;
   /** 끄면(움직임 줄이기) 핑 파동을 그리지 않고 고정된 고리만 보여 준다. */
   animate?: boolean;
+  /** 있으면 이미지 파일을 보드에 끌어다 놓을 수 있다. hit은 놓은 자리의 오브젝트(없으면 null)와 보드·화면 좌표. */
+  onImageFile?: (file: File, hit: { objectId: string | null; x: number; y: number; cx: number; cy: number }) => void;
+  /** 있으면 오브젝트를 오른쪽 클릭하거나(터치는 길게 누르면) 이 메뉴를 연다. */
+  onObjectMenu?: (obj: GameObject, cx: number, cy: number) => void;
+  /** 있으면 이미지 없는 선택 오브젝트 아래에 '이미지 올리기' 칩을 보여 준다. */
+  onRequestImage?: (obj: GameObject, cx: number, cy: number) => void;
+  /** 보드 위에 한 줄로 띄우는 안내(예: 배경이 비었을 때) */
+  hint?: string;
 }
 
-export function Board({ objects, background, me, canInteract, onMove, selectedId, onSelect, fog, onPick, onPing, pings, sceneId, turnTokenIds, onDragStart, animate = true }: Props) {
+export function Board({ objects, background, me, canInteract, onMove, selectedId, onSelect, fog, onPick, onPing, pings, sceneId, turnTokenIds, onDragStart, animate = true, onImageFile, onObjectMenu, onRequestImage, hint }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
   const [view, setView] = useState<View>(FULL);
   const pan = useRef<{ px: number; py: number; v: View } | null>(null);
   const kbTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [fileOver, setFileOver] = useState<{ id: string | null } | null>(null);
   const press = useRef<{ timer: ReturnType<typeof setTimeout>; cx: number; cy: number } | null>(null);
   const cancelPress = () => {
     if (press.current) clearTimeout(press.current.timer);
@@ -69,8 +80,14 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
   };
   useEffect(() => cancelPress, []);
   /** 길게 누르면 그 자리를 핑한다. 많이 움직이거나 손을 떼면 취소된다. */
-  const startPress = (e: React.PointerEvent) => {
+  const startPress = (e: React.PointerEvent, obj?: GameObject) => {
     cancelPress();
+    // 터치로 오브젝트를 길게 누르면 핑 대신 메뉴(오른쪽 클릭 대신). 마우스의 길게 누르기는 그대로 핑이다.
+    if (obj && onObjectMenu && e.pointerType !== "mouse") {
+      const { clientX: cx, clientY: cy } = e;
+      press.current = { cx, cy, timer: setTimeout(() => { press.current = null; setDrag(null); onObjectMenu(obj, cx, cy); }, LONG_PRESS_MS) };
+      return;
+    }
     if (!onPing || onPick) return;
     const p = toBoard(e);
     press.current = { cx: e.clientX, cy: e.clientY, timer: setTimeout(() => { press.current = null; onPing(Math.round(p.x), Math.round(p.y)); }, LONG_PRESS_MS) };
@@ -95,7 +112,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
   const canMove = (o: GameObject) =>
     canInteract && me.role !== "spectator" && (me.role === "kp" || (o.ownerId === me.userId && !o.locked));
 
-  const toBoard = (e: React.PointerEvent) => {
+  const toBoard = (e: { clientX: number; clientY: number }) => {
     const el = svg.current!;
     const pt = el.createSVGPoint();
     pt.x = e.clientX;
@@ -113,7 +130,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
       width="100%"
       height="100%"
       role="application"
-      aria-label="게임 보드. 토큰을 고르고 방향키로 움직일 수 있어요. + − 키로 확대·축소하고, P 키나 길게 누르기로 모두에게 가리킬 수 있어요."
+      aria-label="게임 보드. 토큰을 고르고 방향키로 움직일 수 있어요. + − 키로 확대·축소하고, P 키나 길게 누르기로 모두에게 가리킬 수 있어요. 고른 토큰이 있으면 Tab으로 다음 토큰을 고르고, Esc로 선택을 풀어요."
       tabIndex={0}
       id="game-board"
       data-testid="board"
@@ -147,7 +164,32 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
           kbTimer.current = undefined;
         }, 350);
       }}
-      onContextMenu={(e) => onPing && e.preventDefault()}
+      onContextMenu={(e) => (onPing || onObjectMenu) && e.preventDefault()}
+      onDragEnter={(e) => {
+        if (onImageFile && dragHasFiles(e)) setFileOver({ id: null });
+      }}
+      onDragOver={(e) => {
+        if (!dragHasFiles(e)) return;
+        e.preventDefault(); // 안 막으면 놓았을 때 브라우저가 그림 파일을 열어 버린다
+        if (!onImageFile) return;
+        e.dataTransfer.dropEffect = "copy";
+        const p = toBoard(e);
+        const id = objectAt(objects, p.x, p.y);
+        setFileOver((cur) => (cur && cur.id === id ? cur : { id }));
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFileOver(null);
+      }}
+      onDrop={(e) => {
+        if (!dragHasFiles(e)) return;
+        e.preventDefault();
+        setFileOver(null);
+        if (!onImageFile) return;
+        const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/")) ?? e.dataTransfer.files[0];
+        if (!file) return;
+        const p = toBoard(e);
+        onImageFile(file, { objectId: objectAt(objects, p.x, p.y), x: Math.round(p.x), y: Math.round(p.y), cx: e.clientX, cy: e.clientY });
+      }}
       onDoubleClick={(e) => {
         if (!onPing || onPick) return;
         if (e.target !== svg.current && (e.target as Element).getAttribute("data-bg") === null) return;
@@ -244,13 +286,24 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
             data-mine={mine ? "true" : undefined}
             data-locked={o.locked ? "true" : undefined}
             style={{ cursor: canMove(o) ? "grab" : "default" }}
+            onContextMenu={(e) => {
+              if (!onObjectMenu) return;
+              e.preventDefault(); // 메뉴는 pointerdown 에서 이미 열었다
+              e.stopPropagation();
+            }}
             onPointerDown={(e) => {
               e.stopPropagation();
+              if (e.button === 2) {
+                // 오른쪽 클릭: 고르면서 바로 메뉴를 연다. 고르면 아래 도구 줄이 생겨 보드 크기가 바뀌므로, contextmenu 때는 이미 토큰이 비켜 있을 수 있다.
+                onSelect(o.id);
+                onObjectMenu?.(o, e.clientX, e.clientY);
+                return;
+              }
               if (e.altKey && onPing && !onPick) {
                 const p = toBoard(e);
                 return void onPing(Math.round(p.x), Math.round(p.y));
               }
-              startPress(e);
+              startPress(e, o);
               onSelect(o.id);
               if (canMove(o)) {
                 onDragStart?.(o);
@@ -269,6 +322,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
               </g>
             )}
             {selectedId === o.id && <circle cx={pos.x} cy={pos.y} r={R + 8} fill="none" stroke="#7c86f7" strokeWidth="2" />}
+            {fileOver?.id === o.id && <circle cx={pos.x} cy={pos.y} r={R + 10} fill="rgba(124,134,247,.18)" stroke="#7c86f7" strokeWidth="2.5" strokeDasharray="4 3" pointerEvents="none" data-testid="drop-target" />}
             {o.image ? (
               <>
                 <clipPath id={`clip-${o.id}`}>
@@ -296,6 +350,18 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
               {hidden ? " · GM 전용" : ""}
               {o.locked ? " · 잠김" : ""}
             </text>
+            {selectedId === o.id && !o.image && onRequestImage && drag?.id !== o.id && (
+              <g
+                data-testid="add-image-chip"
+                style={{ cursor: "pointer" }}
+                aria-hidden
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => onRequestImage(o, e.clientX, e.clientY)}
+              >
+                <rect x={pos.x - 38} y={pos.y + (o.kind === "token" ? R + 24 : 40)} width="76" height="18" rx="9" fill="#1a1b1e" stroke="#7c86f7" strokeWidth="1" />
+                <text x={pos.x} y={pos.y + (o.kind === "token" ? R + 37 : 53)} textAnchor="middle" fill="#b8c7ff" fontSize="11" fontWeight="600" pointerEvents="none">이미지 올리기</text>
+              </g>
+            )}
             {drag?.id === o.id && Math.hypot(drag.x - o.x, drag.y - o.y) >= CELL / 8 && (
               <g pointerEvents="none" data-testid="move-dist">
                 <line x1={o.x} y1={o.y} x2={drag.x} y2={drag.y} stroke="#b8c7ff" strokeWidth="1.5" strokeDasharray="4 4" opacity="0.7" />
@@ -314,6 +380,12 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
           </g>
         );
       })}
+      {hint && !fileOver && (
+        <g data-testid="board-hint" pointerEvents="none">
+          <rect x={W / 2 - 150} y={H - 52} width="300" height="28" rx="14" fill="rgba(14,15,17,.88)" stroke="#6b727c" strokeDasharray="4 4" />
+          <text x={W / 2} y={H - 33} textAnchor="middle" fill="#b4b7bf" fontSize="14">{hint}</text>
+        </g>
+      )}
       {pings && sceneId !== undefined && <Pings pings={pings} sceneId={sceneId} animate={animate} />}
     </svg>
     <ul className="sr-only" aria-label="보드 위 토큰 목록" data-testid="board-token-list">
@@ -336,6 +408,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         </li>
       ))}
     </ul>
+    {fileOver && onImageFile && <div className="drop-veil" data-testid="drop-veil" aria-hidden>{fileOver.id ? "이 토큰의 이미지로 넣어요" : "놓으면 쓰임을 물어봐요"}</div>}
     <div className="zoom-ctl" role="group" aria-label="보드 확대·이동">
       <button type="button" className="btn sm" aria-label="확대" onClick={() => zoomAt(1.25)} disabled={view.w <= W / MAX_ZOOM + 0.5}>＋</button>
       <button type="button" className="btn sm" aria-label="축소" onClick={() => zoomAt(0.8)} disabled={!zoomed}>－</button>
