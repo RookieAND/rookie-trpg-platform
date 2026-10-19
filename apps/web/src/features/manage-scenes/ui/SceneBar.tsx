@@ -14,6 +14,16 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
   const ask = useAsk();
   const compact = useMediaQuery(COMPACT_QUERY);
   const tabStops = useRoving<HTMLDivElement>('[role="tab"]');
+  // 보는 장면의 탭이 가려져 있으면 보이는 자리로 가져온다(장면이 많을 때).
+  const viewTab = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const el = viewTab.current;
+    const box = el?.closest<HTMLElement>(".scene-tabs");
+    if (!el || !box) return;
+    const a = el.getBoundingClientRect();
+    const b = box.getBoundingClientRect();
+    if (a.left < b.left || a.right > b.right) box.scrollTo({ left: box.scrollLeft + (a.left - b.left) - (b.width - a.width) / 2, behavior: "smooth" });
+  }, [viewId, scenes.length]);
   const [bringParty, setBringParty] = useState(true); // PL 토큰을 새 장면으로 같이 가져갈지
   const viewing = scenes.find((s) => s.id === viewId);
   const isActive = viewId === activeId;
@@ -137,6 +147,7 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
     <div className="scenebar" data-testid="scenebar">
       {ask.node}
       <div className="scene-row">
+        {scenes.length > 5 && <SceneListMenu scenes={scenes} viewId={viewId} activeId={activeId} onView={onView} />}
         <div className="scene-tabs" role="tablist" aria-label="장면" ref={tabStops.ref} onFocus={tabStops.onFocus} onKeyDown={onTabListKeyDown}>
           {scenes.map((s, i) => {
             const ind = dragId ? dropIndicator(scenes.findIndex((x) => x.id === dragId), overTab?.index ?? -1, overTab?.side ?? "before", scenes.length) : null;
@@ -171,7 +182,7 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
                 }}
                 onDragEnd={endDrag}
               >
-                <button role="tab" aria-selected={s.id === viewId} className="scene-tab" onClick={() => onView(s.id)}>
+                <button role="tab" aria-selected={s.id === viewId} className="scene-tab" ref={s.id === viewId ? viewTab : undefined} onClick={() => onView(s.id)}>
                   {s.id === activeId && <span aria-label="진행 중" title="지금 PL에게 보이는 장면" style={{ color: "var(--ok)" }}>● </span>}
                   {s.start && <span aria-label="시작 장면" title="세션을 시작하면 이 장면이 열려요">▶ </span>}
                   {s.name}
@@ -240,5 +251,30 @@ function GridSettings({ scene, enabled, send }: { scene: Scene; enabled: boolean
         <span className="why">{GRID_MIN}~{GRID_MAX}</span>
       </label>
     </div>
+  );
+}
+
+/** 장면이 많을 때: 이름으로 찾아 바로 고르는 목록 */
+function SceneListMenu({ scenes, viewId, activeId, onView }: { scenes: readonly Scene[]; viewId: string; activeId: string; onView: (id: string) => void }) {
+  const [q, setQ] = useState("");
+  const list = q.trim() ? scenes.filter((s) => s.name.toLowerCase().includes(q.trim().toLowerCase())) : scenes;
+  return (
+    <Menu label={`목록 ${scenes.length}`} title="장면을 이름으로 찾아 열어요" align="left" testId="scene-list">
+      {(close) => (
+        <>
+          {scenes.length > 8 && <input className="input" autoFocus aria-label="장면 찾기" placeholder="장면 이름 찾기" value={q} onChange={(e) => setQ(e.target.value)} />}
+          <div className="scene-list" role="listbox" aria-label="장면 목록">
+            {list.length === 0 && <div className="muted" style={{ padding: "6px 8px" }}>맞는 장면이 없어요.</div>}
+            {list.map((s) => (
+              <button key={s.id} type="button" role="option" aria-selected={s.id === viewId} className="btn scene-list-item" onClick={() => { onView(s.id); close(); }}>
+                <span className="scene-list-mark" aria-hidden>{s.id === activeId ? "●" : s.start ? "▶" : ""}</span>
+                <span className="scene-list-name">{s.name}</span>
+                {s.id === viewId && <span aria-hidden className="select-check">✓</span>}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </Menu>
   );
 }

@@ -190,6 +190,8 @@ const docSchema = z.object({
   beats: z.array(beatSchema).max(MAX_BEATS).default([]),
   branches: z.array(branchSchema).max(MAX_BRANCHES).default([]),
   madnessTable: z.array(z.string()).optional(),
+  /** 장기적 광기(공포증·집착·망상 등) 목록 */
+  madnessIndefinite: z.array(z.string()).optional(),
   audio: z.array(audioSchema).max(MAX_AUDIO_TRACKS).optional(),
   /** 룸 설정(백업). 새 룸에만 적용해요. */
   effects: z.object(Object.fromEntries(EFFECT_LEVELS.map((l) => [l, effectLevel])) as Record<(typeof EFFECT_LEVELS)[number], typeof effectLevel>).optional(),

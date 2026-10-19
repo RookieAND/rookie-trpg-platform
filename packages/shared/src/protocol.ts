@@ -437,8 +437,10 @@ export interface Snapshot {
   activeSceneId: string;
   effects: EffectSettings;
   handouts: Handout[];
-  /** 광기 증상표. GM에게만 담아 보낸다(다른 사람은 빈 배열). */
+  /** 일시적 광기 증상표. GM에게만 담아 보낸다(다른 사람은 빈 배열). */
   madnessTable: string[];
+  /** 장기적 광기(공포증·집착·망상 등) 목록. GM에게만 담아 보낸다. */
+  madnessIndefinite?: string[];
   /** 진행 중인 전투 순서. 없으면 null. 모두에게 보인다. */
   initiative: Initiative | null;
   /** 세션 흐름. GM에게만 담아 보낸다(다른 사람은 null). */
@@ -824,9 +826,9 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("initiative.dex"), data: z.object({ id, dex: z.number().int().min(0).max(200) }) }),
   z.object({ type: z.literal("initiative.next"), data: z.object({}) }),
   z.object({ type: z.literal("initiative.end"), data: z.object({}) }),
-  z.object({ type: z.literal("settings.madness"), data: z.object({ entries: z.array(z.string().trim().min(1).max(120)).max(MAX_MADNESS_ENTRIES) }) }),
+  z.object({ type: z.literal("settings.madness"), data: z.object({ entries: z.array(z.string().trim().min(1).max(120)).max(MAX_MADNESS_ENTRIES), indefinite: z.array(z.string().trim().min(1).max(120)).max(MAX_MADNESS_ENTRIES).optional() }) }),
   /** 증상표에서 증상을 하나 굴린다(GM 전용). 결과는 시트 주인과 GM만 본다. */
-  z.object({ type: z.literal("madness.roll"), data: z.object({ characterId: id, mode: z.enum(["realtime", "summary"]).default("realtime") }) }),
+  z.object({ type: z.literal("madness.roll"), data: z.object({ characterId: id, mode: z.enum(["realtime", "summary", "indefinite"]).default("realtime") }) }),
   /** 하루가 지났다고 기록한다(GM 전용). characterId를 생략하면 모두. */
   z.object({ type: z.literal("san.newDay"), data: z.object({ characterId: id.optional() }).default({}) }),
   /**
@@ -867,11 +869,11 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-/** 광기 증상 굴림 결과. mode가 realtime이면 duration은 라운드, summary면 시간이다. */
+/** 광기 증상 굴림 결과. mode가 realtime이면 duration은 라운드, summary면 시간이다. indefinite(장기적 광기)는 기간 없이 목록에서 하나를 뽑는다(duration 0). */
 export interface MadnessResult {
   characterId: string;
   name: string;
-  mode: "realtime" | "summary";
+  mode: "realtime" | "summary" | "indefinite";
   duration: number;
   index: number;
   symptom: string;
@@ -962,7 +964,7 @@ export type ServerEvent =
   /** 누가 보드의 한 곳을 가리켰다. 저장·기록에 남지 않고, 그 자리가 보이는 사람에게만 간다. */
   | { type: "board.pinged"; data: BoardPing }
   | { type: "settings.effects"; data: { effects: EffectSettings } }
-  | { type: "settings.madness"; data: { entries: string[] } }
+  | { type: "settings.madness"; data: { entries: string[]; indefinite?: string[] } }
   | { type: "flow.updated"; data: { flow: Flow } }
   | { type: "audio.library"; data: { tracks: AudioTrack[] } }
   | { type: "audio.play"; data: { assetId: string; channel: AudioKind; volume: number; loop: boolean; fadeMs: number; startedAt: number } }

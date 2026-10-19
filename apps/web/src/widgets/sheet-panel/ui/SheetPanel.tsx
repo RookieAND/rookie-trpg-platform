@@ -34,7 +34,7 @@ interface Props {
   isKp: boolean;
   onSanCheck: (characterId: string, loss: string) => void;
   onNewDay: (characterId: string) => void;
-  onMadnessRoll: (characterId: string, mode: "realtime" | "summary") => void;
+  onMadnessRoll: (characterId: string, mode: "realtime" | "summary" | "indefinite") => void;
   onDamage: (characterId: string, weaponIndex: number) => void;
   /** GM 전용. 적은 피해를 방어구를 빼고 HP에 적용한다(중상·기절·빈사·사망은 서버가 정한다). */
   onApplyDamage?: (characterId: string, amount: number, armor: number) => void;

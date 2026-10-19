@@ -40,6 +40,7 @@ export interface RoomState {
   effects: EffectSettings;
   /** GM만 채워진다. */
   madnessTable: string[];
+  madnessIndefinite: string[];
   initiative: Initiative | null;
   /** GM만 받는다. */
   flow: Flow | null;
@@ -105,6 +106,7 @@ export const initialRoomState = (roomId = ""): RoomState => ({
   activeSceneId: DEFAULT_SCENE_ID,
   effects: DEFAULT_EFFECTS,
   madnessTable: [],
+  madnessIndefinite: [],
   initiative: null,
   flow: null,
   audioLibrary: [],
@@ -158,6 +160,7 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       activeSceneId: d.activeSceneId,
       effects: d.effects,
       madnessTable: d.madnessTable,
+      madnessIndefinite: d.madnessIndefinite ?? [],
       initiative: d.initiative ?? null,
       flow: d.flow ?? null,
       audioLibrary: d.audioLibrary ?? [],
@@ -221,7 +224,7 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
     case "initiative.updated":
       return { ...next, initiative: ev.data.initiative };
     case "settings.madness":
-      return { ...next, madnessTable: ev.data.entries };
+      return { ...next, madnessTable: ev.data.entries, madnessIndefinite: ev.data.indefinite ?? state.madnessIndefinite };
     case "madness.result":
       return { ...next, lastMadness: { result: ev.data, n: msg.seq } };
     case "settings.effects":

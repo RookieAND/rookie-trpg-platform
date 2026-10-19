@@ -127,6 +127,7 @@ export function buildExport(data: RoomData, opts: ExportOptions): ScenarioDoc {
       return [{ from, to, label: br.label, condition: c }];
     }),
     madnessTable: [...(data.madnessTable ?? [])],
+    ...(data.madnessIndefinite && data.madnessIndefinite.length > 0 ? { madnessIndefinite: [...data.madnessIndefinite] } : {}),
     audio: audio.map((t) => ({ key: trackKey.get(t.id)!, label: t.label, kind: t.kind, assetId: t.assetId, volume: t.volume })),
     ...(opts.format === "backup" && data.effects ? { effects: JSON.parse(JSON.stringify(data.effects)) } : {}),
   };

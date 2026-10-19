@@ -209,6 +209,7 @@ export interface RoomData {
   activeSceneId?: string;
   effects?: EffectSettings;
   madnessTable?: string[];
+  madnessIndefinite?: string[];
   initiative?: Initiative | null;
   flow?: Flow;
   audio?: AudioTrack[];
@@ -308,6 +309,7 @@ export class Room {
   private activeSceneId = DEFAULT_SCENE_ID;
   private effects: EffectSettings = cloneEffects(DEFAULT_EFFECTS);
   private madnessTable: string[] = [];
+  private madnessIndefinite: string[] = [];
   private initiative: Initiative | null = null;
   private audio: AudioTrack[] = [];
   private bgm: BgmState | null = null;
@@ -364,6 +366,7 @@ export class Room {
       activeSceneId: this.activeSceneId,
       effects: cloneEffects(this.effects),
       madnessTable: [...this.madnessTable],
+      madnessIndefinite: [...this.madnessIndefinite],
       initiative: cloneInitiative(this.initiative),
       flow: cloneFlow(this.flow),
       audio: this.audio.map((t) => ({ ...t })),
@@ -397,6 +400,7 @@ export class Room {
       room.activeSceneId = room.scenes.has(data.activeSceneId ?? "") ? (data.activeSceneId as string) : data.scenes[0]!.id;
     }
     if (data.madnessTable) room.madnessTable = [...data.madnessTable];
+    if (data.madnessIndefinite) room.madnessIndefinite = [...data.madnessIndefinite];
     room.initiative = cloneInitiative(data.initiative ?? null);
     if (data.flow) room.flow = cloneFlow(data.flow);
     room.audio = (data.audio ?? []).map((t) => ({ ...t }));
@@ -505,6 +509,7 @@ export class Room {
       activeSceneId: this.activeSceneId,
       effects: cloneEffects(this.effects),
       madnessTable: viewer.role === "kp" ? [...this.madnessTable] : [],
+      madnessIndefinite: viewer.role === "kp" ? [...this.madnessIndefinite] : [],
       initiative: this.initiativeFor(viewer),
       flow: viewer.role === "kp" ? cloneFlow(this.flow) : null,
       audioLibrary: viewer.role === "kp" ? this.audio.map((t) => ({ ...t })) : [],
@@ -708,7 +713,7 @@ export class Room {
       case "initiative.end":
         return this.initiativeEnd(who);
       case "settings.madness":
-        return this.setMadnessTable(who, command.data.entries);
+        return this.setMadnessTable(who, command.data.entries, command.data.indefinite);
       case "madness.roll":
         return this.madnessRoll(who, command.data);
       case "damage.roll":
@@ -1978,6 +1983,9 @@ export class Room {
 
     // 9) 광기표·효과
     let madness: string[] | undefined;
+    if (doc.madnessIndefinite && doc.madnessIndefinite.length > 0 && this.madnessIndefinite.length === 0) {
+      this.madnessIndefinite = doc.madnessIndefinite.map((e) => e.trim()).filter(Boolean).slice(0, MAX_MADNESS_ENTRIES);
+    }
     if (doc.madnessTable && doc.madnessTable.length > 0) {
       if (this.madnessTable.length === 0) madness = doc.madnessTable.map((e) => e.trim()).slice(0, MAX_MADNESS_ENTRIES);
       else warn("광기 증상표는 이미 있어서 그대로 뒀어요.");
@@ -2765,17 +2773,25 @@ export class Room {
     return this.logRoll(who, o.expr, `${c.name} · SAN 체크`, o, false, {}, update);
   }
 
-  private setMadnessTable(who: Actor, entries: string[]): Result {
+  private setMadnessTable(who: Actor, entries: string[], indefinite?: string[]): Result {
     if (who.role !== "kp") return fail("forbidden", "GM만 광기 증상표를 바꿀 수 있어요.");
     this.madnessTable = entries.slice(0, MAX_MADNESS_ENTRIES);
-    return ok(this.emit({ type: "settings.madness", data: { entries: [...this.madnessTable] } }, { roles: ["kp"] }));
+    if (indefinite) this.madnessIndefinite = indefinite.slice(0, MAX_MADNESS_ENTRIES);
+    return ok(this.emit({ type: "settings.madness", data: { entries: [...this.madnessTable], indefinite: [...this.madnessIndefinite] } }, { roles: ["kp"] }));
   }
 
   /** 증상표에서 하나 고르고 지속 시간(1d10)을 굴린다. 증상표 내용은 GM이 채운 것만 쓴다. */
-  private madnessRoll(who: Actor, d: { characterId: string; mode: "realtime" | "summary" }): Result {
+  private madnessRoll(who: Actor, d: { characterId: string; mode: "realtime" | "summary" | "indefinite" }): Result {
     if (who.role !== "kp") return fail("forbidden", "GM만 광기 증상을 굴릴 수 있어요.");
     const c = this.characters.get(d.characterId);
     if (!c) return fail("not_found", "캐릭터를 찾을 수 없어요.");
+    if (d.mode === "indefinite") {
+      if (this.madnessIndefinite.length === 0) return fail("bad_message", "장기적 광기 목록이 비어 있어요. 먼저 항목을 적어 주세요.");
+      const i = rollDie(this.rng, this.madnessIndefinite.length) - 1;
+      const symptom = this.madnessIndefinite[i] as string;
+      this.record("sanity", "madness", `${c.name} 장기적 광기: ${symptom}`, { audience: this.sheetAudience(c) });
+      return ok(this.emit({ type: "madness.result", data: { characterId: c.id, name: c.name, mode: "indefinite", duration: 0, index: i, symptom } }, this.characterAudience(c)));
+    }
     if (this.madnessTable.length === 0) return fail("bad_message", "광기 증상표가 비어 있어요. 먼저 증상을 적어 주세요.");
     const index = rollDie(this.rng, this.madnessTable.length) - 1;
     const duration = rollDie(this.rng, 10);

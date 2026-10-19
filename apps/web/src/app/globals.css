@@ -81,7 +81,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .presence { color: var(--muted); font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .body { flex: 1; min-height: 0; display: flex; }
 .board { flex: 1; min-width: 0; position: relative; background: #0a0b0d; }
-.side { width: clamp(280px, 34vw, 340px); flex: none; border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; }
+.side { width: clamp(320px, 32vw, 460px); flex: none; border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; }
 .banner { position: absolute; top: calc(max(44px, var(--sb-h, 0px)) + 16px); left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px; font-size: 12.5px;
   border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent); background: color-mix(in srgb, var(--panel) 88%, var(--amber) 12%); color: var(--amber); }
 .log { flex: 1; min-height: 0; overflow: auto; padding: 8px 14px; display: flex; flex-direction: column; gap: 8px; }
@@ -962,7 +962,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .sl-sub { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sl-vit { flex: none; display: grid; gap: 1px; text-align: right; font-size: 11.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .sl-vit i { font-style: normal; color: var(--muted); }
-.sheet-modal { position: fixed; inset: 0; z-index: 45; display: grid; place-items: start center; padding: clamp(112px, 22vh, 190px) 16px 16px; pointer-events: none; }
+.sheet-modal { position: fixed; inset: 0; z-index: 45; display: grid; place-items: start center; padding: clamp(112px, 22vh, 190px) 16px 64px; pointer-events: none; }
 .sheet-dlg { pointer-events: auto; width: min(880px, 100%); max-height: 100%; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--radius-lg, 12px); box-shadow: 0 0 0 1px rgba(0,0,0,.4), 0 16px 48px rgba(0,0,0,.6); overflow: hidden; }
 .sheet-dlg-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
 .sheet-dlg-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
@@ -988,3 +988,16 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 /* 휴대폰·시트 안에서는 예전처럼 한 덩어리로 흐른다 */
 .sheet-grid .sel-row { display: contents; }
+
+/* 장면이 많을 때 목록 */
+.scene-list { display: grid; gap: 1px; max-height: min(52vh, 360px); overflow-y: auto; }
+.menu-panel .scene-list-item { gap: 8px; }
+.scene-list-mark { flex: none; width: 14px; text-align: center; font-size: 10px; color: var(--ok); }
+.scene-list-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.scene-list-item[aria-selected="true"] { background: var(--hover) !important; }
+.scene-tabs { mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 20px), transparent 100%); }
+.scenebar .menu-panel { min-width: 240px; }
+
+.flow-intro { border: 1px solid var(--line-2); border-radius: var(--radius-lg, 10px); padding: 8px 12px; font-size: 12.5px; color: var(--text-2); background: rgba(255,255,255,.025); }
+.flow-intro summary { cursor: pointer; font-weight: 600; color: var(--text); }
+.flow-intro p { margin: 8px 0 0; line-height: 1.55; }

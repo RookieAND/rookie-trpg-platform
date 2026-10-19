@@ -10,7 +10,7 @@ interface Props {
   onCheck: (loss: string) => void;
   onSetMadness: (kind: Madness) => void;
   onNewDay: () => void;
-  onMadnessRoll: (mode: "realtime" | "summary") => void;
+  onMadnessRoll: (mode: "realtime" | "summary" | "indefinite") => void;
 }
 
 /** SAN 체크 입력, 광기 상태, 하루 손실. 손실은 "성공 시/실패 시"로 적는다. */
@@ -89,6 +89,7 @@ export function SanPanel({ character: c, canAct, isKp, onCheck, onSetMadness, on
           <>
             <button className="btn sm" onClick={() => onMadnessRoll("realtime")}>증상 굴리기(실시간)</button>
             <button className="btn sm" onClick={() => onMadnessRoll("summary")}>증상 굴리기(요약)</button>
+            {c.madness === "indefinite" && <button className="btn sm" data-testid="madness-indefinite" onClick={() => onMadnessRoll("indefinite")}>장기 광기 굴리기</button>}
           </>
         )}
       </div>

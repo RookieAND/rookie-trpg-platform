@@ -62,6 +62,11 @@ export function FlowPanel({ flow, scenes, handouts, tracks, status, enabled, sen
   return (
     <div style={{ padding: 16, display: "grid", gap: 12, alignContent: "start", overflow: "auto", flex: 1 }} data-testid="flow">
       {ask.node}
+      <details className="flow-intro" data-testid="flow-intro" open={flow.beats.length === 0}>
+        <summary>흐름이 뭐예요?</summary>
+        <p>시나리오의 <b>진행 단계(비트)</b>를 미리 적어 두고, 지금 어디까지 왔는지 표시하는 곳이에요. 비트마다 <b>열 장면 · 보여 줄 핸드아웃 · 틀 배경음</b>을 묶어 두면, 다음 단계로 넘길 때 한 번에 바뀌어요.</p>
+        <p>비트 사이를 잇는 <b>분기</b>에 조건(굴림 성공, 수치 임계, 핸드아웃 공개)을 걸어 두면 조건이 맞았을 때 “다음으로 갈까요?” 제안이 떠요. 안 써도 세션 진행에는 지장이 없어요.</p>
+      </details>
       {(!hasStart || !hasEnding) && (
         <div className="banner" role="status" data-testid="flow-warning">
           {!hasStart && "시작 비트가 없어요. "}

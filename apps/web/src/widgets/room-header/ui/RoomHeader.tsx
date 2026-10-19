@@ -32,6 +32,7 @@ export function RoomHeader({
   chatSettings,
   effects,
   madnessTable,
+  madnessIndefinite,
   endingDefaults,
   effectsEnabled,
   onToggleEffects,
@@ -59,6 +60,7 @@ export function RoomHeader({
   chatSettings?: ChatSettings;
   effects: EffectSettings;
   madnessTable: string[];
+  madnessIndefinite?: string[];
   /** 엔딩 비트에 있을 때 종료 창에 미리 채울 값 */
   endingDefaults?: EndingDefaults;
   effectsEnabled: boolean;
@@ -116,7 +118,7 @@ export function RoomHeader({
             {onShortcutHelp && <button type="button" className="btn" data-testid="open-shortcuts" aria-keyshortcuts="?" onClick={() => { close(); onShortcutHelp(); }}>단축키 보기 (?)</button>}
             {isKp && <MenuLabel>룸 설정 (GM)</MenuLabel>}
             {isKp && <EffectSettingsButton effects={effects} send={send} />}
-            {isKp && <MadnessTableButton entries={madnessTable} send={send} />}
+            {isKp && <MadnessTableButton entries={madnessTable} indefinite={madnessIndefinite ?? []} send={send} />}
             {isKp && <DiscordButton me={me} roomId={roomId} />}
             {isKp && <RoomSafetyButton me={me} roomId={roomId} settings={chatSettings} send={send} />}
             {isKp && <MenuLabel>준비 (GM)</MenuLabel>}

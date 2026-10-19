@@ -12,11 +12,13 @@ export function MadnessResultCard({ last }: { last: { result: MadnessResult; n: 
   const r = last.result;
   return (
     <Dialog label="광기 증상" onClose={() => setClosedN(last.n)} className="dialog" style={{ position: "fixed", top: "22%", left: "50%", right: "auto", transform: "translateX(-50%)" }}>
-      <strong>{r.name} · 광기 증상</strong>
+      <strong>{r.name} · {r.mode === "indefinite" ? "장기적 광기" : "일시적 광기 증상"}</strong>
       <div style={{ fontSize: 16 }} data-testid="madness-symptom">{r.symptom}</div>
-      <span style={{ color: "var(--muted)" }}>
-        지속 {r.duration}{r.mode === "realtime" ? "라운드" : "시간"} ({r.mode === "realtime" ? "실시간" : "요약"})
-      </span>
+      {r.mode !== "indefinite" && (
+        <span style={{ color: "var(--muted)" }}>
+          지속 {r.duration}{r.mode === "realtime" ? "라운드" : "시간"} ({r.mode === "realtime" ? "실시간" : "요약"})
+        </span>
+      )}
       <button className="btn" onClick={() => setClosedN(last.n)}>닫기</button>
     </Dialog>
   );
