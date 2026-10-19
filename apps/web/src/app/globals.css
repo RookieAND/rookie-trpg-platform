@@ -358,7 +358,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .room.phone .turn-badge.low { top: auto; bottom: calc(var(--dock-h) + 8px); }
 .room.phone .fog-note { right: 12px; bottom: calc(var(--dock-h) + 8px); }
 .room.phone .dock-hint { position: absolute; left: 8px; right: 8px; bottom: calc(var(--dock-h) + 8px); transform: none; white-space: normal; text-align: center; z-index: 3; }
-.room.phone .zoom-ctl { top: calc(var(--sb-h) + 8px); right: 8px; left: auto; bottom: auto; flex-direction: column; align-items: stretch; max-width: none; z-index: 4; }
+.room.phone .zoom-ctl { top: calc(var(--sb-h) + 8px); right: 8px; left: auto; bottom: auto; flex-direction: row; flex-wrap: wrap; justify-content: flex-end; align-items: flex-start; width: max-content; max-width: min(250px, calc(100% - 16px)); z-index: 4; }
+.room.phone .zoom-ctl[data-open="false"] { max-width: 56px; }
 .room.phone .zoom-ctl .btn { background: color-mix(in srgb, var(--panel) 62%, transparent); backdrop-filter: blur(6px); }
 .room.phone .toasts { z-index: 62; max-width: calc(100vw - 16px); }
 .room.phone:has(.side.drawer-open) .toasts { bottom: auto; top: 8px; left: 50%; }
