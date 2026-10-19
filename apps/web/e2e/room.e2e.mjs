@@ -2744,7 +2744,7 @@ try {
       await dp.getByTestId("board").waitFor();
       await dp.getByTestId("scenebar").waitFor();
       const boxes = async (extra = {}) => {
-        const sel = { scenebar: '[data-testid="scenebar"]', zoom: '[data-testid="zoom-ctl"]', selected: '[data-testid="selected-bar"]', undo: ".undo-ctl", toast: ".toasts", sheet: '[data-testid="tool-sheet"]', dock: '[data-testid="panel-dock"]', sceneName: '[data-testid="scene-name"]', banner: ".banner-stack", ...extra };
+        const sel = { scenebar: '[data-testid="scenebar"]', zoom: '[data-testid="zoom-ctl"]', selected: '[data-testid="selected-bar"]:visible', undo: ".undo-ctl", toast: ".toasts", sheet: '[data-testid="tool-sheet"]', dock: '[data-testid="panel-dock"]', sceneName: '[data-testid="scene-name"]', banner: ".banner-stack", ...extra };
         const out = {};
         for (const [k, q] of Object.entries(sel)) {
           const l = dp.locator(q).first();
@@ -2760,6 +2760,19 @@ try {
           assert.ok(!overlap(A, B), `${nm} ${what}: ${keys[a]} 와 ${keys[c]} 가 겹쳐요 ${JSON.stringify([A, B])}`);
         }
       };
+      // 휴대폰은 선택 줄이 접힌 도구 묶음 안에 있다: 펼쳐서 보고 다시 접는다
+      const withSel = async (fn) => {
+        if (nm !== "phone") { await dp.locator('[data-testid="selected-bar"]:visible').first().waitFor(); return fn(); }
+        await dp.getByTestId("sheet-handle").click();
+        await dp.getByTestId("sheet-tab-select").click();
+        await dp.locator('[data-testid="selected-bar"]:visible').first().waitFor();
+        await dp.waitForTimeout(400);
+        await fn();
+        await dp.getByTestId("sheet-handle").click();
+        await dp.getByTestId("tool-sheet-body").waitFor({ state: "hidden" });
+        await dp.locator('[data-testid^="pick-"]').first().focus();
+        await dp.keyboard.press("Enter");
+      };
       await dp.waitForTimeout(400);
       if (nm === "phone") assert.ok((await dp.getByTestId("scenebar").boundingBox()).height < 60, "휴대폰 장면 막대는 한 줄이에요");
       if (nm === "tablet" || nm === "phone") assert.ok((await dp.getByTestId("scene-select").count()) > 0, "작은 화면의 장면 막대는 드롭다운이에요");
@@ -2770,11 +2783,10 @@ try {
       const pickBtn = dp.locator('[data-testid^="pick-"]').first();
       await pickBtn.focus();
       await dp.keyboard.press("Enter");
-      await dp.getByTestId("selected-bar").waitFor();
       await dp.keyboard.press("ArrowRight");
       await dp.getByRole("button", { name: "되돌리기" }).first().waitFor();
       await dp.waitForTimeout(300);
-      check(await boxes(), "선택·되돌리기");
+      await withSel(async () => check(await boxes(), "선택·되돌리기"));
       await dp.screenshot({ path: `${SHOTD}/${nm}-gm-selected.png` });
       // 지우면 알림이 뜬다: 알림은 되돌리기·선택 줄·보기 도구·장면 막대와 겹치지 않는다
       await dp.keyboard.press("Delete");
@@ -2788,11 +2800,10 @@ try {
       await dp.locator('[data-testid^="pick-"]').first().waitFor({ state: "attached" });
       await dp.locator('[data-testid^="pick-"]').first().focus();
       await dp.keyboard.press("Enter");
-      await dp.getByTestId("selected-bar").waitFor();
-      await dp.waitForTimeout(300);
-      check(await boxes(), "되돌린 뒤");
-      // 오른쪽 위 가장자리의 큰 글자 깨짐 없음: 선택 줄의 이름·소유자·시트 라벨이 보임
-      assert.ok(await dp.getByTestId("selected-bar").getByText("소유자", { exact: true }).isVisible(), "소유자 이름표가 보여야 해요");
+      await withSel(async () => {
+        check(await boxes(), "되돌린 뒤");
+        assert.ok(await dp.locator('[data-testid="selected-bar"]:visible').first().getByText("소유자", { exact: true }).isVisible(), "소유자 이름표가 보여야 해요");
+      });
       await dc.close();
     }
     step("1440x900·1366x768·820x1180·390x844: 알림·선택 줄·되돌리기·장면 막대·보기 도구가 화면 안에서 서로 겹치지 않음");
