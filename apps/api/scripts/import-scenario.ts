@@ -28,10 +28,12 @@ function parseArgs(argv: string[]) {
 async function main() {
   const { file, user, token, api, room } = parseArgs(process.argv.slice(2));
   if (!file) throw new Error("사용법: pnpm import:scenario <시나리오.json> [--user 이름 | --token 토큰] [--api 주소] [--room 룸이름]");
-  const parsed = parseScenarioText(readFileSync(file, "utf8"));
+  // pnpm은 apps/api 안에서 스크립트를 돌리므로, 명령을 친 폴더(INIT_CWD) 기준으로 파일을 찾는다.
+  const path = resolve(process.env.INIT_CWD ?? process.cwd(), file);
+  const parsed = parseScenarioText(readFileSync(path, "utf8"));
   if (!parsed.ok) throw new Error(`시나리오 파일에 문제가 있어서 룸을 만들지 않았어요.\n${parsed.errors.map((e) => `  - ${e.where}: ${e.message}`).join("\n")}`);
 
-  const baseDir = dirname(resolve(file));
+  const baseDir = dirname(path);
   const local = inlineLocalFiles(parsed.doc, (rel) => {
     const abs = resolve(baseDir, rel);
     return existsSync(abs) && statSync(abs).isFile() ? readFileSync(abs) : null;
