@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 import { josa, MAX_AUDIO_TRACKS, type AudioKind, type AudioTrack, type BgmState, type ClientCommand } from "@coc-vtt/shared";
 import { uploadAudio, type Caller } from "@/shared/api";
-import { useAsk } from "@/shared/ui";
+import { useAsk, Select } from "@/shared/ui";
 
 const KIND_LABEL: Record<AudioKind, string> = { bgm: "배경음", se: "효과음" };
 const FADES = [0, 1000, 3000];
@@ -55,11 +55,11 @@ export function AudioPanel({ me, library, bgm, enabled, send }: { me: Caller; li
         )}
         <label style={{ fontSize: 13, display: "flex", gap: 8, alignItems: "center" }}>
           페이드
-          <select className="input" aria-label="페이드 시간" value={fadeMs} onChange={(e) => setFadeMs(Number(e.target.value))} style={{ height: 28 }}>
+          <Select className="input" aria-label="페이드 시간" value={fadeMs} onChange={(e) => setFadeMs(Number(e.target.value))} style={{ height: 28 }}>
             {FADES.map((f) => (
               <option key={f} value={f}>{f === 0 ? "없음" : `${f / 1000}초`}</option>
             ))}
-          </select>
+          </Select>
         </label>
       </div>
 
@@ -67,10 +67,10 @@ export function AudioPanel({ me, library, bgm, enabled, send }: { me: Caller; li
         <strong>음원 올리기</strong>
         <input className="input" aria-label="음원 이름" placeholder="이름 (비우면 파일 이름)" value={label} maxLength={40} onChange={(e) => setLabel(e.target.value)} />
         <div style={{ display: "flex", gap: 8 }}>
-          <select className="input" aria-label="음원 종류" value={kind} onChange={(e) => setKind(e.target.value as AudioKind)}>
+          <Select className="input" aria-label="음원 종류" value={kind} onChange={(e) => setKind(e.target.value as AudioKind)}>
             <option value="bgm">배경음 (반복)</option>
             <option value="se">효과음 (한 번)</option>
-          </select>
+          </Select>
           <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, whiteSpace: "nowrap" }}>
             기본 볼륨 {volume}
             <input type="range" min={0} max={100} value={volume} aria-label="기본 볼륨" onChange={(e) => setVolume(Number(e.target.value))} style={{ accentColor: "#7c86f7" }} />

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { LIMITS, type Member, type Visibility } from "@coc-vtt/shared";
 import { firstImageFile, imageUrl, type Caller } from "@/shared/api";
-import { ImageUploadButton, LimitNote, useFileDrop, useImageUpload } from "@/shared/ui";
+import { ImageUploadButton, LimitNote, useFileDrop, useImageUpload, Select } from "@/shared/ui";
 
 export interface HandoutDraft {
   title: string;
@@ -51,12 +51,12 @@ export function HandoutEditor({ me, initial, players, onSave, onCancel }: { me: 
         {!image && <span className="img-drop-hint">{drop.busy ? "올리는 중…" : "여기에 이미지를 끌어다 놓아도 돼요"}</span>}
         {drop.error && <span role="alert" style={{ color: "var(--danger)", fontSize: 12 }}>{drop.error}</span>}
       </div>
-      <select className="input" aria-label="공개 범위" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+      <Select className="input" aria-label="공개 범위" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
         <option value="note">GM 전용 노트 (공개할 수 없어요)</option>
         <option value="gm">초안 (나중에 공개할 수 있어요)</option>
         <option value="all">전원에게 공개</option>
         <option value="pick">선택한 PL에게만</option>
-      </select>
+      </Select>
       {mode === "pick" &&
         (players.length === 0 ? (
           <span style={{ color: "var(--muted)" }}>아직 PL이 없어요.</span>

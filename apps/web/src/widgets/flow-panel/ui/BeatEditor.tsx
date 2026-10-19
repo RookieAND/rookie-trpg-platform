@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Select } from "@/shared/ui";
 import { BEAT_KINDS, BGM_STOP, BEAT_KIND_LABEL_KO, MAX_BEAT_HANDOUTS, type AudioTrack, type Beat, type BeatKind, type Handout, type Scene } from "@coc-vtt/shared";
 
 export interface BeatDraft {
@@ -27,24 +28,24 @@ export function BeatEditor({ initial, scenes, handouts, tracks, onSave, onCancel
   return (
     <div style={{ display: "grid", gap: 10 }} data-testid="beat-editor">
       <input className="input" aria-label="비트 이름" placeholder="비트 이름" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
-      <select className="input" aria-label="비트 종류" value={kind} onChange={(e) => setKind(e.target.value as BeatKind)}>
+      <Select className="input" aria-label="비트 종류" value={kind} onChange={(e) => setKind(e.target.value as BeatKind)}>
         {BEAT_KINDS.map((k) => (
           <option key={k} value={k}>{BEAT_KIND_LABEL_KO[k]} 비트</option>
         ))}
-      </select>
-      <select className="input" aria-label="들어갈 때 열 장면" value={sceneId} onChange={(e) => setSceneId(e.target.value)}>
+      </Select>
+      <Select className="input" aria-label="들어갈 때 열 장면" value={sceneId} onChange={(e) => setSceneId(e.target.value)}>
         <option value="">장면은 그대로</option>
         {scenes.map((s) => (
           <option key={s.id} value={s.id}>{s.name}</option>
         ))}
-      </select>
-      <select className="input" aria-label="들어갈 때 틀 배경음" value={bgmTrackId} onChange={(e) => setBgmTrackId(e.target.value)}>
+      </Select>
+      <Select className="input" aria-label="들어갈 때 틀 배경음" value={bgmTrackId} onChange={(e) => setBgmTrackId(e.target.value)}>
         <option value="">배경음은 그대로</option>
         <option value={BGM_STOP}>■ 음악 정지</option>
         {tracks.filter((t) => t.kind === "bgm").map((t) => (
           <option key={t.id} value={t.id}>{t.label}</option>
         ))}
-      </select>
+      </Select>
       {handouts.length > 0 && (
         <fieldset style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 8, display: "grid", gap: 4 }}>
           <legend style={{ fontSize: 12, color: "var(--muted)" }}>들어갈 때 펼칠 핸드아웃 (공개된 것만)</legend>

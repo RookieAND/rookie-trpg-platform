@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Select } from "@/shared/ui";
 import { MAX_WEAPONS, SKILL_CAP, isDamageExpr, type Weapon } from "@coc-vtt/shared";
 
 /** GM이 기능 값을 바로 고치는 칸. Enter나 칸을 벗어나면 적용한다. */
@@ -65,9 +66,9 @@ export function WeaponAdd({ skills, count, disabled, onAdd }: { skills: string[]
     <div className="gm-add" data-testid="weapon-add">
       <div className="row">
         <input className="input" style={{ flex: 1, minWidth: 0 }} aria-label="새 무기 이름" placeholder="무기 이름" value={name} maxLength={30} disabled={disabled} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
-        <select className="input" style={{ flex: 1, minWidth: 0 }} aria-label="새 무기 기능" value={chosen} disabled={disabled} onChange={(e) => setSkill(e.target.value)}>
+        <Select className="input" style={{ flex: 1, minWidth: 0 }} aria-label="새 무기 기능" value={chosen} disabled={disabled} onChange={(e) => setSkill(e.target.value)}>
           {skills.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+        </Select>
       </div>
       <div className="row">
         <input className="input mono" style={{ flex: 1, minWidth: 0 }} aria-label="새 무기 피해" placeholder="1d6+db" value={damage} maxLength={40} disabled={disabled} aria-invalid={badDamage || undefined} onChange={(e) => setDamage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />

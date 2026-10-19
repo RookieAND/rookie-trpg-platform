@@ -4,7 +4,7 @@ import { LOG_KINDS, LOG_KIND_LABEL_KO, type LogEntryView } from "@coc-vtt/shared
 import { getSessionLog } from "@/entities/room";
 import type { Caller } from "@/shared/api";
 import { downloadText } from "@/shared/lib";
-import { useContextMenu } from "@/shared/ui";
+import { useContextMenu, Select } from "@/shared/ui";
 import { EMPTY_FILTER, buildExport, fetchAllLog, filterToQuery, toggleKind, type LogFilter } from "../model/log-view";
 
 export interface LogPanelProps {
@@ -101,12 +101,12 @@ export function LogPanel({ me, roomId, roomTitle, isKp, sessionCount, visible, v
         <div className="logp-row">
           <label className="chat-sel">
             <span className="muted">세션</span>
-            <select className="input" data-testid="log-session" value={filter.session} onChange={(e) => setFilter((f) => ({ ...f, session: Number(e.target.value) }))}>
+            <Select className="input" data-testid="log-session" value={filter.session} onChange={(e) => setFilter((f) => ({ ...f, session: Number(e.target.value) }))}>
               <option value={0}>전체</option>
               {Array.from({ length: sessionCount }, (_, i) => (
                 <option key={i + 1} value={i + 1}>세션 {i + 1}</option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="chat-sel">
             <span className="muted">부터</span>

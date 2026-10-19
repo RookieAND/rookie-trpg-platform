@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { BannedUser, ClientCommand, Member } from "@coc-vtt/shared";
 import { createSpectatorInvite, getRoom, regenerateInvite, revokeSpectatorInvite, type Invite } from "@/entities/room";
 import type { Identity } from "@/entities/user";
-import { Dialog, useAsk } from "@/shared/ui";
+import { Dialog, useAsk, Select } from "@/shared/ui";
 
 const EXPIRY: Array<{ label: string; minutes: number | null }> = [
   { label: "만료 없음", minutes: null },
@@ -122,11 +122,11 @@ export function InviteButton({ me, roomId, members = [], banned = [], send }: { 
               <div className="btn-row">
                 <label className="field" style={{ flex: 1 }}>
                   만료
-                  <select className="input" aria-label="초대 만료" value={expiry ?? ""} onChange={(e) => setExpiry(e.target.value === "" ? null : Number(e.target.value))}>
+                  <Select className="input" aria-label="초대 만료" value={expiry ?? ""} onChange={(e) => setExpiry(e.target.value === "" ? null : Number(e.target.value))}>
                     {EXPIRY.map((x) => (
                       <option key={x.label} value={x.minutes ?? ""}>{x.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <label className="field" style={{ width: 90 }}>
                   최대 인원
@@ -155,11 +155,11 @@ export function InviteButton({ me, roomId, members = [], banned = [], send }: { 
               <div className="btn-row">
                 <label className="field" style={{ flex: 1 }}>
                   만료
-                  <select className="input" aria-label="관전 링크 만료" value={specExpiry ?? ""} onChange={(e) => setSpecExpiry(e.target.value === "" ? null : Number(e.target.value))}>
+                  <Select className="input" aria-label="관전 링크 만료" value={specExpiry ?? ""} onChange={(e) => setSpecExpiry(e.target.value === "" ? null : Number(e.target.value))}>
                     {EXPIRY.map((x) => (
                       <option key={x.label} value={x.minutes ?? ""}>{x.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <label className="field" style={{ width: 90 }}>
                   최대 관전자

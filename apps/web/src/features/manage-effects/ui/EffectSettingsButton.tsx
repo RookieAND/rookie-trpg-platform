@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { EFFECT_LEVELS, LEVEL_LABEL_KO, type ClientCommand, type EffectLevel, type EffectSettings } from "@coc-vtt/shared";
-import { Dialog } from "@/shared/ui";
+import { Dialog, Select } from "@/shared/ui";
 
 /** GM이 판정 단계별 효과를 켜고 세기를 정한다. 참가자는 개인 설정으로 끌 수 있다. */
 export function EffectSettingsButton({ effects, send }: { effects: EffectSettings; send: (c: ClientCommand) => unknown }) {
@@ -21,11 +21,11 @@ export function EffectSettingsButton({ effects, send }: { effects: EffectSetting
                 <input type="checkbox" checked={effects[level].enabled} onChange={(e) => set(level, { enabled: e.target.checked })} style={{ accentColor: "#7c86f7" }} />
                 {LEVEL_LABEL_KO[level]}
               </label>
-              <select className="input" style={{ width: 96, height: 30 }} aria-label={`${LEVEL_LABEL_KO[level]} 세기`} value={effects[level].intensity} disabled={!effects[level].enabled} onChange={(e) => set(level, { intensity: Number(e.target.value) as 1 | 2 | 3 })}>
+              <Select className="input" style={{ width: 96, height: 30 }} aria-label={`${LEVEL_LABEL_KO[level]} 세기`} value={effects[level].intensity} disabled={!effects[level].enabled} onChange={(e) => set(level, { intensity: Number(e.target.value) as 1 | 2 | 3 })}>
                 <option value={1}>약하게</option>
                 <option value={2}>보통</option>
                 <option value={3}>강하게</option>
-              </select>
+              </Select>
             </div>
           ))}
           <div style={{ textAlign: "right" }}><button className="btn" onClick={() => setOpen(false)}>닫기</button></div>

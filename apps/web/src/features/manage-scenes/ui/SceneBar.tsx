@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { josa, BGM_STOP, DEFAULT_GRID_SIZE, GRID_MAX, GRID_MIN, LIMITS, MAX_SCENES, type AudioTrack, type ClientCommand, type Scene } from "@coc-vtt/shared";
 import type { Caller } from "@/shared/api";
 import { useMediaQuery } from "@/shared/lib";
-import { Hint, ImageUploadButton, Menu, MenuLabel, onTabListKeyDown, useAsk, useRoving } from "@/shared/ui";
+import { Hint, ImageUploadButton, Menu, MenuLabel, onTabListKeyDown, useAsk, useRoving, Select } from "@/shared/ui";
 import { dropIndicator, dropSide, reorderTarget, type DropSide } from "../model/drag-order";
 
 /** 이 폭 이하(태블릿 세로·휴대폰)에서는 장면 막대를 한 줄로 접는다 */
@@ -74,13 +74,13 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
       <ImageUploadButton className="btn" me={me} label="배경" current={viewing.background} disabled={!enabled} onUploaded={(image) => send({ type: "scene.background", data: { id: viewing.id, image } })} />
       {viewing.background && <button className="btn" disabled={!enabled} onClick={() => { send({ type: "scene.background", data: { id: viewing.id, image: null } }); close(); }}>배경 떼기</button>}
       {tracks.some((t) => t.kind === "bgm") && (
-        <select className="input" aria-label="장면 배경음" value={viewing.bgmTrackId ?? ""} disabled={!enabled} onChange={(e) => send({ type: "scene.setBgm", data: { id: viewing.id, trackId: e.target.value || null } })}>
+        <Select className="input" aria-label="장면 배경음" value={viewing.bgmTrackId ?? ""} disabled={!enabled} onChange={(e) => send({ type: "scene.setBgm", data: { id: viewing.id, trackId: e.target.value || null } })}>
           <option value="">배경음 그대로 둠</option>
           <option value={BGM_STOP}>■ 음악 정지</option>
           {tracks.filter((t) => t.kind === "bgm").map((t) => (
             <option key={t.id} value={t.id}>♪ {t.label}</option>
           ))}
-        </select>
+        </Select>
       )}
       <GridSettings scene={viewing} enabled={enabled} send={send} />
       <button className="btn" disabled={!enabled} onClick={() => { close(); void rename(); }}>이름 변경</button>
@@ -97,11 +97,11 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
       <div className="scenebar compact" data-testid="scenebar">
         {ask.node}
         <div className="scene-row">
-          <select className="input scene-select" data-testid="scene-select" aria-label="보는 장면" value={viewId} onChange={(e) => onView(e.target.value)}>
+          <Select className="input scene-select" data-testid="scene-select" aria-label="보는 장면" value={viewId} onChange={(e) => onView(e.target.value)}>
             {scenes.map((s) => (
               <option key={s.id} value={s.id}>{`${s.id === activeId ? "● " : ""}${s.start ? "▶ " : ""}${s.name}${s.id === activeId ? " (진행 중)" : ""}`}</option>
             ))}
-          </select>
+          </Select>
           {viewing && !isActive && (
             <Menu label="전환" title="이 장면을 PL에게 보여요" align="right" testId="scene-activate-menu">
               {(close) => (

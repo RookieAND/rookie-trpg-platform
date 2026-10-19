@@ -23,7 +23,7 @@ import {
   type SkillAllocation,
 } from "@coc-vtt/shared";
 
-import { LimitNote } from "@/shared/ui";
+import { LimitNote, Select } from "@/shared/ui";
 import { nextBlockReason } from "../model/next-reason";
 
 const STEPS = ["기본 정보", "특성치", "기능", "확인"] as const;
@@ -102,7 +102,7 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
           <label>직업<input className="input" aria-label="직업" value={occupation} maxLength={40} onChange={(e) => { setOccupation(e.target.value); setJob(null); }} /></label>
           {occupations.length > 0 && (
             <label style={{ gridColumn: "1 / -1" }}>정의해 둔 직업 불러오기
-              <select className="input" aria-label="정의해 둔 직업" value={job?.id ?? ""} onChange={(e) => {
+              <Select className="input" aria-label="정의해 둔 직업" value={job?.id ?? ""} onChange={(e) => {
                 const o = occupations.find((x) => x.id === e.target.value) ?? null;
                 setJob(o);
                 if (o) {
@@ -114,7 +114,7 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
                 {occupations.map((o) => (
                   <option key={o.id} value={o.id}>{o.name}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           )}
           {!ageOk && <div className="err" role="alert" style={{ gridColumn: "1 / -1" }}>나이는 15~90세예요.</div>}
@@ -182,11 +182,11 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
           </div>
           <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
             직업 포인트 공식
-            <select className="input" aria-label="직업 포인트 공식" disabled={!!job} value={job?.formula ?? formula} onChange={(e) => setFormula(e.target.value as OccupationFormulaId)}>
+            <Select className="input" aria-label="직업 포인트 공식" disabled={!!job} value={job?.formula ?? formula} onChange={(e) => setFormula(e.target.value as OccupationFormulaId)}>
               {OCCUPATION_POINT_FORMULAS.map((f) => (
                 <option key={f.id} value={f.id}>{f.label}</option>
               ))}
-            </select>
+            </Select>
           </label>
           {job && <div style={{ color: "var(--muted)", fontSize: 12.5 }}>'{job.name}': 직업 포인트는 ★ 표시한 기능과 신용도에만 쓸 수 있고, 신용도는 {job.creditMin}~{job.creditMax}이어야 해요.</div>}
           <div className="mono" data-testid="points-left">

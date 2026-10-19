@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CHAT_HELP_LINES, CHAT_HISTORY_ON_JOIN, CHAT_MAX_LENGTH, type ChatMessage, type ClientCommand, type Member, type Role } from "@coc-vtt/shared";
 import { limitMessage } from "@/shared/lib";
-import { useContextMenu } from "@/shared/ui";
+import { useContextMenu, Select } from "@/shared/ui";
 import { chatTargets, chatTime, checkDraft, nearBottom, shouldSendOnEnter, speakerField, speakerFromValue, speakerValue, whisperLabel, whisperRecipients, type SpeakerChoice } from "../model/chat-view";
 
 export interface ChatPanelProps {
@@ -174,22 +174,22 @@ export function ChatPanel(p: ChatPanelProps) {
           <div className="chat-row">
             <label className="chat-sel">
               <span className="muted">말하는 이름</span>
-              <select className="input" data-testid="chat-speaker" value={speakerValue(speaker)} onChange={(e) => setSpeaker(speakerFromValue(e.target.value))}>
+              <Select className="input" data-testid="chat-speaker" value={speakerValue(speaker)} onChange={(e) => setSpeaker(speakerFromValue(e.target.value))}>
                 <option value="self">{p.meName}</option>
                 {role === "kp" && <option value="gm">GM</option>}
                 {p.speakable.map((c) => (
                   <option key={c.id} value={`c:${c.id}`}>{c.name}{role === "kp" ? " (NPC)" : " (캐릭터)"}</option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="chat-sel">
               <span className="muted">받는 사람</span>
-              <select className="input" data-testid="chat-to" value={to} onChange={(e) => setTo(e.target.value)}>
+              <Select className="input" data-testid="chat-to" value={to} onChange={(e) => setTo(e.target.value)}>
                 <option value="">모두</option>
                 {recipients.map((m) => (
                   <option key={m.userId} value={m.userId}>{m.role === "kp" ? `${m.name} (GM)` : m.name}</option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
         )}

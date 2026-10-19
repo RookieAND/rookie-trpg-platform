@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { LIMITS, MAX_CHARACTERS, NPC_PRESETS, QUICK_NPC_HP_MAX, buildQuickNpc, josa, quickNpcPreview, type CharacterData, type QuickNpc } from "@coc-vtt/shared";
-import { Dialog, LimitNote } from "@/shared/ui";
+import { Dialog, LimitNote, Select } from "@/shared/ui";
 
 const WEAPON_SKILLS = ["맨손 격투", "사격(권총)", "사격(소총/산탄총)", "투척"] as const;
 
@@ -77,10 +77,10 @@ export function NpcSheetButton({ count, disabled, onCreate, open: openProp, onOp
               <span className="import-sub">빈칸만 채우면 돼요. 나머지 기능은 기본값으로 들어가고, 만든 뒤 시트에서 고칠 수 있어요.</span>
               <label className="npc-field">이름<input className="input" aria-label="NPC 이름" data-testid="npc-name" value={name} maxLength={LIMITS.objectName} onChange={(e) => setName(e.target.value)} autoFocus /><LimitNote label="이름" max={LIMITS.objectName} value={name} /></label>
               <label className="npc-field">예시
-                <select className="input" aria-label="빠른 NPC 예시" data-testid="npc-preset" value={preset} onChange={(e) => choose(e.target.value)}>
+                <Select className="input" aria-label="빠른 NPC 예시" data-testid="npc-preset" value={preset} onChange={(e) => choose(e.target.value)}>
                   <option value="">직접 입력</option>
                   {NPC_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                </select>
+                </Select>
               </label>
               <div className="npc-grid">
                 <label className="npc-field">HP{num("hp")}</label>
@@ -94,9 +94,9 @@ export function NpcSheetButton({ count, disabled, onCreate, open: openProp, onOp
               <div className="npc-grid">
                 <label className="npc-field">무기<input className="input" aria-label="무기 이름" data-testid="npc-weapon" value={v.weaponName ?? ""} maxLength={30} placeholder="없으면 비워요" onChange={(e) => setV({ ...v, weaponName: e.target.value })} /></label>
                 <label className="npc-field">무기 기능
-                  <select className="input" aria-label="무기 기능" value={v.weaponSkill} onChange={(e) => setV({ ...v, weaponSkill: e.target.value })}>
+                  <Select className="input" aria-label="무기 기능" value={v.weaponSkill} onChange={(e) => setV({ ...v, weaponSkill: e.target.value })}>
                     {WEAPON_SKILLS.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  </Select>
                 </label>
                 <label className="npc-field">기능 값{num("fight")}</label>
                 <label className="npc-field">피해<input className="input mono" aria-label="무기 피해" value={v.weaponDamage ?? ""} maxLength={40} placeholder="1d6+db" onChange={(e) => setV({ ...v, weaponDamage: e.target.value })} /></label>

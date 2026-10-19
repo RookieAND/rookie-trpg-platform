@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Select } from "@/shared/ui";
 import { LIMITS, type Beat, type Branch, type BranchCondition, type Handout } from "@coc-vtt/shared";
 
 type Kind = BranchCondition["type"];
@@ -41,44 +42,44 @@ export function BranchEditor({ initial, fromId, beats, handouts, onSave, onCance
   return (
     <div style={{ display: "grid", gap: 10 }} data-testid="branch-editor">
       <input className="input" aria-label="분기 이름" placeholder="분기 이름 (예: 지하실 문을 연다)" value={label} maxLength={40} onChange={(e) => setLabel(e.target.value)} />
-      <select className="input" aria-label="이동할 비트" value={to} onChange={(e) => setTo(e.target.value)}>
+      <Select className="input" aria-label="이동할 비트" value={to} onChange={(e) => setTo(e.target.value)}>
         {others.map((b) => (
           <option key={b.id} value={b.id}>{b.name}</option>
         ))}
-      </select>
-      <select className="input" aria-label="분기 조건" value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
+      </Select>
+      <Select className="input" aria-label="분기 조건" value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
         {(Object.keys(KIND_LABEL) as Kind[]).map((k) => (
           <option key={k} value={k} disabled={k === "handout" && handouts.length === 0}>{KIND_LABEL[k]}</option>
         ))}
-      </select>
+      </Select>
       {kind === "roll" && (
         <div style={{ display: "flex", gap: 8 }}>
           <input className="input" style={{ flex: 1 }} aria-label="조건 기능 이름" placeholder="기능 이름 (예: 도서관 이용)" maxLength={LIMITS.rollName} value={skill} onChange={(e) => setSkill(e.target.value)} />
-          <select className="input" aria-label="조건 판정 단계" value={atLeast} onChange={(e) => setAtLeast(e.target.value as typeof atLeast)}>
+          <Select className="input" aria-label="조건 판정 단계" value={atLeast} onChange={(e) => setAtLeast(e.target.value as typeof atLeast)}>
             <option value="regular">보통 이상</option>
             <option value="hard">어려움 이상</option>
             <option value="extreme">극단 이상</option>
             <option value="critical">대성공</option>
-          </select>
+          </Select>
         </div>
       )}
       {kind === "stat" && (
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <select className="input" aria-label="조건 수치" value={stat} onChange={(e) => setStat(e.target.value as typeof stat)}>
+          <Select className="input" aria-label="조건 수치" value={stat} onChange={(e) => setStat(e.target.value as typeof stat)}>
             <option value="san">SAN</option>
             <option value="hp">HP</option>
             <option value="luck">행운</option>
-          </select>
+          </Select>
           <input className="input mono" style={{ width: 80 }} type="number" aria-label="조건 기준값" value={atMost} onChange={(e) => setAtMost(e.target.value)} />
           <span>이하</span>
         </div>
       )}
       {kind === "handout" && (
-        <select className="input" aria-label="조건 핸드아웃" value={handoutId} onChange={(e) => setHandoutId(e.target.value)}>
+        <Select className="input" aria-label="조건 핸드아웃" value={handoutId} onChange={(e) => setHandoutId(e.target.value)}>
           {handouts.map((h) => (
             <option key={h.id} value={h.id}>{h.title}</option>
           ))}
-        </select>
+        </Select>
       )}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button className="btn" onClick={onCancel}>취소</button>

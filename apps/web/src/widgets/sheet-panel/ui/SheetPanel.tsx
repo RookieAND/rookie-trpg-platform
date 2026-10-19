@@ -7,7 +7,7 @@ import { SkillAdd, SkillValueInput, WeaponAdd } from "./GmSheetEdit";
 import { stepDelta } from "../model/stat-input";
 import { downloadCharacterCsv } from "@/entities/character";
 import { SanPanel } from "@/features/san-check";
-import { Group, Hint, useAsk } from "@/shared/ui";
+import { Group, Hint, useAsk, Select } from "@/shared/ui";
 import { josa, CHARACTERISTIC_KEYS, deriveCharacter, fifth, half, isSkillEdited, sheetCsvSourceFromCharacter, skillBaseValues, type Character, type HealKind, type SheetOp, type StatPath } from "@coc-vtt/shared";
 
 export interface RollOptions {
@@ -86,7 +86,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, rollWhy, 
       <Group title="기본 정보" testId="sheet-basic">
         <div className="sheet-head">
           {characters.length > 1 ? (
-            <select className="input" aria-label="캐릭터 선택" value={c.id} onChange={(e) => onSelect(e.target.value)}>
+            <Select className="input" aria-label="캐릭터 선택" value={c.id} onChange={(e) => onSelect(e.target.value)}>
               {npcIds && npcIds.size > 0 && characters.some((x) => !npcIds.has(x.id)) ? (
                 <>
                   <optgroup label="PL 시트">{characters.filter((x) => !npcIds.has(x.id)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>
@@ -95,7 +95,7 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, rollWhy, 
               ) : (
                 characters.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)
               )}
-            </select>
+            </Select>
           ) : (
             <strong style={{ fontSize: 15 }}>{c.name}</strong>
           )}
@@ -154,20 +154,20 @@ export function SheetPanel({ characters, selectedId, onSelect, canAct, rollWhy, 
       <Group title="특성치" testId="sheet-stats">
         <div className="sheet-sec">
           <div className="row">
-            <select className="input" style={{ flex: 1, minWidth: 0 }} aria-label="보너스·페널티" value={bonus} onChange={(e) => setBonus(Number(e.target.value))}>
+            <Select className="input" style={{ flex: 1, minWidth: 0 }} aria-label="보너스·페널티" value={bonus} onChange={(e) => setBonus(Number(e.target.value))}>
               <option value={2}>보너스 2</option>
               <option value={1}>보너스 1</option>
               <option value={0}>기본</option>
               <option value={-1}>페널티 1</option>
               <option value={-2}>페널티 2</option>
-            </select>
+            </Select>
             <Hint term="bonus" label="보너스·페널티 설명" />
-            <select className="input" style={{ flex: 1, minWidth: 0 }} aria-label="난이도" value={difficulty ?? ""} onChange={(e) => setDifficulty((e.target.value || undefined) as RollOptions["difficulty"])}>
+            <Select className="input" style={{ flex: 1, minWidth: 0 }} aria-label="난이도" value={difficulty ?? ""} onChange={(e) => setDifficulty((e.target.value || undefined) as RollOptions["difficulty"])}>
               <option value="">난이도 없음</option>
               <option value="regular">보통</option>
               <option value="hard">어려움</option>
               <option value="extreme">극단적</option>
-            </select>
+            </Select>
             <Hint term="difficulty" label="난이도 설명" />
           </div>
           {isKp && (

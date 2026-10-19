@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Select } from "@/shared/ui";
 import { LIMITS, josa, type Character, type DamageApplied, type RollAsk } from "@coc-vtt/shared";
 
 const LEVEL: Record<string, string> = { regular: "보통", hard: "어려움", extreme: "극단적" };
@@ -38,16 +39,16 @@ export function AskForm({
       {open && (
         <div className="ask-fields">
           <input className="input" style={{ flex: "1 1 100%" }} aria-label="요청할 기능" placeholder="기능 이름 (예: 관찰력)" maxLength={LIMITS.rollName} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} />
-          <select className="input" style={{ flex: "1 1 0", minWidth: 0 }} aria-label="요청 받을 사람" value={target} onChange={(e) => setTarget(e.target.value)}>
+          <Select className="input" style={{ flex: "1 1 0", minWidth: 0 }} aria-label="요청 받을 사람" value={target} onChange={(e) => setTarget(e.target.value)}>
             <option value="">PL 전원</option>
             {players.map((p) => <option key={p.userId} value={p.userId}>{p.name}</option>)}
-          </select>
-          <select className="input" style={{ flex: "1 1 0", minWidth: 0 }} aria-label="요청 난이도" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
+          </Select>
+          <Select className="input" style={{ flex: "1 1 0", minWidth: 0 }} aria-label="요청 난이도" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
             <option value="">난이도 없음</option>
             <option value="regular">보통</option>
             <option value="hard">어려움</option>
             <option value="extreme">극단적</option>
-          </select>
+          </Select>
           {onGroup && (
             <label className="check" style={{ flex: "1 1 100%" }} title="PL들이 직접 누르지 않고 서버가 캐릭터 시트로 한꺼번에 굴려요. 결과는 한 항목으로 남아요.">
               <input type="checkbox" aria-label="그룹 판정" checked={group} onChange={(e) => setGroup(e.target.checked)} style={{ accentColor: "#7c86f7" }} />

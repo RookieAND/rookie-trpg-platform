@@ -1,5 +1,5 @@
 "use client";
-import { useContextMenu } from "@/shared/ui";
+import { useContextMenu, Select } from "@/shared/ui";
 import { useMemo, useState } from "react";
 import { formatRollLog, josa, luckBlockReason, luckNeeded, parseCommand, pushBlockReason, type Character, type RollLogEntry, type RollRuleInput } from "@coc-vtt/shared";
 import { MacroBar, useRollMacros } from "@/features/roll-macros";
@@ -228,14 +228,14 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
         </div>
         {disabled && disabledReason && <div className="why" id="roll-why" data-testid="roll-why">{disabledReason}</div>}
         {isKp && onSkillRoll && characters.length > 1 && looksLikeName && (
-          <select className="input" aria-label="이름으로 굴릴 캐릭터" data-testid="skill-actor" value={actor?.id ?? ""} onChange={(e) => setActorId(e.target.value)}>
+          <Select className="input" aria-label="이름으로 굴릴 캐릭터" data-testid="skill-actor" value={actor?.id ?? ""} onChange={(e) => setActorId(e.target.value)}>
             {characters.map((c) => <option key={c.id} value={c.id}>{c.name}(으)로 굴리기</option>)}
-          </select>
+          </Select>
         )}
         {usesDb && characters.length > 1 && (
-          <select className="input" aria-label="db를 쓸 캐릭터" value={dbTarget?.id ?? ""} onChange={(e) => setDbChar(e.target.value)}>
+          <Select className="input" aria-label="db를 쓸 캐릭터" value={dbTarget?.id ?? ""} onChange={(e) => setDbChar(e.target.value)}>
             {characters.map((c) => <option key={c.id} value={c.id}>{c.name}의 피해 보너스</option>)}
-          </select>
+          </Select>
         )}
         {(localError || error) && <div className="err" role="alert" data-testid="roll-expr-error">{localError ?? error}</div>}
         <div className="row foot">
@@ -284,9 +284,9 @@ function DamageApply({ roll, characters, applied, disabled, onApply }: { roll: R
   const names = applied.map((id) => characters.find((c) => c.id === id)?.name).filter((n): n is string => Boolean(n));
   return (
     <div className="dmg-apply" data-testid="damage-apply">
-      <select className="input" aria-label="피해를 받을 캐릭터" value={pick?.id ?? ""} onChange={(e) => setTarget(e.target.value)}>
+      <Select className="input" aria-label="피해를 받을 캐릭터" value={pick?.id ?? ""} onChange={(e) => setTarget(e.target.value)}>
         {characters.map((c) => <option key={c.id} value={c.id}>{c.name}{applied.includes(c.id) ? " (적용됨)" : ""}</option>)}
-      </select>
+      </Select>
       <input className="input mono num" inputMode="numeric" aria-label="방어구" title="피해에서 뺄 방어구 값" placeholder="방어구" value={armor} onChange={(e) => setArmor(e.target.value)} />
       <button
         className="btn sm"

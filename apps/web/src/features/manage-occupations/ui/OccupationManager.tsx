@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import { Select } from "@/shared/ui";
 import { CREDIT_RATING, DEFAULT_SKILLS, MAX_OCCUPATION_SKILLS, OCCUPATION_POINT_FORMULAS, type Occupation, type OccupationFormulaId } from "@coc-vtt/shared";
 import { downloadText } from "@/shared/lib";
 import type { AddOccupationResult, ImportResult } from "../model/occupations";
@@ -82,11 +83,11 @@ export function OccupationManager({ error: syncError, occupations, onAdd, onEdit
         <div style={{ display: "grid", gap: 10 }}>
           <input className="input" aria-label="직업 이름" placeholder="직업 이름" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <select className="input" style={{ width: "auto" }} aria-label="정의의 직업 포인트 공식" value={formula} onChange={(e) => setFormula(e.target.value as OccupationFormulaId)}>
+            <Select className="input" style={{ width: "auto" }} aria-label="정의의 직업 포인트 공식" value={formula} onChange={(e) => setFormula(e.target.value as OccupationFormulaId)}>
               {OCCUPATION_POINT_FORMULAS.map((f) => (
                 <option key={f.id} value={f.id}>{f.label}</option>
               ))}
-            </select>
+            </Select>
             <label style={{ display: "flex", gap: 6, alignItems: "center" }}>신용도
               <input className="input mono" style={{ width: 70 }} aria-label="신용도 최소" type="number" min={0} max={99} value={creditMin} onChange={(e) => setCreditMin(Number(e.target.value))} />~
               <input className="input mono" style={{ width: 70 }} aria-label="신용도 최대" type="number" min={0} max={99} value={creditMax} onChange={(e) => setCreditMax(Number(e.target.value))} />

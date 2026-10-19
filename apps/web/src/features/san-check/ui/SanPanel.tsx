@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { MADNESS_LABEL_KO, maxLoss, parseSanLoss, type Character, type Madness } from "@coc-vtt/shared";
-import { Dialog, Hint } from "@/shared/ui";
+import { Dialog, Hint, Select } from "@/shared/ui";
 
 interface Props {
   character: Character;
@@ -75,12 +75,12 @@ export function SanPanel({ character: c, canAct, isKp, onCheck, onSetMadness, on
         )}
         <Hint term="manualSan">SAN·HP를 직접 바꾸면?</Hint>
         {isKp && (
-          <select className="input" style={{ width: "auto" }} aria-label="광기 상태" value={c.madness ?? "none"} onChange={(e) => onSetMadness(e.target.value as Madness)}>
+          <Select className="input" style={{ width: "auto" }} aria-label="광기 상태" value={c.madness ?? "none"} onChange={(e) => onSetMadness(e.target.value as Madness)}>
             <option value="none">정상</option>
             <option value="temporary">{MADNESS_LABEL_KO.temporary}</option>
             <option value="indefinite">{MADNESS_LABEL_KO.indefinite}</option>
             <option value="permanent">{MADNESS_LABEL_KO.permanent}</option>
-          </select>
+          </Select>
         )}
         {isKp && (
           <button className="btn sm" onClick={onNewDay}>하루 지남</button>

@@ -8,6 +8,34 @@ const WEB = process.env.WEB_URL ?? "http://localhost:3000";
 const API = process.env.API_URL ?? "http://localhost:8787";
 const exe = process.env.CHROMIUM_PATH ?? "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
 const browser = await chromium.launch({ executablePath: exe, args: ["--no-sandbox", "--no-proxy-server", "--disable-dev-shm-usage"] });
+// 직접 만든 드롭다운(Select)을 기본 select처럼 다루는 도우미
+const __tmp = await browser.newContext();
+const __pg = await __tmp.newPage();
+const LocatorProto = Object.getPrototypeOf(__pg.locator("body"));
+const __origSelect = LocatorProto.selectOption;
+LocatorProto.selectOption = async function (arg, opts) {
+  const isCustom = (await this.getAttribute("role", opts)) === "combobox";
+  if (!isCustom) return __origSelect.call(this, arg, opts);
+  const page = this.page();
+  await this.click(opts);
+  const list = page.locator('[role="listbox"]');
+  const opt = typeof arg === "string" ? list.locator(`[role="option"][data-value="${arg.replace(/"/g, '\\"')}"]`) : list.locator('[role="option"]').filter({ has: page.locator(".select-opt-label", { hasText: new RegExp("^\\s*" + String(arg.label).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*$") }) });
+  await opt.first().click(opts);
+};
+const __origInputValue = LocatorProto.inputValue;
+LocatorProto.inputValue = async function (opts) {
+  if ((await this.getAttribute("role", opts)) === "combobox") return (await this.getAttribute("data-value", opts)) ?? "";
+  return __origInputValue.call(this, opts);
+};
+// 드롭다운의 옵션 글자 목록(열었다 닫는다)과 현재 고른 글자
+const selOptions = async (loc) => {
+  await loc.click();
+  const t = await loc.page().locator('[role="listbox"] [role="option"]').allInnerTexts();
+  await loc.page().keyboard.press("Escape");
+  return t.map((x) => x.replace(/\s*✓\s*$/, "").trim());
+};
+const selCurrent = async (loc) => (await loc.locator(".select-label").innerText()).trim();
+await __tmp.close();
 // 느린 개발 서버·바쁜 머신에서도 흔들리지 않게 기본 대기를 넉넉히 둔다(E2E_TIMEOUT_MS로 조절).
 const ctx = async () => {
   const c = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -151,7 +179,7 @@ try {
   await lobby.getByRole("link", { name: "내 캐릭터" }).click();
   await lobby.getByRole("button", { name: "새 캐릭터" }).click();
   await lobby.getByLabel("이름", { exact: true }).fill(CHAR);
-  await lobby.getByLabel("직업").fill("기자");
+  await lobby.getByLabel("직업", { exact: true }).fill("기자");
   await lobby.getByRole("button", { name: "특성치 굴리기" }).click();
   assert.equal(Number(await lobby.getByLabel("STR", { exact: true }).inputValue()) % 5, 0);
   await lobby.getByRole("button", { name: "기본 기능 채우기" }).click();
@@ -172,7 +200,7 @@ try {
   await lobby.getByRole("button", { name: "마법사로 만들기" }).click();
   await lobby.getByLabel("이름", { exact: true }).fill(WIZ);
   await lobby.getByLabel("나이").fill("17");
-  await lobby.getByLabel("직업").fill("학생");
+  await lobby.getByLabel("직업", { exact: true }).fill("학생");
   await lobby.getByRole("button", { name: "다음" }).click();
   for (const [k, v] of Object.entries({ STR: 60, CON: 50, SIZ: 60, DEX: 50, APP: 50, INT: 60, POW: 50, EDU: 70 })) await lobby.getByLabel(`${k} 기본값`).fill(String(v));
   await lobby.getByTestId("age-rules").waitFor();
@@ -1895,7 +1923,7 @@ try {
       step("대화: /r 1d100 굴림이 대화와 굴림 기록에 함께 남고 다른 PL에게도 보임");
 
       // 귓속말: 기본은 PL→GM만. 다른 PL은 받는 사람 목록에도, 대화에도 없음
-      const toOptions = async (p) => p.getByTestId("chat-to").locator("option").allInnerTexts();
+      const toOptions = async (p) => selOptions(p.getByTestId("chat-to"));
       const gmLabel = `하늘${run} (GM)`;
       assert.deepEqual(await toOptions(pls[0]), ["모두", gmLabel]);
       await pls[0].getByTestId("chat-to").selectOption({ label: gmLabel });
@@ -1915,7 +1943,7 @@ try {
       await box.fill("");
       await kpT.getByTestId("chat-plwhisper").click(); // 서버가 받아들인 뒤에 체크가 켜진다
       await kpT.waitForFunction(() => document.querySelector('[data-testid="chat-plwhisper"]').checked);
-      await pls[0].getByTestId("chat-to").locator("option", { hasText: `도윤${run}` }).waitFor({ state: "attached" });
+      for (let t = 0; t < 50 && !(await toOptions(pls[0])).some((x) => x.includes(`도윤${run}`)); t++) await pls[0].waitForTimeout(200);
       await say(pls[0], `/w 도윤${run} 둘이서만`);
       await pls[1].getByTestId("chat-list").locator('[data-kind="whisper"]').filter({ hasText: "둘이서만" }).waitFor();
       await say(pls[0], "그리고 다시 공개");
@@ -2181,7 +2209,7 @@ try {
     await kp2.getByTestId("csv-preview").getByText(NPC).waitFor();
     await kp2.getByTestId("csv-apply").click();
     await kp2.getByLabel("캐릭터 선택").selectOption({ label: NPC });
-    assert.equal(await kp2.getByLabel("캐릭터 선택").locator("option:checked").innerText(), NPC);
+    assert.equal(await selCurrent(kp2.getByLabel("캐릭터 선택")), NPC);
     await kp2.getByTestId("stat-hp").getByText("9/10").waitFor();
     assert.equal(await pl.getByLabel("캐릭터 선택").count(), 0, "PL은 GM이 등록한 NPC 시트를 받지 않음");
   }
@@ -2234,7 +2262,7 @@ try {
     await kp2.getByRole("tab", { name: "굴림" }).click();
     await kp2.getByTestId(`obj-${NPC}`).click();
     await tabOn(kp2, "시트").waitFor();
-    assert.equal(await kp2.getByLabel("캐릭터 선택").locator("option:checked").innerText(), NPC);
+    assert.equal(await selCurrent(kp2.getByLabel("캐릭터 선택")), NPC);
     step("NPC 토큰의 HP는 GM에게만 보이고 'HP 공개'로 PL에게 열고 닫을 수 있으며, GM이 토큰을 누르면 그 NPC 시트가 열림");
 
     // 4) 이어지지 않은 토큰에 시트 연결 고르기 → HP 막대, 연결 해제 → 막대 사라짐
@@ -2260,7 +2288,7 @@ try {
     await kp2.getByTestId("npc-create").click();
     await kp2.getByTestId("npc-dialog").waitFor({ state: "detached" });
     await kp2.getByTestId("npc-badge").waitFor();
-    await kp2.waitForFunction((n) => document.querySelector('select[aria-label="캐릭터 선택"]')?.selectedOptions[0]?.textContent === n, N);
+    await kp2.waitForFunction((n) => document.querySelector('[role="combobox"][aria-label="캐릭터 선택"] .select-label')?.textContent.trim() === n, N);
     await kp2.getByTestId("stat-hp").getByText("12/12").waitFor();
     await kp2.getByTestId("weapon-곤봉").waitFor();
     await hpBar(kp2, N).waitFor({ state: "attached" }); // '토큰도 같이 놓기' 기본값
@@ -2694,7 +2722,7 @@ try {
     const CH = "모바캐릭터 " + run;
     await dlg.getByLabel("이름", { exact: true }).fill(CH);
     await dlg.getByLabel("나이").fill("25");
-    await dlg.getByLabel("직업").fill("기자");
+    await dlg.getByLabel("직업", { exact: true }).fill("기자");
     await dlg.getByRole("button", { name: "다음" }).click();
     for (const [k, v] of Object.entries({ STR: 60, CON: 50, SIZ: 60, DEX: 50, APP: 50, INT: 60, POW: 50, EDU: 70 })) await dlg.getByLabel(`${k} 기본값`).fill(String(v));
     // 나이 보정의 교육 향상 판정을 안 하면 막히고, 이유가 보이며, 누르면 풀린다
