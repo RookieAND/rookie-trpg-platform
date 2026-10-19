@@ -995,9 +995,29 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .scene-list-mark { flex: none; width: 14px; text-align: center; font-size: 10px; color: var(--ok); }
 .scene-list-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .scene-list-item[aria-selected="true"] { background: var(--hover) !important; }
-.scene-tabs { mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 20px), transparent 100%); }
 .scenebar .menu-panel { min-width: 240px; }
 
 .flow-intro { border: 1px solid var(--line-2); border-radius: var(--radius-lg, 10px); padding: 8px 12px; font-size: 12.5px; color: var(--text-2); background: rgba(255,255,255,.025); }
 .flow-intro summary { cursor: pointer; font-weight: 600; color: var(--text); }
 .flow-intro p { margin: 8px 0 0; line-height: 1.55; }
+
+.scene-current { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 0 1 auto; }
+.scene-current .menu > .btn { max-width: min(320px, 40vw); font-weight: 600; }
+.scene-current .menu > .btn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scene-count { font-size: 11.5px; padding: 0 4px; font-variant-numeric: tabular-nums; }
+.scenebar > .scene-row > .spacer { flex: 1; }
+
+/* 시트 대화상자: 뒤를 어둡게 하고, 글자는 크게, 넓으면 두 칸으로 */
+.sheet-modal::before { content: ""; position: fixed; inset: 0; background: rgba(0, 0, 0, .6); pointer-events: none; }
+.sheet-dlg { background: var(--panel-2); font-size: 14px; width: min(1040px, 100%); }
+.sheet-dlg .grp-h, .sheet-dlg .grp-toggle { font-size: 13.5px; font-weight: 650; color: var(--text); }
+.sheet-dlg .sheet-sub { font-size: 13px; color: var(--text-2); }
+.sheet-dlg .sheet-head strong { font-size: 18px; }
+.sheet-dlg-head { background: var(--panel-3); padding: 10px 14px; }
+.sheet-dlg-body .sheet { padding: 6px 20px 20px; }
+@media (min-width: 900px) {
+  .sheet-dlg-body .sheet { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
+  .sheet-dlg-body .sheet > .grp:first-child, .sheet-dlg-body .sheet > [data-testid="sheet-skills"], .sheet-dlg-body .sheet > [data-testid="sheet-notes"] { grid-column: 1 / -1; }
+}
+.sheet-dlg { position: relative; z-index: 1; }
+.sheet-dlg-body .sheet { align-items: start; align-content: start; }

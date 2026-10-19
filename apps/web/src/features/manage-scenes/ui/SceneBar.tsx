@@ -29,6 +29,7 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
   const isActive = viewId === activeId;
   const partyOpt = bringParty ? {} : { bringParty: false };
   const index = scenes.findIndex((s) => s.id === viewId);
+  const many = scenes.length > 6;
 
   // 복제하면 새로 생긴 장면(원본 바로 뒤)을 바로 보여 준다.
   const copyFrom = useRef<Set<string> | null>(null);
@@ -147,8 +148,15 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
     <div className="scenebar" data-testid="scenebar">
       {ask.node}
       <div className="scene-row">
-        {scenes.length > 5 && <SceneListMenu scenes={scenes} viewId={viewId} activeId={activeId} onView={onView} />}
-        <div className="scene-tabs" role="tablist" aria-label="장면" ref={tabStops.ref} onFocus={tabStops.onFocus} onKeyDown={onTabListKeyDown}>
+        {many && (
+          <div className="scene-current" data-testid="scene-current">
+            <button type="button" className="btn sm ico" aria-label="이전 장면" disabled={index <= 0} onClick={() => onView(scenes[index - 1]!.id)}>‹</button>
+            <SceneListMenu scenes={scenes} viewId={viewId} activeId={activeId} onView={onView} label={`${viewing?.id === activeId ? "● " : ""}${viewing?.start ? "▶ " : ""}${viewing?.name ?? "장면"}`} />
+            <button type="button" className="btn sm ico" aria-label="다음 장면" disabled={index < 0 || index >= scenes.length - 1} onClick={() => onView(scenes[index + 1]!.id)}>›</button>
+            <span className="scene-count muted" aria-label={`${scenes.length}개 중 ${index + 1}번째`}>{index + 1}/{scenes.length}</span>
+          </div>
+        )}
+        {!many && <div className="scene-tabs" role="tablist" aria-label="장면" ref={tabStops.ref} onFocus={tabStops.onFocus} onKeyDown={onTabListKeyDown}>
           {scenes.map((s, i) => {
             const ind = dragId ? dropIndicator(scenes.findIndex((x) => x.id === dragId), overTab?.index ?? -1, overTab?.side ?? "before", scenes.length) : null;
             const mark = ind && ind.index === i ? ` drop-${ind.side}` : "";
@@ -190,7 +198,8 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
               </span>
             );
           })}
-        </div>
+        </div>}
+        {many && <div className="spacer" />}
         {legend}
         <button type="button" className="btn sm scene-add" data-testid="scene-add" aria-label="새 장면 만들기" title="새 장면 만들기" disabled={!enabled || scenes.length >= MAX_SCENES} onClick={() => void newScene()}>＋</button>
       </div>
@@ -255,11 +264,11 @@ function GridSettings({ scene, enabled, send }: { scene: Scene; enabled: boolean
 }
 
 /** 장면이 많을 때: 이름으로 찾아 바로 고르는 목록 */
-function SceneListMenu({ scenes, viewId, activeId, onView }: { scenes: readonly Scene[]; viewId: string; activeId: string; onView: (id: string) => void }) {
+function SceneListMenu({ scenes, viewId, activeId, onView, label }: { scenes: readonly Scene[]; viewId: string; activeId: string; onView: (id: string) => void; label?: string }) {
   const [q, setQ] = useState("");
   const list = q.trim() ? scenes.filter((s) => s.name.toLowerCase().includes(q.trim().toLowerCase())) : scenes;
   return (
-    <Menu label={`목록 ${scenes.length}`} title="장면을 이름으로 찾아 열어요" align="left" testId="scene-list">
+    <Menu label={label ?? `목록 ${scenes.length}`} title="장면 목록에서 골라 열어요" align="left" testId="scene-list">
       {(close) => (
         <>
           {scenes.length > 8 && <input className="input" autoFocus aria-label="장면 찾기" placeholder="장면 이름 찾기" value={q} onChange={(e) => setQ(e.target.value)} />}
