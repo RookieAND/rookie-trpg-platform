@@ -243,7 +243,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   .board:has(> .dock:not(.dock-hint)) > .dock:not([data-testid]) { grid-row: 3; grid-column: 1 / -1; }
   .board:has(> .dock:not(.dock-hint)) > .cuebar { grid-row: 4; grid-column: 1 / -1; }
   /* 선택 줄은 지도 위에 겹쳐 띄운다. 줄로 끼워 넣으면 토큰을 고를 때마다 지도가 줄어들며 움직인다. */
-  .board:has(> .dock:not(.dock-hint)) > .dock[data-testid="selected-bar"] { grid-row: 1; grid-column: 1 / -1; align-self: end; justify-self: end; z-index: 4; flex-direction: row; flex-wrap: wrap; align-items: center; width: max-content; max-width: min(calc(100% - 168px), 720px); margin: 0 12px 10px 0;
+  .board:has(> .dock:not(.dock-hint)) > .dock[data-testid="selected-bar"] { grid-row: 1; grid-column: 1 / -1; align-self: end; justify-self: end; z-index: 4; flex-direction: row; flex-wrap: wrap; align-items: center; width: max-content; max-width: min(calc(100% - 168px), 720px) !important; margin: 0 12px 10px 0;
     border-width: 1px; border-radius: var(--radius-lg); box-shadow: var(--shadow); background: color-mix(in srgb, var(--panel) 94%, transparent); backdrop-filter: blur(8px); padding: 4px 8px; }
   .dock[data-testid="selected-bar"] .dock-input { width: auto; max-width: 150px; }
   .dock[data-testid="selected-bar"] .btn { width: auto; }
