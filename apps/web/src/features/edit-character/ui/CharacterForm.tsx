@@ -1,9 +1,9 @@
 "use client";
 import { useMemo, useState } from "react";
-import { CHARACTERISTIC_KEYS, defaultSkillValues, deriveCharacter, isSkillEdited, rollCharacteristics, skillBaseValues, type CharacterInput, type CharacteristicKey } from "@coc-vtt/shared";
+import { CHARACTERISTIC_KEYS, LIMITS, defaultSkillValues, deriveCharacter, isSkillEdited, rollCharacteristics, skillBaseValues, type CharacterInput, type CharacteristicKey } from "@coc-vtt/shared";
 import { SheetCsvImport, downloadCharacterCsv } from "@/entities/character";
 import type { Caller } from "@/shared/api";
-import { Group } from "@/shared/ui";
+import { Group, LimitNote } from "@/shared/ui";
 
 const DEFAULT: CharacterInput = {
   name: "",
@@ -92,9 +92,9 @@ export function CharacterForm({ initial, onSubmit, onCancel, me }: { initial?: C
 
       <Group title="기본 정보" testId="cf-basic">
         <div className="cf-basic">
-          <label className="field">이름<input className="input" aria-label="이름" value={c.name} onChange={(e) => setC({ ...c, name: e.target.value })} /></label>
+          <label className="field">이름<input className="input" aria-label="이름" value={c.name} maxLength={LIMITS.characterName} onChange={(e) => setC({ ...c, name: e.target.value })} /><LimitNote label="이름" max={LIMITS.characterName} value={c.name} /></label>
           <label className="field">나이<input className="input" aria-label="나이" type="number" value={c.age} onChange={(e) => setC({ ...c, age: num(e.target.value) })} /></label>
-          <label className="field">직업<input className="input" aria-label="직업" value={c.occupation ?? ""} onChange={(e) => setC({ ...c, occupation: e.target.value })} /></label>
+          <label className="field">직업<input className="input" aria-label="직업" value={c.occupation ?? ""} maxLength={LIMITS.occupation} onChange={(e) => setC({ ...c, occupation: e.target.value })} /></label>
         </div>
       </Group>
 
@@ -144,7 +144,7 @@ export function CharacterForm({ initial, onSubmit, onCancel, me }: { initial?: C
         <div className="cf-skills">
           {visible.map(({ s, i }) => (
             <div key={i} className="cf-skill">
-              <input className="input" aria-label={`기능 이름 ${i + 1}`} value={s.name} onChange={(e) => setSkill(i, { name: e.target.value })} />
+              <input className="input" aria-label={`기능 이름 ${i + 1}`} value={s.name} maxLength={LIMITS.skillName} onChange={(e) => setSkill(i, { name: e.target.value })} />
               <input className="input mono" aria-label={`기능 값 ${i + 1}`} type="number" value={s.value} onChange={(e) => setSkill(i, { value: num(e.target.value) })} />
               <input type="checkbox" title="성장 표시" aria-label={`기능 성장 ${i + 1}`} checked={s.grown ?? false} onChange={(e) => setSkill(i, { grown: e.target.checked })} style={{ accentColor: "#7c86f7" }} />
               <button type="button" className="btn ghost sm" aria-label={`기능 ${i + 1} 지우기`} onClick={() => setC({ ...c, skills: skills.filter((_, j) => j !== i) })}>삭제</button>
@@ -163,21 +163,21 @@ export function CharacterForm({ initial, onSubmit, onCancel, me }: { initial?: C
         {weapons.length === 0 && <div className="res-sub">공격 기능과 피해 식(예: 1d6+db)을 적어 두면 시트에서 바로 굴려요.</div>}
         {weapons.map((w, i) => (
           <div key={i} className="cf-weapon">
-            <input className="input" aria-label={`무기 이름 ${i + 1}`} placeholder="이름" value={w.name} onChange={(e) => setWeapon(i, { name: e.target.value })} />
-            <input className="input" aria-label={`무기 기능 ${i + 1}`} placeholder="공격 기능 (예: 사격(권총))" value={w.skill} onChange={(e) => setWeapon(i, { skill: e.target.value })} />
-            <input className="input mono" aria-label={`무기 피해 ${i + 1}`} placeholder="1d6+db" value={w.damage} onChange={(e) => setWeapon(i, { damage: e.target.value })} />
+            <input className="input" aria-label={`무기 이름 ${i + 1}`} placeholder="이름" value={w.name} maxLength={LIMITS.weaponName} onChange={(e) => setWeapon(i, { name: e.target.value })} />
+            <input className="input" aria-label={`무기 기능 ${i + 1}`} placeholder="공격 기능 (예: 사격(권총))" value={w.skill} maxLength={LIMITS.weaponName} onChange={(e) => setWeapon(i, { skill: e.target.value })} />
+            <input className="input mono" aria-label={`무기 피해 ${i + 1}`} placeholder="1d6+db" value={w.damage} maxLength={LIMITS.weaponDamage} onChange={(e) => setWeapon(i, { damage: e.target.value })} />
             <button type="button" className="btn ghost sm" aria-label={`무기 ${i + 1} 지우기`} onClick={() => setC({ ...c, weapons: weapons.filter((_, j) => j !== i) })}>삭제</button>
           </div>
         ))}
       </Group>
 
       <Group title="소지품" testId="cf-possessions">
-        <textarea className="input" style={{ height: 80 }} aria-label="소지품" value={c.possessions ?? ""} onChange={(e) => setC({ ...c, possessions: e.target.value })} />
+        <textarea className="input" style={{ height: 80 }} aria-label="소지품" value={c.possessions ?? ""} maxLength={LIMITS.possessions} onChange={(e) => setC({ ...c, possessions: e.target.value })} />
       </Group>
 
       <Group title="비고" testId="cf-notes">
-        <label className="field">인물 배경<textarea className="input" style={{ height: 100 }} aria-label="인물 배경" value={c.backstory ?? ""} onChange={(e) => setC({ ...c, backstory: e.target.value })} /></label>
-        <label className="field">메모<textarea className="input" style={{ height: 80 }} aria-label="메모" value={c.notes ?? ""} onChange={(e) => setC({ ...c, notes: e.target.value })} /></label>
+        <label className="field">인물 배경<textarea className="input" style={{ height: 100 }} aria-label="인물 배경" value={c.backstory ?? ""} maxLength={LIMITS.backstory} onChange={(e) => setC({ ...c, backstory: e.target.value })} /><LimitNote label="인물 배경" max={LIMITS.backstory} value={c.backstory ?? ""} /></label>
+        <label className="field">메모<textarea className="input" style={{ height: 80 }} aria-label="메모" value={c.notes ?? ""} maxLength={LIMITS.notes} onChange={(e) => setC({ ...c, notes: e.target.value })} /><LimitNote label="메모" max={LIMITS.notes} value={c.notes ?? ""} /></label>
       </Group>
 
       <div className="cf-foot">

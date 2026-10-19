@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClientCommand } from "@coc-vtt/shared";
 import { buildCues, filterCues, slotConfirm, SLOT_CONFIRM_MS, type Cue, type CueSource } from "../model/cues";
 import { assignSlot, clearSlot, emptySlots, parseSlots, SLOT_COUNT, type Slots } from "../model/slots";
-import { Dialog } from "@/shared/ui";
+import { Dialog, useRoving } from "@/shared/ui";
 import { withMod } from "@/shared/lib";
 
 const isTyping = (el: Element | null) => el instanceof HTMLElement && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
@@ -14,6 +14,8 @@ const isTyping = (el: Element | null) => el instanceof HTMLElement && (el.isCont
  */
 export function StageCues({ roomId, source, enabled, send, sessionActive = false, notify, bare = false }: { roomId: string; source: CueSource; enabled: boolean; send: (c: ClientCommand) => unknown; /** 세션이 진행 중이면 숫자 키 장면 전환은 3초 취소 창을 둔다 */ sessionActive?: boolean; notify?: (text: string, action?: { label: string; run: () => void }, opts?: { ttl?: number }) => void; /** 휴대폰 시트 안에 놓을 때: 떠 있는 막대가 아니라 그 자리의 한 묶음 */ bare?: boolean }) {
   const storageKey = `coc-vtt.slots.${roomId}`;
+  // 연출 칸 9개와 검색 버튼은 Tab 한 번에 지나가고, 안에서는 방향키로 옮긴다
+  const roving = useRoving<HTMLDivElement>(".cue-btn");
   const [slots, setSlots] = useState<Slots>(emptySlots);
   // null이면 닫힘, "run"이면 실행용, 숫자면 그 슬롯에 등록하는 용도
   const [palette, setPalette] = useState<null | "run" | number>(null);
@@ -37,7 +39,7 @@ export function StageCues({ roomId, source, enabled, send, sessionActive = false
 
   const cues = useMemo(() => buildCues(source), [source]);
   const byId = useMemo(() => new Map(cues.map((c) => [c.id, c])), [cues]);
-  const run = (cue: Cue) => enabled && send(cue.command);
+  const run = (cue: Cue) => (cue.command ? enabled && send(cue.command) : cue.run?.());
 
   const slotsRef = useRef({ slots, byId, enabled, palette, sessionActive, notify });
   slotsRef.current = { slots, byId, enabled, palette, sessionActive, notify };
@@ -63,10 +65,11 @@ export function StageCues({ roomId, source, enabled, send, sessionActive = false
           pending.current = null;
         }
         const ask = cur.notify ? slotConfirm(cue, cur.sessionActive) : null;
-        if (!ask) return void send(cue.command);
+        const fire = () => (cue.command ? send(cue.command) : cue.run?.());
+        if (!ask) return void fire();
         const timer = setTimeout(() => {
           if (pending.current === timer) pending.current = null;
-          send(cue.command);
+          fire();
         }, SLOT_CONFIRM_MS);
         pending.current = timer;
         cur.notify!(ask.text, { label: "취소", run: () => { clearTimeout(timer); if (pending.current === timer) pending.current = null; } }, { ttl: SLOT_CONFIRM_MS });
@@ -78,7 +81,7 @@ export function StageCues({ roomId, source, enabled, send, sessionActive = false
 
   return (
     <>
-      <div className={`cuebar${bare ? " bare" : ""}`} data-testid="cuebar" role="toolbar" aria-label="연출 바">
+      <div className={`cuebar${bare ? " bare" : ""}`} data-testid="cuebar" role="toolbar" aria-label="연출 바" aria-orientation="horizontal" ref={roving.ref} onFocus={roving.onFocus} onKeyDown={roving.onKeyDown}>
         {!bare && <span className="dock-label" title={`칸에 장면·핸드아웃을 등록해 두면 숫자 키(1~9)로 실행해요. 진행 중에 장면을 바꾸는 칸은 3초 안에 취소할 수 있어요. ${withMod("K")}로 검색해도 돼요`}>연출 칸</span>}
         {Array.from({ length: SLOT_COUNT }, (_, i) => {
           const id = slots[i];
@@ -133,7 +136,7 @@ function Palette({ cues, assigning, onClose, onPick }: { cues: Cue[]; assigning:
           autoFocus
           className="input"
           aria-label="명령어 검색어"
-          placeholder={assigning !== null ? `슬롯 ${assigning + 1}에 등록할 동작 검색` : "장면, 핸드아웃, 오브젝트 검색"}
+          placeholder={assigning !== null ? `슬롯 ${assigning + 1}에 등록할 동작 검색` : "장면, 핸드아웃, 토큰·소품 검색"}
           value={query}
           onChange={(e) => (setQuery(e.target.value), setIndex(0))}
           onKeyDown={(e) => {

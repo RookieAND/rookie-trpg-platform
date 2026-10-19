@@ -2,8 +2,10 @@
 import { useEffect, useRef, useState } from "react";
 import { STATUS_LABEL_KO, type BoardPing, type FogArea, type GameObject, type Role, type SceneGrid } from "@coc-vtt/shared";
 import { imageUrl } from "@/shared/api";
+import { usePhone } from "@/shared/lib";
 import { dragHasFiles } from "@/shared/ui";
 import { objectAt } from "../model/drop-target";
+import { layoutLabels, truncateLabel } from "../model/labels";
 import { layoutBadges, shapePath, BADGE_R } from "../model/marker-badges";
 import {
   DEFAULT_CELL,
@@ -105,6 +107,8 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
   const [rulerOn, setRulerOn] = useState(false);
   const [ruler, setRuler] = useState<{ a: Pt; b: Pt } | null>(null);
   const rulerDrag = useRef(false);
+  const phone = usePhone();
+  const [zoomOpen, setZoomOpen] = useState(false);
   // 격자 맞춤: 장면 설정이 기본이고, 이 사람이 따로 켜거나 끈 값이 있으면 그 값을 쓴다
   const [snapPref, setSnapPref] = useState<boolean | null>(null);
   useEffect(() => setSnapPref(snapKey ? loadSnap(snapKey) : null), [snapKey]);
@@ -203,6 +207,16 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
 
   const toBoard = (e: { clientX: number; clientY: number }) => screenToBoard(view, frame(), e.clientX, e.clientY);
   const place = (p: Pt) => (snapOn ? snapPoint(p, cell) : p);
+
+  const labelBase = (o: GameObject, pos: Pt) => pos.y + kt * (o.kind === "token" ? R + 8 : o.image ? 40 : 22) + labelFs * 0.95;
+  const labelText = (o: GameObject) => `${truncateLabel(o.name)}${o.layer === "gm" || o.visibleTo === "gm" ? " · GM 전용" : ""}${o.locked ? " · 잠김" : ""}`;
+  const labelPos = layoutLabels(
+    objects.map((o) => {
+      const pos = drag?.id === o.id ? drag : o;
+      return { id: o.id, x: pos.x, y: labelBase(o, pos), text: labelText(o), keep: selectedId === o.id || drag?.id === o.id };
+    }),
+    labelFs,
+  );
 
   return (
     <>
@@ -375,6 +389,8 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         }
         if (rulerDrag.current) {
           rulerDrag.current = false;
+          // 끌지 않고 뗀 점은 재기가 아니다: 0칸 글자를 남기지 않는다
+          setRuler((r) => (r && Math.hypot(r.a.x - r.b.x, r.a.y - r.b.y) < 1 ? null : r));
           return;
         }
         const t = tap.current;
@@ -439,7 +455,9 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         const fill = hidden ? "rgba(227,169,74,.12)" : o.kind === "token" ? "#2b3a5e" : "#23272d";
         // 몸통(링·배지·막대 포함)은 많이 축소했을 때만 커진다. 이름표는 따로 화면 글자 크기를 지킨다.
         const body = kt === 1 ? undefined : `translate(${pos.x} ${pos.y}) scale(${kt}) translate(${-pos.x} ${-pos.y})`;
-        const labelY = pos.y + kt * (o.kind === "token" ? R + 8 : o.image ? 40 : 22) + labelFs * 0.95;
+        const lp = labelPos.get(o.id);
+        const labelY = lp?.y ?? labelBase(o, pos);
+        const labelHidden = lp?.hidden ?? false;
         const badges = o.kind === "token" ? layoutBadges(o.markers, o.vitals?.status, R) : null;
         const markerText = o.kind === "token" ? markerSummary(o, badges!) : "";
         const desc = `${o.name}${mine ? ", 내 토큰" : ""}${hidden ? ", GM 전용" : ""}${o.locked ? ", 잠김" : ""}${markerText}, 위치 ${Math.round(pos.x)} ${Math.round(pos.y)}`;
@@ -527,10 +545,9 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
               </g>
             )}
             </g>
-            <text x={pos.x} y={labelY} textAnchor="middle" fill={hidden ? "#e3a94a" : "#c3c9d2"} fontSize={labelFs} pointerEvents="none" stroke="#0a0b0d" strokeWidth={(3.5 * labelFs) / 12} strokeLinejoin="round" paintOrder="stroke" data-testid={`label-${o.name}`}>
-              {o.name}
-              {hidden ? " · GM 전용" : ""}
-              {o.locked ? " · 잠김" : ""}
+            <text x={pos.x} y={labelY} textAnchor="middle" fill={hidden ? "#e3a94a" : "#c3c9d2"} fontSize={labelFs} pointerEvents="none" stroke="#0a0b0d" strokeWidth={(3.5 * labelFs) / 12} strokeLinejoin="round" paintOrder="stroke" data-testid={`label-${o.name}`} display={labelHidden ? "none" : undefined} aria-hidden>
+              <title>{o.name}</title>
+              {labelText(o)}
             </text>
             {selectedId === o.id && !o.image && onRequestImage && drag?.id !== o.id && (
               <g
@@ -562,7 +579,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
           <line x1={ruler.a.x} y1={ruler.a.y} x2={ruler.b.x} y2={ruler.b.y} stroke="#f0b429" strokeWidth={Math.max(2, 2 / scale)} strokeLinecap="round" />
           <circle cx={ruler.a.x} cy={ruler.a.y} r={Math.max(4, 5 / scale)} fill="#f0b429" stroke="#08090a" strokeWidth="1" />
           <circle cx={ruler.b.x} cy={ruler.b.y} r={Math.max(4, 5 / scale)} fill="#f0b429" stroke="#08090a" strokeWidth="1" />
-          <text x={(ruler.a.x + ruler.b.x) / 2} y={(ruler.a.y + ruler.b.y) / 2 - labelUnits(10, scale)} textAnchor="middle" fill="#ffe39a" fontSize={labelUnits(14, scale)} fontWeight="700" stroke="#08090a" strokeWidth={(3.5 * labelUnits(14, scale)) / 14} paintOrder="stroke" data-testid="ruler-label">
+          <text x={(ruler.a.x + ruler.b.x) / 2} y={(ruler.a.y + ruler.b.y) / 2 - labelUnits(10, scale)} textAnchor="middle" fill="#ffe39a" fontSize={labelUnits(14, scale)} fontWeight="700" stroke="#08090a" strokeWidth={(3.5 * labelUnits(14, scale)) / 14} paintOrder="stroke" data-testid="ruler-label" display={Math.hypot(ruler.a.x - ruler.b.x, ruler.a.y - ruler.b.y) < 1 ? "none" : undefined}>
             {formatDistance(ruler.a, ruler.b, cell)}
           </text>
         </g>
@@ -597,12 +614,13 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
       ))}
     </ul>
     {fileOver && onImageFile && <div className="drop-veil" data-testid="drop-veil" aria-hidden>{fileOver.id ? "이 토큰의 이미지로 넣어요" : "놓으면 쓰임을 물어봐요"}</div>}
-    <div className="zoom-ctl" role="group" aria-label="보드 확대·이동" data-testid="zoom-ctl">
+    <div className="zoom-ctl" data-open={phone ? String(zoomOpen) : "true"} role="group" aria-label="보드 확대·이동" data-testid="zoom-ctl">
+      <button type="button" className="btn sm zc zoom-toggle" data-testid="zoom-toggle" aria-expanded={zoomOpen} aria-label="보기 도구 펼치기" title="확대·이동 도구" onClick={() => setZoomOpen((v) => !v)}>{zoomOpen ? "×" : "＋"}</button>
       <button type="button" className="btn sm zc" aria-label="확대" title="확대 (+)" onClick={() => zoomBy(1.25)} disabled={view.w <= W / MAX_ZOOM + 0.5}>＋</button>
       <button type="button" className="btn sm zc" aria-label="축소" title="축소 (-)" onClick={() => zoomBy(0.8)} disabled={!zoomed}>－</button>
       <button type="button" className="btn sm zc" data-testid="zoom-fit" title="보드 전체가 보이게 맞춰요 (0)" onClick={fit} disabled={!zoomed}>맞춤</button>
       {mineToken && <button type="button" className="btn sm zc" data-testid="focus-mine" title="내 토큰이 가운데 오게 해요" onClick={focusMine}>내 토큰</button>}
-      <button type="button" className="btn sm zc" data-testid="ruler-toggle" aria-pressed={rulerOn} title="보드를 끌어서 두 곳 사이의 거리를 재요. 나에게만 보여요" onClick={toggleRuler}>자</button>
+      <button type="button" className="btn sm zc" data-testid="ruler-toggle" aria-pressed={rulerOn} title="보드를 끌어서 두 곳 사이의 거리를 재요. 나에게만 보여요" onClick={toggleRuler}><span aria-hidden>↔ </span>거리 재기</button>
       {grid && <button type="button" className="btn sm zc" data-testid="snap-toggle" aria-pressed={snapOn} title="켜면 토큰이 칸 가운데로 맞춰져요" onClick={toggleSnap}>칸 맞춤</button>}
     </div>
     </>

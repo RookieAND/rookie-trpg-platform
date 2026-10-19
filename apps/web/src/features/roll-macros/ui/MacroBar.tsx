@@ -3,7 +3,7 @@ import { useState } from "react";
 import { MAX_MACROS, type AddResult, type Macro } from "../model/macros";
 
 /** 자주 굴리는 식을 이름 붙여 두고 한 번에 굴리는 줄. */
-export function MacroBar({ error: syncError, macros, isKp, disabled, onRoll, onAdd, onRemove }: { error?: string | null; macros: Macro[]; isKp: boolean; disabled: boolean; onRoll: (m: Macro) => void; onAdd: (i: { name: string; expr: string; secret: boolean }) => AddResult; onRemove: (id: string) => void }) {
+export function MacroBar({ error: syncError, macros, isKp, readOnly = false, disabled, onRoll, onAdd, onRemove }: { error?: string | null; macros: Macro[]; isKp: boolean; /** 관전자: 매크로를 고치는 줄을 숨긴다 */ readOnly?: boolean; disabled: boolean; onRoll: (m: Macro) => void; onAdd: (i: { name: string; expr: string; secret: boolean }) => AddResult; onRemove: (id: string) => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
   const [expr, setExpr] = useState("");
@@ -30,12 +30,12 @@ export function MacroBar({ error: syncError, macros, isKp, disabled, onRoll, onA
             {editing && <button className="btn sm ghost" aria-label={`${m.name} 매크로 삭제`} onClick={() => onRemove(m.id)}>×</button>}
           </span>
         ))}
-                <button className="btn sm ghost" style={{ marginLeft: macros.length ? "auto" : 0 }} title="자주 굴리는 식을 이름 붙여 저장해요" aria-expanded={editing} onClick={() => setEditing((v) => !v)}>
+        {!readOnly && <button className="btn sm ghost" style={{ marginLeft: macros.length ? "auto" : 0 }} title="자주 굴리는 식을 이름 붙여 저장해요" aria-expanded={editing} onClick={() => setEditing((v) => !v)}>
           {editing ? "닫기" : "매크로 편집"}
-        </button>
+        </button>}
       </div>
       {syncError && <div className="err" role="alert">{syncError}</div>}
-      {editing && (
+      {editing && !readOnly && (
         <div className="macro-edit">
           <div className="row">
             <input className="input" style={{ width: 96, flex: "none" }} aria-label="매크로 이름" placeholder="이름" value={name} maxLength={20} onChange={(e) => setName(e.target.value)} />

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ClientCommand, GameObject } from "@coc-vtt/shared";
+import { LIMITS, type ClientCommand, type GameObject } from "@coc-vtt/shared";
 import { clampToViewport } from "../model/object-actions";
 import { MarkerPanel } from "./MarkerPanel";
 
@@ -77,7 +77,7 @@ export function ObjectContextMenu({ obj, at, actions, send, onClose }: { obj: Ga
           className="input"
           aria-label="새 이름"
           value={name}
-          maxLength={40}
+          maxLength={LIMITS.objectName}
           autoFocus
           onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => setName(e.target.value)}

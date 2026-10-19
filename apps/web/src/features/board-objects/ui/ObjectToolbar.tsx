@@ -1,15 +1,15 @@
 "use client";
 import { useEffect, useState } from "react";
-import type { Character, ClientCommand, GameObject, Member } from "@coc-vtt/shared";
+import { LIMITS, type Character, type ClientCommand, type GameObject, type Member } from "@coc-vtt/shared";
 import type { Caller } from "@/shared/api";
-import { ImageUploadButton } from "@/shared/ui";
+import { ImageUploadButton, LimitNote } from "@/shared/ui";
 import { newTokenName, uniqueName } from "../model/names";
 import { MarkerButton } from "./MarkerButton";
 
 interface PlacementInput {
-  /** 오브젝트를 놓을 장면(GM이 보고 있는 장면) */
+  /** 토큰·소품을 놓을 장면(GM이 보고 있는 장면) */
   sceneId: string;
-  /** 지금 장면의 오브젝트(기본 이름이 겹치지 않게 보는 데 쓴다) */
+  /** 지금 장면의 토큰·소품(기본 이름이 겹치지 않게 보는 데 쓴다) */
   objects: GameObject[];
   /** 룸의 PL 목록 */
   players: Member[];
@@ -77,7 +77,7 @@ export function PlaceControls({ placement: p, enabled, players, withTokenButton 
         <option value="">소유자 없음(NPC)</option>
         {players.map((pl) => <option key={pl.userId} value={pl.userId}>{pl.name}</option>)}
       </select>
-      <input className="dock-input" style={{ width: 96 }} aria-label="새 토큰 이름" placeholder="이름(선택)" title="비우면 소유자 이름이, 소유자가 없으면 ‘토큰N’이 쓰여요" value={p.newName} maxLength={40} disabled={!enabled}
+      <input className="dock-input" style={{ width: 96 }} aria-label="새 토큰 이름" placeholder="이름(선택)" title="비우면 소유자 이름이, 소유자가 없으면 ‘토큰N’이 쓰여요" value={p.newName} maxLength={LIMITS.objectName} disabled={!enabled}
         onChange={(e) => p.setNewName(e.target.value)} />
       {players.length > 1 && (
         <button className="btn" disabled={!enabled} title="PL마다 그 사람 이름으로 토큰을 하나씩 놓아요" onClick={p.addAll}>PL 전원 토큰 만들기</button>
@@ -86,7 +86,7 @@ export function PlaceControls({ placement: p, enabled, players, withTokenButton 
         {p.allLocked ? "이동 풀기" : "이동 잠금"}
       </button>
       <button className="btn" disabled={!enabled} title="가구·단서 같은 소품을 놓아요" onClick={() => p.add("prop", "object")}>+ 소품</button>
-      <button className="btn" disabled={!enabled} title="PL에게 보이지 않는 메모용 오브젝트를 놓아요" onClick={() => p.add("prop", "gm")}>+ GM 전용</button>
+      <button className="btn" disabled={!enabled} title="PL에게 보이지 않는 메모용 소품을 놓아요" onClick={() => p.add("prop", "gm")}>+ GM 전용</button>
     </>
   );
 }
@@ -105,7 +105,7 @@ interface SelectedInput {
   onDeselect: () => void;
 }
 
-/** 선택한 오브젝트의 이름·소유자·시트·잠금·삭제. 데스크톱에서는 지도 위 상자로, 휴대폰에서는 시트 안에 놓는다. */
+/** 선택한 토큰·소품의 이름·소유자·시트·잠금·삭제. 데스크톱에서는 지도 위 상자로, 휴대폰에서는 시트 안에 놓는다. */
 export function SelectedControls({ me, enabled, players, selected, characters = [], onOpenSheet, send, onDeselect }: SelectedInput) {
   const [rename, setRename] = useState("");
   useEffect(() => setRename(selected.name), [selected.id, selected.name]);
@@ -115,23 +115,32 @@ export function SelectedControls({ me, enabled, players, selected, characters = 
   };
   return (
     <>
-        <input className="dock-input" aria-label="선택한 오브젝트 이름" value={rename} maxLength={40} disabled={!enabled}
-          onChange={(e) => setRename(e.target.value)} onBlur={commitRename} onKeyDown={(e) => e.key === "Enter" && commitRename()} />
+        <span className="sel-field sel-name">
+          <input className="dock-input" aria-label="선택한 토큰·소품 이름" value={rename} maxLength={LIMITS.objectName} disabled={!enabled}
+            onChange={(e) => setRename(e.target.value)} onBlur={commitRename} onKeyDown={(e) => e.key === "Enter" && commitRename()} />
+          <LimitNote label="이름" max={LIMITS.objectName} value={rename} />
+        </span>
         <button className="btn" disabled={!enabled || !rename.trim() || rename.trim() === selected.name} onClick={commitRename}>이름 바꾸기</button>
         {selected.kind === "token" && (
-          <select className="dock-input" aria-label="선택한 토큰 소유자" disabled={!enabled} value={selected.ownerId ?? ""}
-            onChange={(e) => send({ type: "object.update", data: { id: selected.id, ownerId: e.target.value || null } })}>
-            <option value="">소유자 없음(NPC)</option>
-            {selected.ownerId && !players.some((p) => p.userId === selected.ownerId) && <option value={selected.ownerId}>(나간 사람)</option>}
-            {players.map((p) => <option key={p.userId} value={p.userId}>{p.name}</option>)}
-          </select>
+          <label className="sel-field">
+            <span className="sel-cap" aria-hidden>소유자</span>
+            <select className="dock-input" aria-label="선택한 토큰 소유자" disabled={!enabled} value={selected.ownerId ?? ""}
+              onChange={(e) => send({ type: "object.update", data: { id: selected.id, ownerId: e.target.value || null } })}>
+              <option value="">소유자 없음(NPC)</option>
+              {selected.ownerId && !players.some((p) => p.userId === selected.ownerId) && <option value={selected.ownerId}>(나간 사람)</option>}
+              {players.map((p) => <option key={p.userId} value={p.userId}>{p.name}</option>)}
+            </select>
+          </label>
         )}
         {selected.kind === "token" && characters.length > 0 && (
-          <select className="dock-input" aria-label="시트 연결" title="이 토큰에 캐릭터 시트를 이어요. 이으면 토큰 아래에 HP가 보이고, 토큰을 눌러 시트를 열 수 있어요" disabled={!enabled} value={selected.characterId ?? ""}
-            onChange={(e) => send({ type: "object.update", data: { id: selected.id, characterId: e.target.value || null } })}>
-            <option value="">시트 연결 없음</option>
-            {characters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <label className="sel-field" title="이 토큰에 캐릭터 시트를 이어요. 이으면 토큰 아래에 HP가 보이고, 토큰을 눌러 시트를 열 수 있어요">
+            <span className="sel-cap" aria-hidden>시트</span>
+            <select className="dock-input" aria-label="시트 연결" disabled={!enabled} value={selected.characterId ?? ""}
+              onChange={(e) => send({ type: "object.update", data: { id: selected.id, characterId: e.target.value || null } })}>
+              <option value="">시트 연결 없음</option>
+              {characters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </label>
         )}
         {selected.kind === "token" && selected.characterId && (
           <>
@@ -192,13 +201,13 @@ export function ObjectToolbar({
   return (
     <>
     {selected && (
-      <div className="dock sel-panel" data-testid="selected-bar">
-        <span className="dock-label" title="선택한 오브젝트의 이름과 소유자를 바꿔요">선택</span>
+      <div className="dock sel-panel" data-testid="selected-bar" data-lane="bottom">
+        <span className="dock-label" title="선택한 토큰·소품의 이름과 소유자를 바꿔요">선택</span>
         <SelectedControls me={me} enabled={enabled} players={players} selected={selected} characters={characters} {...(onOpenSheet ? { onOpenSheet } : {})} send={send} onDeselect={onDeselect} />
       </div>
     )}
     <div className="dock" style={{ bottom: 12 }}>
-      <span className="dock-label" title="지금 보고 있는 장면에 오브젝트를 놓아요">놓기</span>
+      <span className="dock-label" title="지금 보고 있는 장면에 토큰·소품을 놓아요">놓기</span>
       <PlaceControls placement={p} enabled={enabled} players={players} />
     </div>
     </>

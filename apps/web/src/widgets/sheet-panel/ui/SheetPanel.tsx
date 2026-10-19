@@ -296,9 +296,9 @@ export function SheetEmpty({ role, canLoad }: { role: "kp" | "pl" | "spectator";
     role === "spectator"
       ? "관전자는 시트를 볼 수 없어요."
       : role === "kp"
-        ? "아직 룸에 캐릭터가 없어요. 아래에서 보관함 캐릭터를 불러오거나 PL이 불러오길 기다려요."
+        ? "아직 룸에 캐릭터가 없어요. NPC를 만들거나, 아래에서 보관함 캐릭터를 불러오거나, PL이 만들길 기다려요."
         : canLoad
-          ? "내 캐릭터가 아직 없어요. 아래 ‘캐릭터 만들기’로 바로 만들거나, 보관함에 있는 캐릭터를 불러와요."
+          ? "내 캐릭터가 아직 없어요. ‘캐릭터 만들기’로 바로 만들거나, 아래에서 보관함 캐릭터를 불러와요."
           : "아직 내 캐릭터가 없어요.";
-  return <div style={{ color: "var(--muted)" }} data-testid="sheet-empty">{text}</div>;
+  return <div className="sheet-empty-note" data-testid="sheet-empty">{text}</div>;
 }

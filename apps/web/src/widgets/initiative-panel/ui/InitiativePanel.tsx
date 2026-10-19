@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import type { ClientCommand, Initiative } from "@coc-vtt/shared";
+import { LIMITS, type ClientCommand, type Initiative } from "@coc-vtt/shared";
 import { StatusChips, useAsk } from "@/shared/ui";
 
 /** 전투 순서. 모두가 보고, GM만 시작·넘기기·NPC 추가·DEX 수정을 한다. */
@@ -81,7 +81,7 @@ export function InitiativePanel({ initiative, isKp, enabled, send }: { initiativ
 
       {isKp && (
         <div style={{ display: "flex", gap: 8 }}>
-          <input className="input" style={{ flex: 1 }} aria-label="NPC 이름" placeholder="NPC 이름" value={name} disabled={!enabled} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+          <input className="input" style={{ flex: 1 }} aria-label="NPC 이름" placeholder="NPC 이름" maxLength={LIMITS.initiativeName} value={name} disabled={!enabled} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
           <input className="input mono" style={{ width: 64 }} type="number" aria-label="NPC DEX" value={dex} disabled={!enabled} onChange={(e) => setDex(e.target.value)} />
           <button className="btn" disabled={!canAdd} onClick={add}>추가</button>
         </div>

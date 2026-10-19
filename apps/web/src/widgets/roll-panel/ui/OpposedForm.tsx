@@ -1,6 +1,6 @@
 "use client";
 import { useId, useState } from "react";
-import { josa, type Character } from "@coc-vtt/shared";
+import { LIMITS, josa, type Character } from "@coc-vtt/shared";
 import { commonSkillNames, skillOptions } from "../model/skill-options";
 
 interface Props {
@@ -65,30 +65,42 @@ export function OpposedForm({ isKp, disabled, userId, characters, players, onOpp
         <div className="ask-fields">
           {isKp ? (
             <>
-              <select className="input" style={{ flex: "1 1 45%", minWidth: 0 }} aria-label="주도하는 캐릭터" value={a?.id ?? ""} onChange={(e) => { setAId(e.target.value); setASkill(""); }}>
-                {aChars.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <select className="input" style={{ flex: "1 1 45%", minWidth: 0 }} aria-label="주도하는 기능" value={aName} onChange={(e) => setASkill(e.target.value)}>
-                {skillOptions(a).map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-              <select className="input" style={{ flex: "1 1 45%", minWidth: 0 }} aria-label="맞서는 캐릭터" value={b?.id ?? ""} onChange={(e) => { setBId(e.target.value); setBSkill(""); }}>
-                {characters.filter((c) => c.id !== a?.id).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <select className="input" style={{ flex: "1 1 45%", minWidth: 0 }} aria-label="맞서는 기능" value={bName} onChange={(e) => setBSkill(e.target.value)}>
-                {skillOptions(b).map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
+              <div className="opp-row" role="group" aria-label="주도하는 쪽">
+                <span className="opp-cap">주도</span>
+                <select className="input" aria-label="주도하는 캐릭터" value={a?.id ?? ""} onChange={(e) => { setAId(e.target.value); setASkill(""); }}>
+                  {aChars.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <select className="input" aria-label="주도하는 기능" value={aName} onChange={(e) => setASkill(e.target.value)}>
+                  {skillOptions(a).map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="opp-row" role="group" aria-label="맞서는 쪽">
+                <span className="opp-cap">맞섬</span>
+                <select className="input" aria-label="맞서는 캐릭터" value={b?.id ?? ""} onChange={(e) => { setBId(e.target.value); setBSkill(""); }}>
+                  {characters.filter((c) => c.id !== a?.id).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <select className="input" aria-label="맞서는 기능" value={bName} onChange={(e) => setBSkill(e.target.value)}>
+                  {skillOptions(b).map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
             </>
           ) : (
             <>
-              <span className="res-sub" style={{ flex: "1 1 100%" }}>{a ? `${josa(a.name, "으로/로")} 굴려요` : ""}</span>
-              <select className="input" style={{ flex: "1 1 100%", minWidth: 0 }} aria-label="주도하는 기능" value={aName} onChange={(e) => setASkill(e.target.value)}>
-                {skillOptions(a).map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-              <select className="input" style={{ flex: "1 1 45%", minWidth: 0 }} aria-label="맞서는 PL" value={bPlayer?.userId ?? ""} onChange={(e) => setBUser(e.target.value)}>
-                {others.map((p) => <option key={p.userId} value={p.userId}>{p.name}</option>)}
-              </select>
-              <input className="input" style={{ flex: "1 1 45%", minWidth: 0 }} list={listId} aria-label="맞서는 기능" placeholder="상대 기능 (예: 회피)" value={bSkill} onChange={(e) => setBSkill(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} />
-              <datalist id={listId}>{commonSkillNames().map((n) => <option key={n} value={n} />)}</datalist>
+              <div className="opp-row" role="group" aria-label="주도하는 쪽">
+                <span className="opp-cap">주도</span>
+                <span className="res-sub opp-who">{a ? `${josa(a.name, "으로/로")} 굴려요` : ""}</span>
+                <select className="input" aria-label="주도하는 기능" value={aName} onChange={(e) => setASkill(e.target.value)}>
+                  {skillOptions(a).map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div className="opp-row" role="group" aria-label="맞서는 쪽">
+                <span className="opp-cap">맞섬</span>
+                <select className="input" aria-label="맞서는 PL" value={bPlayer?.userId ?? ""} onChange={(e) => setBUser(e.target.value)}>
+                  {others.map((p) => <option key={p.userId} value={p.userId}>{p.name}</option>)}
+                </select>
+                <input className="input" list={listId} aria-label="맞서는 기능" placeholder="상대 기능 (예: 회피)" maxLength={LIMITS.rollName} value={bSkill} onChange={(e) => setBSkill(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} />
+                <datalist id={listId}>{commonSkillNames().map((n) => <option key={n} value={n} />)}</datalist>
+              </div>
             </>
           )}
           <div className="res-sub" style={{ flex: "1 1 100%" }}>

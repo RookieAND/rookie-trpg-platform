@@ -84,7 +84,7 @@ export function ImageIntakePopover({ me, file, at, selected, onChoose, onClose }
   );
 }
 
-/** 오브젝트 하나의 이미지를 고르는 상자. 이 룸에서 쓴 이미지를 다시 고르거나 새 파일을 올린다. */
+/** 토큰·소품 하나의 이미지를 고르는 상자. 이 룸에서 쓴 이미지를 다시 고르거나 새 파일을 올린다. */
 export function ObjectImagePopover({ me, current, at, onPick, onClose }: { me: Caller; current?: string | null; at: { cx: number; cy: number }; onPick: (image: string) => void; onClose: () => void }) {
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -99,7 +99,7 @@ export function ObjectImagePopover({ me, current, at, onPick, onClose }: { me: C
         ref={input}
         type="file"
         accept="image/png,image/jpeg,image/gif,image/webp"
-        aria-label="오브젝트 이미지 파일"
+        aria-label="토큰·소품 이미지 파일"
         hidden
         onChange={async (e) => {
           await upload(e.target.files?.[0]);

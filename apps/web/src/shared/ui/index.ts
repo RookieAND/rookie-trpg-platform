@@ -13,3 +13,7 @@ export { Group } from "./Group";
 export { useAsk, type ConfirmOptions, type PromptOptions } from "./AskDialog";
 export { StatusChips } from "./StatusChips";
 export { ErrorPanel } from "./ErrorPanel";
+export { ScrollTabs } from "./ScrollTabs";
+export { LimitNote } from "./LimitNote";
+export { useRoving, syncRoving, nextRovingIndex } from "./roving";
+export { restoreFocus, focusReturnTarget, menuTriggerOf } from "./focus-return";

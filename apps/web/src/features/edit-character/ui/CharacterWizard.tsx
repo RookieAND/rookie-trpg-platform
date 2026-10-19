@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import {
   CHARACTERISTIC_KEYS,
+  LIMITS,
   FIXED_SKILLS,
   OCCUPATION_POINT_FORMULAS,
   SKILL_CREATION_CAP,
@@ -22,6 +23,7 @@ import {
   type SkillAllocation,
 } from "@coc-vtt/shared";
 
+import { LimitNote } from "@/shared/ui";
 import { nextBlockReason } from "../model/next-reason";
 
 const STEPS = ["기본 정보", "특성치", "기능", "확인"] as const;
@@ -95,7 +97,7 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
 
       {step === 0 && (
         <div className="wz-basic">
-          <label>이름<input className="input" aria-label="이름" value={name} onChange={(e) => setName(e.target.value)} /></label>
+          <label>이름<input className="input" aria-label="이름" value={name} maxLength={LIMITS.characterName} onChange={(e) => setName(e.target.value)} /><LimitNote label="이름" max={LIMITS.characterName} value={name} /></label>
           <label>나이<input className="input" aria-label="나이" type="number" value={age} onChange={(e) => { setAge(Number(e.target.value)); resetAgeParts(); }} /></label>
           <label>직업<input className="input" aria-label="직업" value={occupation} maxLength={40} onChange={(e) => { setOccupation(e.target.value); setJob(null); }} /></label>
           {occupations.length > 0 && (
@@ -221,8 +223,8 @@ export function CharacterWizard({ occupations, onSubmit, onCancel }: { occupatio
           </div>
           <div className="mono" style={{ color: "var(--muted)" }}>{CHARACTERISTIC_KEYS.map((k) => `${k} ${final[k]}`).join(" · ")} · 행운 {luck}</div>
           <div className="mono" style={{ color: "var(--muted)" }}>HP {derived.hp} · MP {derived.mp} · SAN {derived.san} · MOV {derived.mov} · DB {derived.damageBonus} · 체격 {derived.build}</div>
-          <label>소지품<textarea className="input" style={{ height: 72, padding: 12 }} aria-label="소지품" value={possessions} onChange={(e) => setPossessions(e.target.value)} /></label>
-          <label>인물 배경<textarea className="input" style={{ height: 90, padding: 12 }} aria-label="인물 배경" value={backstory} onChange={(e) => setBackstory(e.target.value)} /></label>
+          <label>소지품<textarea className="input" style={{ height: 72, padding: 12 }} aria-label="소지품" value={possessions} maxLength={LIMITS.possessions} onChange={(e) => setPossessions(e.target.value)} /></label>
+          <label>인물 배경<textarea className="input" style={{ height: 90, padding: 12 }} aria-label="인물 배경" value={backstory} maxLength={LIMITS.backstory} onChange={(e) => setBackstory(e.target.value)} /><LimitNote label="인물 배경" max={LIMITS.backstory} value={backstory} /></label>
           <span style={{ color: "var(--muted)", fontSize: 12.5 }}>무기와 기능 세부는 만든 뒤 편집에서 고칠 수 있어요.</span>
         </div>
       )}

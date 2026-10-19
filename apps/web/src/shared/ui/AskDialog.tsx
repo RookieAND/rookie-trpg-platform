@@ -3,6 +3,7 @@ import { useCallback, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Dialog } from "./Dialog";
 import { promptResult } from "./ask-dialog";
+import { LimitNote } from "./LimitNote";
 
 export type ConfirmOptions = {
   title: string;
@@ -77,7 +78,10 @@ function AskView({ pending, onFinish }: { pending: Pending; onFinish: (v: boolea
         <strong>{opts.title}</strong>
         {opts.message && <div style={{ color: "var(--muted)" }}>{opts.message}</div>}
         {pending.kind === "prompt" && (
-          <input className="input" aria-label={pending.opts.label} value={text} maxLength={pending.opts.maxLength ?? 40} autoFocus onFocus={(e) => e.currentTarget.select()} onChange={(e) => setText(e.target.value)} />
+          <>
+            <input className="input" aria-label={pending.opts.label} value={text} maxLength={pending.opts.maxLength ?? 40} aria-describedby="ask-limit" autoFocus onFocus={(e) => e.currentTarget.select()} onChange={(e) => setText(e.target.value)} />
+            <LimitNote id="ask-limit" label={pending.opts.label} max={pending.opts.maxLength ?? 40} value={text} />
+          </>
         )}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button type="button" className="btn" onClick={cancel}>{opts.cancelLabel ?? "취소"}</button>

@@ -75,11 +75,12 @@ export function RoomHeader({
     <header className="topbar">
       <Link href="/" className="brand" aria-label="로비로 가기">{SERVICE_NAME}</Link>
       <Link href="/" className="crumb">← 로비</Link>
+      {roomName && <span className="room-name" data-testid="room-name" title={roomName}>{roomName}</span>}
       <span className={`badge ${isKp ? "kp" : ""}`}>{ROLE_LABEL[role]}</span>
       {role === "spectator" && <span className="badge paused" data-testid="spectator-badge" title="보기만 할 수 있어요. 굴림·이동·편집은 막혀 있어요">관전 중</span>}
       {kpAway && <span className="badge paused" role="status" data-testid="kp-away-badge">GM 끊김</span>}
       <span className={`badge status ${status === "ACTIVE" ? "live" : ""} ${status === "PAUSED" ? "paused" : ""}`} data-testid="session-status">
-        {sessionNumber > 0 ? `세션 ${sessionNumber} · ` : "세션 시작 전 · "}
+        <span className="st-long">{sessionNumber > 0 ? `세션 ${sessionNumber} · ` : "세션 시작 전 · "}</span>
         {SESSION_STATUS_LABEL[status]}
       </span>
       <span className="badge plain conn" data-testid="connection" data-state={connection}>{CONNECTION_LABEL[connection]}</span>

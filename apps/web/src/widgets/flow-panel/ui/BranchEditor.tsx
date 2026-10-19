@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import type { Beat, Branch, BranchCondition, Handout } from "@coc-vtt/shared";
+import { LIMITS, type Beat, type Branch, type BranchCondition, type Handout } from "@coc-vtt/shared";
 
 type Kind = BranchCondition["type"];
 const KIND_LABEL: Record<Kind, string> = { manual: "수동 (GM이 누름)", roll: "판정 결과", stat: "수치 임계", handout: "핸드아웃 공개" };
@@ -53,7 +53,7 @@ export function BranchEditor({ initial, fromId, beats, handouts, onSave, onCance
       </select>
       {kind === "roll" && (
         <div style={{ display: "flex", gap: 8 }}>
-          <input className="input" style={{ flex: 1 }} aria-label="조건 기능 이름" placeholder="기능 이름 (예: 도서관 이용)" value={skill} onChange={(e) => setSkill(e.target.value)} />
+          <input className="input" style={{ flex: 1 }} aria-label="조건 기능 이름" placeholder="기능 이름 (예: 도서관 이용)" maxLength={LIMITS.rollName} value={skill} onChange={(e) => setSkill(e.target.value)} />
           <select className="input" aria-label="조건 판정 단계" value={atLeast} onChange={(e) => setAtLeast(e.target.value as typeof atLeast)}>
             <option value="regular">보통 이상</option>
             <option value="hard">어려움 이상</option>

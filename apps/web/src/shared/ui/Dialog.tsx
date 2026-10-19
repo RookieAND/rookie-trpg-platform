@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type ComponentProps } from "react";
 import { isTop, trapTarget } from "./dialog-focus";
+import { focusReturnTarget } from "./focus-return";
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const stack: object[] = [];
@@ -14,7 +15,7 @@ export function Dialog({ label, onClose, children, ...rest }: { label: string; o
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   // 그려지기 전의 초점 자리가 곧 연 곳이다.
-  const [opener] = useState<Element | null>(() => (typeof document === "undefined" ? null : document.activeElement));
+  const [opener] = useState<Element | null>(() => (typeof document === "undefined" ? null : focusReturnTarget(document.activeElement)));
 
   useEffect(() => {
     const el = ref.current;
