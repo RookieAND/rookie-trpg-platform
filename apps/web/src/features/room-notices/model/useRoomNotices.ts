@@ -1,9 +1,12 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { badCommandMessage } from "@/shared/lib";
 import { ACTION_TTL, ERROR_TTL, INFO_TTL, humanizeError, pushToast, RECONNECTED_TEXT, SEND_FAILED_TEXT, type Toast, type ToastAction } from "./toasts";
 
 interface Input {
-  lastError: { code: string; message?: string } | null;
+  lastError: { code: string; message?: string; requestId?: string } | null;
+  /** 요청 번호로 그때 보낸 명령을 찾는다(형식 오류를 칸별 문구로 바꾸는 데 쓴다) */
+  commandOf?: (requestId: string) => unknown;
   /** 연결이 없어 보내지 못한 횟수 */
   sendFailed: number;
   /** 다시 연결된 횟수 */
@@ -13,7 +16,7 @@ interface Input {
 }
 
 /** 서버 오류·전송 실패·재연결을 토스트 목록으로 모은다. */
-export function useRoomNotices({ lastError, sendFailed, reconnected, lastUndo }: Input) {
+export function useRoomNotices({ lastError, commandOf, sendFailed, reconnected, lastUndo }: Input) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
   const push = useCallback((kind: Toast["kind"], text: string, action?: ToastAction, ttl?: number) => {
@@ -23,7 +26,10 @@ export function useRoomNotices({ lastError, sendFailed, reconnected, lastUndo }:
 
   // 같은 오류가 연달아 와도 이벤트마다 새 객체라 매번 새 토스트가 된다.
   useEffect(() => {
-    if (lastError) push("error", humanizeError(lastError));
+    if (!lastError) return;
+    const field = lastError.code === "bad_message" && lastError.requestId && commandOf ? badCommandMessage(commandOf(lastError.requestId)) : null;
+    push("error", field ?? humanizeError(lastError));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastError, push]);
   useEffect(() => {
     if (sendFailed > 0) push("error", SEND_FAILED_TEXT);

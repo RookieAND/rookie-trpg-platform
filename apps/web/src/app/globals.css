@@ -4,7 +4,10 @@
   --line: rgba(255,255,255,.06); --line-2: rgba(255,255,255,.11);
   --hover: rgba(255,255,255,.055); --active: rgba(255,255,255,.09);
   --text: #e8e9ec; --text-2: #b4b7bf; --muted: #84878f;
-  --accent: #7c86f7; --primary: #5e6ad2; --primary-hover: #6c78e0;
+  --accent: #7c86f7; --primary: #5e6ad2; --primary-hover: #5560c4;
+  /* 입력 칸: 테두리는 비텍스트 대비 3:1, 자리표시자 글은 4.5:1 이상(contrast.test.ts가 지킨다) */
+  --input-border: rgba(255,255,255,.38); --placeholder: #868991;
+  color-scheme: dark;
   --amber: #e0a94f; --danger: #ec6a60; --ok: #4cc38a;
   --radius: 6px; --radius-md: 8px; --radius-lg: 10px;
   --row: 28px; --row-lg: 32px; --gap: 8px; --tap: 44px;
@@ -18,7 +21,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 a { color: inherit; }
 ::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
-:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); outline-offset: 1px; }
+:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 85%, transparent); outline-offset: 1px; }
 * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.14) transparent; }
 .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
 h1, h2, h3 { letter-spacing: -.01em; }
@@ -44,10 +47,10 @@ h1, h2, h3 { letter-spacing: -.01em; }
 .btn-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .sep { width: 1px; height: 16px; background: var(--line-2); flex: none; margin: 0 2px; }
 
-.input { height: var(--row); padding: 0 10px; border-radius: var(--radius); border: 1px solid var(--line-2); background: rgba(255,255,255,.03); width: 100%; font-size: 13px; transition: border-color .12s, background .12s; }
-.input:hover { border-color: rgba(255,255,255,.17); }
+.input { height: var(--row); padding: 0 10px; border-radius: var(--radius); border: 1px solid var(--input-border); background: rgba(255,255,255,.03); width: 100%; font-size: 13px; transition: border-color .12s, background .12s; }
+.input:hover { border-color: rgba(255,255,255,.55); }
 .input:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 70%, transparent); background: rgba(255,255,255,.045); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
-.input::placeholder { color: #5f626a; }
+.input::placeholder, .dock-input::placeholder, .chat-input::placeholder { color: var(--placeholder); opacity: 1; }
 textarea.input { height: auto; padding: 8px 10px; resize: vertical; line-height: 1.5; }
 select.input { padding-right: 6px; }
 input[type="checkbox"] { accent-color: var(--accent); }
@@ -209,7 +212,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .dock-field { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--text-2); }
 .dock-note { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .dock-group { display: inline-flex; gap: 6px; align-items: center; }
-.dock-input { height: var(--row); max-width: 150px; padding: 0 8px; border-radius: var(--radius); border: 1px solid var(--line-2); background: var(--panel-2); color: var(--text); font-size: 12px; }
+.dock-input { height: var(--row); max-width: 150px; padding: 0 8px; border-radius: var(--radius); border: 1px solid var(--input-border); background: var(--panel-2); color: var(--text); font-size: 12px; }
 .dock-input:focus-visible { outline: 1px solid var(--accent); }
 .dock-input:disabled { opacity: .4; }
 .sel-panel { left: auto; right: 8px; bottom: 100px; top: auto; transform: none; flex-direction: column; align-items: stretch; width: 164px; padding: 6px; gap: 4px; }
@@ -475,7 +478,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .grp-h { margin: 0; flex: 1; min-width: 0; font-size: inherit; font-weight: inherit; letter-spacing: 0; }
 .grp-toggle { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; height: var(--row); padding: 0 8px 0 2px; border-radius: var(--radius); font-size: 12px; font-weight: 600; letter-spacing: .01em; color: var(--text-2); }
 .grp-toggle:hover { background: var(--hover); color: var(--text); }
-.grp-toggle:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); outline-offset: 1px; }
+.grp-toggle:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 85%, transparent); outline-offset: 1px; }
 .grp-caret { width: 10px; font-size: 10px; color: var(--muted); }
 .grp-actions { display: flex; gap: 6px; align-items: center; flex: none; }
 .grp-body { display: grid; gap: 8px; padding: 2px 0 12px; }

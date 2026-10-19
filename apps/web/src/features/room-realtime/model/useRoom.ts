@@ -62,6 +62,8 @@ export function useRoom({ roomId, user, name, token: initialToken, invite, refre
   const lastSeq = useRef(0);
   lastSeq.current = state.lastSeq;
   const reqId = useRef(0);
+  // 최근에 보낸 명령(요청 번호별). 서버가 형식 오류를 돌려주면 어느 칸이 문제인지 다시 찾는 데 쓴다.
+  const sent = useRef(new Map<string, ClientCommand>());
   const wasDown = useRef(false);
   const everOpened = useRef(false);
   const refreshRef = useRef(refresh);
@@ -144,12 +146,16 @@ export function useRoom({ roomId, user, name, token: initialToken, invite, refre
       setSendFailed((n) => n + 1);
       return false;
     }
-    ws.send(JSON.stringify({ id: String(++reqId.current), command }));
+    const id = String(++reqId.current);
+    sent.current.set(id, command);
+    if (sent.current.size > 40) sent.current.delete(sent.current.keys().next().value as string);
+    ws.send(JSON.stringify({ id, command }));
     return true;
   }, []);
+  const commandOf = useCallback((requestId: string) => sent.current.get(requestId), []);
 
   /** HTTP로 받은 이전 대화를 같은 reducer로 합친다(id가 같으면 건너뛴다). */
   const addChatHistory = useCallback((messages: ChatMessage[]) => dispatch({ seq: 0, event: { type: "chat.history", data: { messages, last: false } } }), []);
 
-  return { state, connection, closeCode, send, retry, reconnected, sendFailed, authExpired, addChatHistory };
+  return { state, connection, closeCode, send, commandOf, retry, reconnected, sendFailed, authExpired, addChatHistory };
 }
