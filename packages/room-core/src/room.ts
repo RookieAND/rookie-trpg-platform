@@ -591,6 +591,12 @@ export class Room {
       // 대화는 세션 전·일시정지 중에도 할 수 있다(대화 안의 주사위만 진행 중에 굴린다).
       case "chat.send":
         return this.chatSend(who, command.data);
+      case "chat.remove":
+        return this.chatRemove(who, command.data.seq);
+      case "roll.remove":
+        return this.rollRemove(who, command.data.id);
+      case "log.remove":
+        return this.logRemove(who, command.data.n);
     }
 
     if (this.status === "PAUSED") {
@@ -2294,6 +2300,33 @@ export class Room {
     const out: Out[] = [this.emit({ type: "history.purged", data: { chat: scope.chat, log: scope.log } }, { roles: ALL_ROLES })];
     if (scope.log) this.record("session", "history.purge", scope.chat ? "대화와 세션 기록을 비웠어요" : "세션 기록을 비웠어요", { audience: "gm" });
     return out;
+  }
+
+  private chatRemove(who: Actor, seq: number): Result {
+    if (who.role !== "kp") return fail("forbidden", "GM만 대화를 지울 수 있어요.");
+    const i = this.chat.findIndex((m) => m.seq === seq);
+    if (i < 0) return fail("not_found", "이미 지워졌거나 없는 대화예요.");
+    this.chat.splice(i, 1);
+    // 다시 접속하는 사람이 지운 대화를 되받지 않게 이벤트 버퍼에서도 걷어낸다.
+    this.buffer = this.buffer.filter((o) => !(o.event.type === "chat.posted" && o.event.data.seq === seq));
+    return ok(this.emit({ type: "chat.removed", data: { seq } }, { roles: ALL_ROLES }));
+  }
+
+  private rollRemove(who: Actor, id: string): Result {
+    if (who.role !== "kp") return fail("forbidden", "GM만 굴림 기록을 지울 수 있어요.");
+    const i = this.rolls.findIndex((r) => r.id === id);
+    if (i < 0) return fail("not_found", "이미 지워졌거나 없는 굴림이에요.");
+    this.rolls.splice(i, 1);
+    this.buffer = this.buffer.filter((o) => !((o.event.type === "roll.result" || o.event.type === "roll.hidden") && (o.event.data as { id?: string }).id === id));
+    return ok(this.emit({ type: "roll.removed", data: { id } }, { roles: ALL_ROLES }));
+  }
+
+  private logRemove(who: Actor, n: number): Result {
+    if (who.role !== "kp") return fail("forbidden", "GM만 기록을 지울 수 있어요.");
+    const i = this.log.findIndex((e) => e.n === n);
+    if (i < 0) return fail("not_found", "이미 지워졌거나 없는 기록이에요.");
+    this.log.splice(i, 1);
+    return ok(this.emit({ type: "log.removed", data: { n } }, { roles: ALL_ROLES }));
   }
 
   private objectRemove(who: Actor, id: string): Result {

@@ -35,7 +35,11 @@ const confirmAsk = async (page) => { const d = page.getByTestId("ask-dialog"); a
 const openSettings = async (page) => { if (!(await page.getByRole("menu").count())) await page.getByTestId("settings-menu").click(); };
 // 판정 요청 폼과 안개 더보기는 접혀 있다. 필요할 때 펼친다.
 const openAsk = async (page) => { if (!(await page.getByLabel("요청할 기능").count())) await page.getByRole("button", { name: "판정 요청" }).click(); };
-const openFogMore = async (page) => { const b = page.getByTestId("fog-toolbar").getByRole("button", { name: /^더보기|^접기/ }); if ((await b.getAttribute("aria-expanded")) !== "true") await b.click(); };
+// GM 데스크톱의 보드 아래 도구 줄은 놓기·안개·연출 탭이다. 휴대폰에는 이 탭이 없어서(도구 시트를 쓴다) 아무 일도 하지 않는다.
+const dockTab = async (page, id) => { const t = page.getByTestId(`dock-tab-${id}`); if ((await t.count()) && (await t.getAttribute("aria-selected")) !== "true") await t.click(); };
+// 장면 막대의 ＋ 버튼으로 화면 안 대화상자를 열어 새 장면을 만든다.
+const addScene = async (page, name) => { await page.getByTestId("scene-add").click(); const d = page.getByTestId("ask-dialog"); await d.getByLabel("장면 이름").fill(name); await d.locator('button[type="submit"]').click(); await d.waitFor({ state: "detached" }); };
+const openFogMore = async (page) => { await dockTab(page, "fog"); const b = page.getByTestId("fog-toolbar").getByRole("button", { name: /^더보기|^접기/ }); if ((await b.getAttribute("aria-expanded")) !== "true") await b.click(); };
 const openSceneMenu = async (page) => { if (!(await page.getByRole("menu").count())) await page.getByRole("button", { name: /장면 설정/ }).click(); };
 
 // 이전 실행이 남긴 룸이 사용자별 룸 수 한도를 채우지 않게, 시작할 때 이 시험의 사용자들 룸을 비운다.
@@ -799,6 +803,7 @@ try {
   await kp.getByRole("button", { name: "+ 소품" }).click();
   const plProps = pl.locator('[data-testid^="obj-소품"]');
   await plProps.first().waitFor();
+  await dockTab(kp, "fog");
   await kp.getByRole("button", { name: "안개 켜기" }).click();
   await pl.getByTestId("fog").waitFor();
   await plProps.first().waitFor({ state: "detached" });
@@ -829,6 +834,7 @@ try {
   await kp.getByRole("button", { name: "안개 끄기" }).click();
   await plProps.first().waitFor();
   await pl.getByTestId("fog").waitFor({ state: "detached" });
+  await dockTab(kp, "place");
   step("안개와 시야: 안개 속 오브젝트는 PL 화면에서 사라지고, 시야 반지름·밝힌 영역으로 다시 보이며, 지나간 자리는 탐험 기록으로 남고(GM이 지움), 끄면 모두 보임");
 
   // 되돌리기(Ctrl+Z): 토큰 삭제 → 복귀, 이동 → 원위치. 확인창 없이 삭제하고 안내 토스트가 뜬다.
@@ -1268,8 +1274,7 @@ try {
   step("PL이 효과를 끄면 더는 재생되지 않음");
 
   // 장면: GM이 다른 장면을 미리 꾸미면 PL에게는 안 보이고, 페이드 전환하면 PL 화면이 통째로 바뀜
-  await kp2.getByLabel("새 장면 이름").fill("서재");
-  await kp2.getByRole("button", { name: "추가", exact: true }).click();
+  await addScene(kp2, "서재");
   await kp2.getByRole("tab", { name: "서재" }).click();
   await kp2.getByRole("button", { name: "+ 소품" }).click();
   await kp2.getByTestId("obj-소품1").waitFor();
@@ -1288,8 +1293,7 @@ try {
   await kp2.getByRole("tab", { name: "장면 1" }).click(); // 활성 장면에서는 체크가 안 보여 다른 장면 탭을 연다
   assert.equal(await kp2.getByTestId("bring-party").isChecked(), true, "기본은 켜짐");
   for (const [scene, bring] of [["복도", false], ["회랑", true]]) {
-    await kp2.getByLabel("새 장면 이름").fill(scene);
-    await kp2.getByRole("button", { name: "추가", exact: true }).click();
+    await addScene(kp2, scene);
     await kp2.getByRole("tab", { name: scene }).click();
     if (!bring) await kp2.getByTestId("bring-party").uncheck();
     await kp2.getByRole("button", { name: "바로 전환" }).click();
@@ -1316,6 +1320,7 @@ try {
   assert.equal(await kp2.getByRole("dialog", { name: "명령어 검색" }).count(), 0);
   step("Ctrl+K 검색으로 장면을 바꾸면 PL 화면이 전환됨");
 
+  await dockTab(kp2, "cues");
   await kp2.getByRole("button", { name: "슬롯 1: 비어 있음" }).click();
   await kp2.getByLabel("명령어 검색어").fill("서재 페이드");
   await kp2.keyboard.press("Enter");
@@ -1331,6 +1336,7 @@ try {
   await kp2.keyboard.press("1");
   await pl.getByTestId("scene-name").getByText("서재").waitFor();
   step("슬롯 1의 장면 전환은 숫자 키 1을 누르면 3초 알림 뒤 실행되고, 그 안에 취소할 수 있음");
+  await dockTab(kp2, "place");
 
   // 전투 순서: GM이 시작하고 NPC를 넣고 넘기면 PL 화면에 같은 순서와 차례가 보임
   // 활성 장면(서재)에 서하 소유 토큰을 놓아 둔다: 차례 링과 이동 안내를 보려는 것
@@ -2296,13 +2302,16 @@ try {
 
   // 입력 한도·탭 줄·초점 복귀(GM, 데스크톱)
   {
-    const inp = kp2.getByLabel("새 장면 이름");
+    await kp2.getByTestId("scene-add").click();
+    const askDlg = kp2.getByTestId("ask-dialog");
+    const inp = askDlg.getByLabel("장면 이름");
     await inp.fill("가".repeat(40));
-    const note = kp2.getByTestId("limit-note").first();
+    const note = askDlg.getByTestId("limit-note").first();
     await note.waitFor();
     assert.match(await note.innerText(), /장면 이름은 40자까지예요/);
     assert.equal((await inp.inputValue()).length, 40);
-    await inp.fill("");
+    await kp2.keyboard.press("Escape");
+    await askDlg.waitFor({ state: "detached" });
     // 오른쪽 패널의 마지막 탭도 잘리지 않고 눌러진다
     const side = await kp2.getByTestId("side-panel").boundingBox();
     const logTab = kp2.getByRole("tab", { name: /^기록/ });
@@ -2421,6 +2430,7 @@ try {
     const orig = await sceneNames();
     await homeTab().click();
     await kp2.getByTestId("obj-낡은 상자").waitFor();
+    await openSceneMenu(kp2);
     await kp2.getByTestId("scene-duplicate").click();
     await sceneTabs().filter({ hasText: "현관 복사" }).waitFor();
     await kp2.waitForFunction(() => [...document.querySelectorAll('[role="tab"]')].some((t) => t.textContent.includes("현관 복사") && t.getAttribute("aria-selected") === "true"));
@@ -2428,8 +2438,10 @@ try {
     let names = await sceneNames();
     assert.equal(names.indexOf("현관 복사"), names.indexOf("현관") + 1, "원본 바로 뒤에 놓임");
     // 순서: 앞으로 → 원본 앞, 뒤로 → 다시 뒤
+    await openSceneMenu(kp2);
     await kp2.getByTestId("scene-move-up").click();
     names = await waitNames((n) => n.indexOf("현관 복사") < n.indexOf("현관"));
+    await openSceneMenu(kp2);
     await kp2.getByTestId("scene-move-down").click();
     names = await waitNames((n) => n.indexOf("현관 복사") > n.indexOf("현관"));
     // 순서: 탭을 끌어서 바꾸기(복사본을 원본의 왼쪽 절반에 놓으면 원본 앞, 오른쪽 절반에 놓으면 뒤)

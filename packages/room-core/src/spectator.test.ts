@@ -131,6 +131,9 @@ const SPECTATOR_FRAMES = new Set<string>([
   "roll.hidden",
   "roll.asked",
   "chat.posted",
+  "chat.removed",
+  "roll.removed",
+  "log.removed",
   "settings.chat",
   "session.started",
   "session.paused",
@@ -268,6 +271,9 @@ const samples = (w: World): Record<string, ClientCommand["data"]> => {
     "settings.madness": { entries: ["x"] },
     "madness.roll": { characterId: ids.plSheet, mode: "realtime" },
     "chat.send": { text: "안녕" },
+    "chat.remove": { seq: 1 },
+    "roll.remove": { id: ids.roll },
+    "log.remove": { n: 1 },
     "settings.chat": { plWhisper: true, spectatorChat: true },
     "session.start": {},
     "session.pause": {},
@@ -418,7 +424,7 @@ describe("GM이 참가자를 내보낸다", () => {
 
 /** GM만 쓸 수 있는 명령. PL이 보내면 룸이 바뀌지 않고 거절돼야 한다. */
 const GM_ONLY = [
-  "member.remove", "member.unban", "object.add", "object.update", "object.remove", "hp.heal", "roll.group", "scenario.revert", "scene.fog", "scene.grid", "fog.reveal", "fog.remove", "fog.clear", "fog.forget",
+  "member.remove", "member.unban", "chat.remove", "roll.remove", "log.remove", "object.add", "object.update", "object.remove", "hp.heal", "roll.group", "scenario.revert", "scene.fog", "scene.grid", "fog.reveal", "fog.remove", "fog.clear", "fog.forget",
   "undo.last", "roll.ask", "handout.create", "handout.update", "handout.remove", "handout.show", "settings.effects",
   "scene.create", "scene.rename", "scene.setStart", "scene.setBgm", "scene.background", "scene.remove", "scene.duplicate",
   "scene.reorder", "scene.activate", "damage.apply", "san.newDay", "flow.beat.upsert", "flow.beat.remove", "flow.branch.upsert",

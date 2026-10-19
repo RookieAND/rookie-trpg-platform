@@ -205,10 +205,14 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .menu-panel:has([role="dialog"]) .menu-label, .menu-panel:has([role="dialog"]) > .btn, .menu-panel:has([role="dialog"]) > span > .btn:not([role="dialog"] *) { display: none; }
 
 /* 시작 가이드 */
-.guide { position: absolute; top: calc(max(48px, var(--sb-h, 0px)) + 16px); left: 50%; transform: translateX(-50%); z-index: 2; width: 380px; max-width: calc(100% - 24px); padding: 14px; display: grid; gap: 10px;
+.guide { position: absolute; top: calc(max(48px, var(--sb-h, 0px)) + 16px); right: 12px; left: auto; transform: none; z-index: 2; width: 270px; max-width: calc(100% - 24px); padding: 8px 10px; display: grid; gap: 6px;
   border-radius: var(--radius-lg); border: 1px solid var(--line-2); background: color-mix(in srgb, var(--panel) 94%, transparent); backdrop-filter: blur(8px); box-shadow: var(--shadow); }
-.guide h2 { margin: 0; font-size: 13.5px; font-weight: 650; }
-.guide ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.guide h2 { margin: 0; flex: 1; font-size: 13px; font-weight: 650; }
+.guide-head { display: flex; align-items: center; gap: 4px; }
+.guide-count { margin-left: 4px; color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.guide-text { display: grid; gap: 2px; }
+.guide li[data-next="true"] .hint { color: var(--text-2); }
+.guide ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
 .guide li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: start; color: var(--text-2); font-size: 12.5px; }
 .guide li b { color: var(--text); font-weight: 600; }
 .guide .check { width: 16px; height: 16px; margin-top: 1px; border-radius: 50%; border: 1.5px solid var(--line-2); display: grid; place-items: center; font-size: 10px; color: transparent; }
@@ -238,31 +242,29 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .cuebar { align-items: center; }
 .cuebar .dock-label { width: 40px; }
 
-/* 보드 아래 도구 줄(GM): 지도 아래에 쌓아 지도를 가리지 않는다. 줄은 넘치면 줄바꿈한다(잘리지 않는다).
-   641~1280px(태블릿·작은 노트북)은 한 줄씩 위아래로, 1281px 이상은 안개와 놓기를 한 줄에 나란히 둔다. */
+/* 보드 아래 도구 줄(GM): 놓기·안개·연출을 탭 하나로 묶어 지도 아래에 한 줄만 둔다. 줄은 넘치면 줄바꿈한다(잘리지 않는다). */
 @media (min-width: 641px) {
-  .board:has(> .dock:not(.dock-hint)) { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto auto auto; overflow: hidden; }
-  .board:has(> .dock:not(.dock-hint)) > svg { grid-row: 1; grid-column: 1 / -1; min-height: 0; height: 100%; width: 100%; }
-  .board:has(> .dock:not(.dock-hint)) > .dock:not(.dock-hint), .board:has(> .dock:not(.dock-hint)) > .cuebar {
-    position: static; transform: none; z-index: auto; max-width: none !important; min-width: 0; border-radius: 0; border-width: 1px 0 0; box-shadow: none; backdrop-filter: none;
-    background: var(--panel); flex-wrap: wrap; justify-content: flex-start; padding: 4px 12px; min-height: 36px; }
-  .board:has(> .dock:not(.dock-hint)) > .dock[data-testid="fog-toolbar"] { grid-row: 2; grid-column: 1 / -1; }
-  .board:has(> .dock:not(.dock-hint)) > .dock:not([data-testid]) { grid-row: 3; grid-column: 1 / -1; }
-  .board:has(> .dock:not(.dock-hint)) > .cuebar { grid-row: 4; grid-column: 1 / -1; }
+  .board:has(> .tooldock) { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; overflow: hidden; }
+  .board:has(> .tooldock) > svg { grid-row: 1; grid-column: 1 / -1; min-height: 0; height: 100%; width: 100%; }
+  .board:has(> .tooldock) > .tooldock { grid-row: 2; grid-column: 1 / -1; }
   /* 선택 줄은 지도 위에 겹쳐 띄운다. 줄로 끼워 넣으면 토큰을 고를 때마다 지도가 줄어들며 움직인다. */
-  .board:has(> .dock:not(.dock-hint)) > .dock[data-testid="selected-bar"] { grid-row: 1; grid-column: 1 / -1; align-self: end; justify-self: end; z-index: 4; flex-direction: row; flex-wrap: wrap; align-items: center; width: max-content; max-width: min(calc(100% - 168px), 720px) !important; margin: 0 12px 10px 0;
+  .board:has(> .tooldock) > .dock[data-testid="selected-bar"] { grid-row: 1; grid-column: 1 / -1; position: static; align-self: end; justify-self: end; z-index: 4; transform: none; flex-direction: row; flex-wrap: wrap; align-items: center; width: max-content; max-width: min(calc(100% - 168px), 720px) !important; margin: 0 12px 10px 0;
     border-width: 1px; border-radius: var(--radius-lg); box-shadow: var(--shadow); background: color-mix(in srgb, var(--panel) 94%, transparent); backdrop-filter: blur(8px); padding: 4px 8px; }
   .dock[data-testid="selected-bar"] .dock-input { width: auto; max-width: 150px; }
   .dock[data-testid="selected-bar"] .btn { width: auto; }
-  .board:has(> .dock:not(.dock-hint)) .zoom-ctl { bottom: auto; }
-  .board:has(> .dock:not(.dock-hint)) > .undo-ctl { position: static; grid-row: 1; grid-column: 1; align-self: end; justify-self: start; margin: 0 0 10px 12px; z-index: 2; }
+  .board:has(> .tooldock) .zoom-ctl { bottom: auto; }
+  .board:has(> .tooldock) > .undo-ctl { position: static; grid-row: 1; grid-column: 1; align-self: end; justify-self: start; margin: 0 0 10px 12px; z-index: 2; }
 }
-@media (min-width: 1281px) {
-  .board:has(> .dock:not(.dock-hint)) { grid-template-columns: minmax(0, 1fr) max-content; }
-  .board:has(> .dock:not(.dock-hint)) > .dock[data-testid="fog-toolbar"] { grid-row: 2; grid-column: 1; }
-  .board:has(> .dock:not(.dock-hint)) > .dock:not([data-testid]) { grid-row: 2; grid-column: 2; border-left: 1px solid var(--line); }
-  .board:has(> .dock:not(.dock-hint)) > .cuebar { grid-row: 3; grid-column: 1 / -1; }
-}
+.tooldock { display: flex; align-items: stretch; gap: 0; min-height: 40px; border-top: 1px solid var(--line); background: var(--panel); z-index: 3; }
+.tooldock-tabs { flex: none; display: flex; align-items: center; gap: 2px; padding: 4px 8px 4px 12px; border-right: 1px solid var(--line); }
+.tooldock-tabs button { height: var(--row); padding: 0 12px; border-radius: var(--radius); border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; }
+.tooldock-tabs button:hover { color: var(--text); background: var(--panel-2); }
+.tooldock-tabs button[aria-selected="true"] { color: var(--text); background: var(--panel-2); border-color: var(--line-2); }
+.tooldock-tabs button:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.tooldock-body { flex: 1; min-width: 0; display: flex; align-items: center; padding: 4px 12px; }
+.tooldock-sec { flex: 1; min-width: 0; }
+.tooldock-sec[hidden] { display: none; }
+.tooldock-sec .dock-bare, .tooldock-sec .cuebar.bare { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border: 0; background: transparent; padding: 0; box-shadow: none; }
 /* 태블릿: 패널은 지도 옆에 두되 지도를 가리지 않게 폭을 줄이고, 장면 막대는 넘치면 줄바꿈한다 */
 @media (min-width: 641px) and (max-width: 1280px) {
   .scenebar { flex-wrap: wrap; }
@@ -673,7 +675,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .chat-compose { flex: none; padding: 8px 12px 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
 .chat-row { display: flex; gap: 6px; align-items: stretch; }
 .chat-sel { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; }
-.chat-input-row { align-items: flex-end; }
+.chat-input-row { align-items: stretch; }
+.chat-btns .btn { flex: 1; }
 .chat-input { height: auto; min-height: 52px; padding: 6px 10px; resize: none; font: inherit; line-height: 1.4; }
 .chat-btns { display: flex; flex-direction: column; gap: 4px; flex: none; }
 .chat-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 11.5px; }
@@ -913,3 +916,9 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .chat-msg.status { align-self: center; text-align: center; max-width: 100%; }
 .chat-msg.status .chat-text { color: var(--muted); font-size: 12px; }
 @media (max-width: 720px) { .party { top: 6px; left: 6px; flex-direction: row; flex-wrap: wrap; max-height: none; } .party-card { width: 138px; padding: 4px 6px; } }
+
+/* 우클릭 메뉴 */
+.ctxmenu { position: fixed; z-index: 60; min-width: 120px; padding: 4px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel-3); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45); display: flex; flex-direction: column; }
+.ctxmenu-item { text-align: left; padding: 8px 12px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.ctxmenu-item:hover, .ctxmenu-item:focus-visible { background: rgba(255, 255, 255, 0.08); outline: none; }
+.ctxmenu-item.danger { color: #ff8a80; }

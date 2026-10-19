@@ -30,7 +30,7 @@ export function MacroBar({ error: syncError, macros, isKp, readOnly = false, dis
             {editing && <button className="btn sm ghost" aria-label={`${m.name} 매크로 삭제`} onClick={() => onRemove(m.id)}>×</button>}
           </span>
         ))}
-        {!readOnly && <button className="btn sm ghost" style={{ marginLeft: macros.length ? "auto" : 0 }} title="자주 굴리는 식을 이름 붙여 저장해요" aria-expanded={editing} onClick={() => setEditing((v) => !v)}>
+        {!readOnly && <button className="btn sm ghost" style={macros.length ? { marginLeft: "auto" } : undefined} title="자주 굴리는 식을 이름 붙여 저장해요" aria-expanded={editing} onClick={() => setEditing((v) => !v)}>
           {editing ? "닫기" : "매크로 편집"}
         </button>}
       </div>

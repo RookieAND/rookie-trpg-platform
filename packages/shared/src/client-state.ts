@@ -308,6 +308,12 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       return next;
     case "bans.updated":
       return { ...next, banned: ev.data.banned };
+    case "chat.removed":
+      return { ...next, chat: state.chat.filter((m) => m.seq !== ev.data.seq) };
+    case "roll.removed":
+      return { ...next, rolls: state.rolls.filter((r) => r.id !== ev.data.id), hiddenRolls: state.hiddenRolls.filter((r) => r.id !== ev.data.id) };
+    case "log.removed":
+      return { ...next, historyPurges: state.historyPurges + 1 };
     case "history.purged":
       return { ...next, chat: ev.data.chat ? [] : state.chat, historyPurges: state.historyPurges + 1 };
     case "session.started":

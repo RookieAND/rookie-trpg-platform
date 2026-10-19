@@ -2,6 +2,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CHAT_HELP_LINES, CHAT_HISTORY_ON_JOIN, CHAT_MAX_LENGTH, type ChatMessage, type ClientCommand, type Member, type Role } from "@coc-vtt/shared";
 import { limitMessage } from "@/shared/lib";
+import { useContextMenu } from "@/shared/ui";
 import { chatTargets, chatTime, checkDraft, nearBottom, shouldSendOnEnter, speakerField, speakerFromValue, speakerValue, whisperLabel, whisperRecipients, type SpeakerChoice } from "../model/chat-view";
 
 export interface ChatPanelProps {
@@ -46,6 +47,10 @@ export function ChatPanel(p: ChatPanelProps) {
   const stick = useRef(true); // 바닥에 붙어 있는가
   const lastCount = useRef(0);
   const lastId = useRef<string | null>(null);
+
+  const ctx = useContextMenu();
+  const menuFor = (m: ChatMessage) =>
+    role === "kp" ? ctx.onContextMenu([{ label: "이 대화 지우기", danger: true, onSelect: () => p.send({ type: "chat.remove", data: { seq: m.seq } }) }]) : undefined;
 
   const recipients = useMemo(() => whisperRecipients(members, meId, role, p.plWhisper), [members, meId, role, p.plWhisper]);
   const targets = useMemo(() => chatTargets(members, meId, role, p.characters), [members, meId, role, p.characters]);
@@ -137,6 +142,7 @@ export function ChatPanel(p: ChatPanelProps) {
 
   return (
     <div className="chat" data-testid="chat-panel" hidden={!p.visible}>
+      {ctx.menu}
       <div className="chat-list" ref={listRef} onScroll={onScroll} role="log" aria-live="polite" aria-label="대화" data-testid="chat-list">
         {showOlder && (
           <button type="button" className="btn sm chat-older" data-testid="chat-load-older" disabled={older === "loading"} onClick={loadOlder}>
@@ -145,7 +151,7 @@ export function ChatPanel(p: ChatPanelProps) {
         )}
         {messages.length === 0 && <p className="muted chat-empty">{p.ready ? "아직 대화가 없어요. 첫 마디를 남겨 보세요." : "불러오는 중이에요…"}</p>}
         {messages.map((m) => (
-          <ChatLine key={m.id} m={m} meId={meId} />
+          <ChatLine key={m.id} m={m} meId={meId} onMenu={menuFor(m)} />
         ))}
       </div>
       {newBelow > 0 && (
@@ -236,12 +242,12 @@ export function ChatPanel(p: ChatPanelProps) {
   );
 }
 
-function ChatLine({ m, meId }: { m: ChatMessage; meId: string }) {
+function ChatLine({ m, meId, onMenu }: { m: ChatMessage; meId: string; onMenu?: (e: React.MouseEvent) => void }) {
   const mine = m.userId === meId;
   const gm = m.role === "kp";
   if (m.kind === "status") {
     return (
-      <div className="chat-msg status" data-testid="chat-msg" data-kind="status" data-mine={mine ? "1" : "0"}>
+      <div className="chat-msg status" data-testid="chat-msg" data-kind="status" data-mine={mine ? "1" : "0"} onContextMenu={onMenu}>
         <div className="chat-text">
           {m.text} <time className="muted chat-time" dateTime={new Date(m.at).toISOString()}>{chatTime(m.at)}</time>
         </div>
@@ -249,7 +255,7 @@ function ChatLine({ m, meId }: { m: ChatMessage; meId: string }) {
     );
   }
   return (
-    <div className={`chat-msg ${m.kind}${mine ? " mine" : ""}`} data-testid="chat-msg" data-kind={m.kind} data-mine={mine ? "1" : "0"}>
+    <div className={`chat-msg ${m.kind}${mine ? " mine" : ""}`} data-testid="chat-msg" data-kind={m.kind} data-mine={mine ? "1" : "0"} onContextMenu={onMenu}>
       <div className="chat-head">
         <b className="chat-name">{m.name}</b>
         {gm && <span className="badge kp">GM</span>}

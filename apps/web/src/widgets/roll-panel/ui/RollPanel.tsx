@@ -1,4 +1,5 @@
 "use client";
+import { useContextMenu } from "@/shared/ui";
 import { useMemo, useState } from "react";
 import { formatRollLog, josa, luckBlockReason, luckNeeded, parseCommand, pushBlockReason, type Character, type RollLogEntry, type RollRuleInput } from "@coc-vtt/shared";
 import { MacroBar, useRollMacros } from "@/features/roll-macros";
@@ -31,6 +32,8 @@ interface Props {
   onLuck: (rollId: string) => void;
   /** GM 전용. 판정 요청 */
   players?: Array<{ userId: string; name: string }>;
+  /** GM이 굴림 기록 한 줄을 지운다 */
+  onRemove?: (id: string) => void;
   onAsk?: (name: string, difficulty: "regular" | "hard" | "extreme" | undefined, targetUserId?: string) => unknown;
   /** GM 전용. 그룹 판정(PL 전원 또는 한 명의 캐릭터가 한꺼번에 굴림) */
   onGroup?: (name: string, difficulty: "regular" | "hard" | "extreme" | undefined, targetUserId?: string, secret?: boolean) => unknown;
@@ -42,7 +45,8 @@ interface Props {
   onApplyDamage?: (rollId: string, characterId: string, armor: number) => unknown;
 }
 
-export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disabled, readOnly = false, disabledReason, error, onRoll, onSkillRoll, onPush, onLuck, players, onAsk, onGroup, onOpposed, damageApplied = {}, onApplyDamage }: Props) {
+export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disabled, readOnly = false, disabledReason, error, onRoll, onSkillRoll, onPush, onLuck, players, onAsk, onGroup, onOpposed, damageApplied = {}, onApplyDamage, onRemove }: Props) {
+  const ctx = useContextMenu();
   const [expr, setExpr] = useState("");
   const [secret, setSecret] = useState(false);
   const [help, setHelp] = useState(false);
@@ -151,10 +155,11 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
 
   return (
     <>
+      {ctx.menu}
       <div className="log" data-testid="roll-log" aria-live="polite">
         {rolls.length === 0 && hidden.length === 0 && <div style={{ color: "var(--muted)" }}>아직 굴림이 없어요.</div>}
         {[...rolls].reverse().map((r) => (
-          <div key={r.id} className="log-item" data-testid="roll-entry">
+          <div key={r.id} className="log-item" data-testid="roll-entry" onContextMenu={isKp && onRemove ? ctx.onContextMenu([{ label: "이 굴림 지우기", danger: true, onSelect: () => onRemove(r.id) }]) : undefined}>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <strong>{r.userName}</strong>
               {r.label && <span style={{ color: "var(--muted)" }}>{r.label}</span>}
@@ -189,7 +194,7 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
               aria-controls="skill-ac-list"
               aria-activedescendant={listOpen && cursor >= 0 ? `skill-ac-${cursor}` : undefined}
               aria-describedby={disabled && disabledReason ? "roll-why" : undefined}
-              placeholder="CC<=60, 1d100, 관찰력, 관찰력 어려움 +1"
+              placeholder="CC<=60 · 1d100 · 관찰력"
               value={expr}
               disabled={disabled}
               autoComplete="off"

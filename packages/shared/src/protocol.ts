@@ -841,6 +841,12 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
       speaker: z.union([z.object({ characterId: id }), z.object({ gm: z.literal(true) })]).optional(),
     }),
   }),
+  /** 대화 한 줄을 지운다(GM 전용). 모두의 화면에서 사라진다. */
+  z.object({ type: z.literal("chat.remove"), data: z.object({ seq: z.number().int().min(1) }) }),
+  /** 굴림 기록 한 줄을 지운다(GM 전용). */
+  z.object({ type: z.literal("roll.remove"), data: z.object({ id }) }),
+  /** 세션 기록 한 줄을 지운다(GM 전용). */
+  z.object({ type: z.literal("log.remove"), data: z.object({ n: z.number().int().min(1) }) }),
   /** 대화 설정(GM 전용) */
   z.object({ type: z.literal("settings.chat"), data: z.object({ plWhisper: z.boolean(), spectatorChat: z.boolean().optional(), plSelfEdit: z.boolean().optional() }) }),
   z.object({ type: z.literal("session.start"), data: z.object({}).default({}) }),
@@ -999,6 +1005,12 @@ export type ServerEvent =
   | { type: "bans.updated"; data: { banned: BannedUser[] } }
   /** GM이 대화·세션 기록을 비웠다. 받은 화면은 해당 목록을 지운다. */
   | { type: "history.purged"; data: { chat: boolean; log: boolean } }
+  /** GM이 대화 한 줄을 지웠다. */
+  | { type: "chat.removed"; data: { seq: number } }
+  /** GM이 굴림 기록 한 줄을 지웠다. */
+  | { type: "roll.removed"; data: { id: string } }
+  /** GM이 세션 기록 한 줄을 지웠다. */
+  | { type: "log.removed"; data: { n: number } }
   | { type: "session.started"; data: { number: number } }
   | { type: "session.paused"; data: { reason: PauseReason } }
   /** GM의 마지막 연결이 닫혀 유예가 시작됨. 아직 정지는 아니다. */

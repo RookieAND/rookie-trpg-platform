@@ -182,6 +182,7 @@ export function ObjectToolbar({
   send,
   onDeselect,
   placement,
+  placeDock = true,
 }: {
   me: Caller;
   enabled: boolean;
@@ -195,6 +196,8 @@ export function ObjectToolbar({
   onDeselect: () => void;
   /** 밖에서 만든 상태를 쓸 때(없으면 여기서 만든다) */
   placement?: Placement;
+  /** false면 ‘놓기’ 줄은 그리지 않고 선택한 것의 도구만 그린다(놓기는 다른 곳의 묶음에 둔다) */
+  placeDock?: boolean;
 }) {
   const own = usePlacement({ sceneId, objects, players, send });
   const p = placement ?? own;
@@ -206,10 +209,12 @@ export function ObjectToolbar({
         <SelectedControls me={me} enabled={enabled} players={players} selected={selected} characters={characters} {...(onOpenSheet ? { onOpenSheet } : {})} send={send} onDeselect={onDeselect} />
       </div>
     )}
-    <div className="dock" style={{ bottom: 12 }}>
-      <span className="dock-label" title="지금 보고 있는 장면에 토큰·소품을 놓아요">놓기</span>
-      <PlaceControls placement={p} enabled={enabled} players={players} />
-    </div>
+    {placeDock && (
+      <div className="dock" style={{ bottom: 12 }}>
+        <span className="dock-label" title="지금 보고 있는 장면에 토큰·소품을 놓아요">놓기</span>
+        <PlaceControls placement={p} enabled={enabled} players={players} />
+      </div>
+    )}
     </>
   );
 }

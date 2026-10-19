@@ -50,6 +50,7 @@ import { playerGuideSteps, readGuideClosed, showPlayerGuide, writeGuideClosed } 
 import { SheetPanel, SheetEmpty, type RollOptions } from "@/widgets/sheet-panel";
 import { RoomCharacterCreate } from "@/widgets/character-creator";
 import { PanelDock, ToolSheet } from "@/widgets/phone-bars";
+import { ToolDock } from "@/widgets/tool-dock";
 import { INITIAL_PANELS, panelsReducer, selectLabel, type SheetTab } from "../model/phone-panels";
 import { TOKEN_REQUEST_TEXT, canRequestToken, newTokenRequests, tokenRequestToast } from "../model/token-request";
 import { toastLane } from "../model/lanes";
@@ -91,6 +92,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     if (reconnected > 0) reconnectedAt.current = Date.now();
   }, [reconnected]);
   const sound = useAudioPreference();
+  const [dockTab, setDockTab] = useState<"place" | "fog" | "cues">("place");
   const [tab, setTab] = useState<"roll" | "chat" | "sheet" | "handout" | "combat" | "flow" | "sound" | "log">("roll");
   const [sheetId, setSheetId] = useState<string | null>(null);
   const [dismissedN, setDismissedN] = useState(0);
@@ -469,9 +471,6 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
           <Board grid={board.grid} viewKey={board.sceneId ? viewKey(me.userId, roomId, board.sceneId) : undefined} snapKey={board.sceneId ? snapKey(me.userId, roomId, board.sceneId) : undefined} onOpenSheet={(o) => o.characterId && (isKp || o.ownerId === me.userId) && state.characters[o.characterId] && openSheet(o.characterId)} objects={board.objects} background={board.background} me={{ userId: me.userId, role }} canInteract={canEditBoard} onMove={move} selectedId={selectedId} onSelect={setSelectedId} fog={board.fog} onPing={canPing ? ping : undefined} pings={state.pings} sceneId={board.sceneId} turnTokenIds={turnTokenIds} onDragStart={onDragStart} animate={fx.enabled} onPick={isKp && fogPicking ? (x, y) => send({ type: "fog.reveal", data: { sceneId: shownSceneId, x, y, r: fogRadius } }) : undefined} {...interactions.boardProps} {...(isKp && !board.background ? { hint: "이미지를 끌어다 놓아 배경을 정해요" } : {})} />
           {interactions.ui}
           {role === "pl" && <PartyStatus party={state.party} meId={me.userId} />}
-          {isKp && !phone && (
-            <StageCues roomId={roomId} enabled={state.sessionStatus !== "PAUSED"} send={send} source={cueSource} sessionActive={active} notify={notices.notify} />
-          )}
           {role === "pl" && selected && canEditMarkers(role, me.userId, selected) && (
             <div className="dock dock-hint pl-marker-dock" data-testid="pl-marker-dock" data-lane="bottom">
               <span className="dock-note">{selected.name}</span>
@@ -494,23 +493,43 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
             </div>
           )}
           {isKp && !phone && <UndoButton onUndo={undo} />}
-          {isKp && !phone && shownScene && (
-            <FogToolbar scene={shownScene} selected={selected} partyTokens={objects.filter((o) => o.kind === "token" && o.ownerId)} enabled={canEditBoard} picking={fogPicking} radius={fogRadius} onPicking={setFogPicking} onRadius={setFogRadius} send={sendWithHint} />
-          )}
           {isKp && !phone && (
-            <ObjectToolbar
-              me={me}
-              enabled={canEditBoard}
-              sceneId={shownSceneId}
-              objects={objects}
-              players={players}
-              selected={selected}
-              characters={characters}
-              onOpenSheet={openSheet}
-              send={sendWithHint}
-              onDeselect={() => setSelectedId(null)}
-              placement={placement}
-            />
+            <>
+              <ObjectToolbar
+                me={me}
+                enabled={canEditBoard}
+                sceneId={shownSceneId}
+                objects={objects}
+                players={players}
+                selected={selected}
+                characters={characters}
+                onOpenSheet={openSheet}
+                send={sendWithHint}
+                onDeselect={() => setSelectedId(null)}
+                placement={placement}
+                placeDock={false}
+              />
+              <ToolDock
+                tab={dockTab}
+                onTab={setDockTab}
+                tabs={[
+                  { id: "place", label: "놓기" },
+                  { id: "fog", label: "안개" },
+                  { id: "cues", label: "연출" },
+                ]}
+                sections={{
+                  place: (
+                    <div className="dock-bare">
+                      <PlaceControls placement={placement} enabled={canEditBoard} players={players} />
+                    </div>
+                  ),
+                  fog: shownScene ? (
+                    <FogToolbar bare scene={shownScene} selected={selected} partyTokens={objects.filter((o) => o.kind === "token" && o.ownerId)} enabled={canEditBoard} picking={fogPicking} radius={fogRadius} onPicking={setFogPicking} onRadius={setFogRadius} send={sendWithHint} />
+                  ) : null,
+                  cues: <StageCues bare roomId={roomId} enabled={state.sessionStatus !== "PAUSED"} send={send} source={cueSource} sessionActive={active} notify={notices.notify} />,
+                }}
+              />
+            </>
           )}
           {isKp && phone && (
             <ToolSheet<SheetTab>
@@ -602,7 +621,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
             onSetSpectatorChat={(on) => send({ type: "settings.chat", data: { plWhisper: state.chatSettings.plWhisper, spectatorChat: on } })}
             onLoadOlder={loadOlderChat}
           />
-          <LogPanel me={me} roomId={roomId} roomTitle={roomName ?? "세션 기록"} isKp={isKp} sessionCount={state.sessionNumber} visible={tab === "log"} version={logVersion} />
+          <LogPanel me={me} roomId={roomId} roomTitle={roomName ?? "세션 기록"} isKp={isKp} sessionCount={state.sessionNumber} visible={tab === "log"} version={logVersion} onRemove={isKp ? (n) => send({ type: "log.remove", data: { n } }) : undefined} />
           {tab === "chat" || tab === "log" ? null : tab === "roll" ? (
             <RollPanel
               me={me}
@@ -610,6 +629,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               userId={me.userId}
               characters={characters}
               hidden={state.hiddenRolls}
+              onRemove={isKp ? (id) => send({ type: "roll.remove", data: { id } }) : undefined}
               isKp={isKp}
               disabled={!active || role === "spectator"}
               readOnly={role === "spectator"}

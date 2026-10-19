@@ -1,4 +1,5 @@
 "use client";
+import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClientCommand } from "@coc-vtt/shared";
 import { buildCues, filterCues, slotConfirm, SLOT_CONFIRM_MS, type Cue, type CueSource } from "../model/cues";
@@ -107,7 +108,7 @@ export function StageCues({ roomId, source, enabled, send, sessionActive = false
         })}
         <button className="cue-btn cue-search" onClick={() => setPalette("run")} aria-label="명령어 검색" title={`명령어 검색 (${withMod("K")})`}>{bare ? "검색" : withMod("K")}</button>
       </div>
-      {palette !== null && (
+      {palette !== null && createPortal(
         <Palette
           cues={cues}
           assigning={typeof palette === "number" ? palette : null}
@@ -117,7 +118,8 @@ export function StageCues({ roomId, source, enabled, send, sessionActive = false
             else run(cue);
             setPalette(null);
           }}
-        />
+        />,
+        document.body,
       )}
     </>
   );

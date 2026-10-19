@@ -4,6 +4,7 @@ import { LOG_KINDS, LOG_KIND_LABEL_KO, type LogEntryView } from "@coc-vtt/shared
 import { getSessionLog } from "@/entities/room";
 import type { Caller } from "@/shared/api";
 import { downloadText } from "@/shared/lib";
+import { useContextMenu } from "@/shared/ui";
 import { EMPTY_FILTER, buildExport, fetchAllLog, filterToQuery, toggleKind, type LogFilter } from "../model/log-view";
 
 export interface LogPanelProps {
@@ -17,11 +18,14 @@ export interface LogPanelProps {
   visible: boolean;
   /** 값이 바뀌면 기록을 다시 불러온다(새 굴림·진행이 생겼다는 뜻) */
   version: string;
+  /** GM이 기록 한 줄을 지운다(없으면 우클릭 메뉴를 열지 않는다) */
+  onRemove?: (n: number) => void;
 }
 
 const PAGE = 100;
 
-export function LogPanel({ me, roomId, roomTitle, isKp, sessionCount, visible, version }: LogPanelProps) {
+export function LogPanel({ me, roomId, roomTitle, isKp, sessionCount, visible, version, onRemove }: LogPanelProps) {
+  const ctx = useContextMenu();
   const [filter, setFilter] = useState<LogFilter>(EMPTY_FILTER);
   const [asPublic, setAsPublic] = useState(false);
   const [entries, setEntries] = useState<LogEntryView[]>([]);
@@ -134,9 +138,28 @@ export function LogPanel({ me, roomId, roomTitle, isKp, sessionCount, visible, v
         )}
         {entries.length === 0 && state !== "loading" && <li className="muted" data-testid="log-empty">{state === "error" ? "기록을 불러오지 못했어요." : filtered ? "조건에 맞는 기록이 없어요." : "아직 기록이 없어요."}</li>}
         {entries.map((e) => (
-          <LogItem key={e.n} e={e} />
+          <LogItem
+            key={e.n}
+            e={e}
+            onMenu={
+              isKp && onRemove
+                ? ctx.onContextMenu([
+                    {
+                      label: "이 기록 지우기",
+                      danger: true,
+                      onSelect: () => {
+                        setEntries((cur) => cur.filter((x) => x.n !== e.n));
+                        setTotal((t) => Math.max(0, t - 1));
+                        onRemove(e.n);
+                      },
+                    },
+                  ])
+                : undefined
+            }
+          />
         ))}
       </ol>
+      {ctx.menu}
       <div className="muted logp-foot" data-testid="log-total">{state === "loading" ? "불러오는 중…" : `${total}건`}</div>
     </div>
   );
@@ -144,9 +167,9 @@ export function LogPanel({ me, roomId, roomTitle, isKp, sessionCount, visible, v
 
 const hm = (at: number) => new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(at));
 
-function LogItem({ e }: { e: LogEntryView }) {
+function LogItem({ e, onMenu }: { e: LogEntryView; onMenu?: (ev: React.MouseEvent) => void }) {
   return (
-    <li className={`logp-item k-${e.kind}`} data-testid="log-item" data-kind={e.kind}>
+    <li className={`logp-item k-${e.kind}`} data-testid="log-item" data-kind={e.kind} onContextMenu={onMenu}>
       <div className="logp-meta">
         <span className="badge plain">{LOG_KIND_LABEL_KO[e.kind]}</span>
         {e.scope && <span className="badge kp">GM 전용</span>}

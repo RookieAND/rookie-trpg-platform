@@ -17,3 +17,4 @@ export { ScrollTabs } from "./ScrollTabs";
 export { LimitNote } from "./LimitNote";
 export { useRoving, syncRoving, nextRovingIndex } from "./roving";
 export { restoreFocus, focusReturnTarget, menuTriggerOf } from "./focus-return";
+export { useContextMenu, type ContextItem } from "./ContextMenu";

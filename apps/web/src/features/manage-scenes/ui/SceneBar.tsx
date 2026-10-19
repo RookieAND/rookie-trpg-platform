@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { josa, BGM_STOP, DEFAULT_GRID_SIZE, GRID_MAX, GRID_MIN, LIMITS, MAX_SCENES, type AudioTrack, type ClientCommand, type Scene } from "@coc-vtt/shared";
 import type { Caller } from "@/shared/api";
 import { useMediaQuery } from "@/shared/lib";
-import { Hint, ImageUploadButton, LimitNote, Menu, MenuLabel, onTabListKeyDown, useAsk, useRoving } from "@/shared/ui";
+import { Hint, ImageUploadButton, Menu, MenuLabel, onTabListKeyDown, useAsk, useRoving } from "@/shared/ui";
 import { dropIndicator, dropSide, reorderTarget, type DropSide } from "../model/drag-order";
 
 /** 이 폭 이하(태블릿 세로·휴대폰)에서는 장면 막대를 한 줄로 접는다 */
@@ -14,7 +14,6 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
   const ask = useAsk();
   const compact = useMediaQuery(COMPACT_QUERY);
   const tabStops = useRoving<HTMLDivElement>('[role="tab"]');
-  const [name, setName] = useState("");
   const [bringParty, setBringParty] = useState(true); // PL 토큰을 새 장면으로 같이 가져갈지
   const viewing = scenes.find((s) => s.id === viewId);
   const isActive = viewId === activeId;
@@ -46,11 +45,6 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
   const endDrag = () => {
     setDragId(null);
     setOverTab(null);
-  };
-
-  const create = () => {
-    if (!name.trim()) return;
-    if (send({ type: "scene.create", data: { name: name.trim() } }) !== false) setName("");
   };
 
   const rename = async () => {
@@ -187,11 +181,7 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
           })}
         </div>
         {legend}
-        <span className="scene-new">
-          <input className="input" style={{ width: 112 }} aria-label="새 장면 이름" placeholder="+ 새 장면" value={name} maxLength={LIMITS.sceneName} disabled={!enabled} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && create()} />
-          <LimitNote label="장면 이름" max={LIMITS.sceneName} value={name} />
-        </span>
-        <button className="btn sm" disabled={!enabled || !name.trim()} onClick={create}>추가</button>
+        <button type="button" className="btn sm scene-add" data-testid="scene-add" aria-label="새 장면 만들기" title="새 장면 만들기" disabled={!enabled || scenes.length >= MAX_SCENES} onClick={() => void newScene()}>＋</button>
       </div>
       {viewing && (
         <div className="scene-row tools">
@@ -203,13 +193,16 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
             </>
           )}
           {!isActive && <span className="scene-hint">준비 중 — PL에게 안 보여요</span>}
-          <span className="scene-move" role="group" aria-label="장면 순서">
-            <button type="button" className="btn sm" data-testid="scene-move-up" aria-label="장면을 앞으로 옮기기" title="이 장면을 앞으로 옮겨요" disabled={!enabled || index <= 0} onClick={() => move(index - 1)}>◀</button>
-            <button type="button" className="btn sm" data-testid="scene-move-down" aria-label="장면을 뒤로 옮기기" title="이 장면을 뒤로 옮겨요" disabled={!enabled || index < 0 || index >= scenes.length - 1} onClick={() => move(index + 1)}>▶</button>
-          </span>
-          <button type="button" className="btn sm" data-testid="scene-duplicate" title="이 장면의 토큰·소품·안개·배경을 그대로 복사해요" disabled={!enabled || scenes.length >= MAX_SCENES} onClick={() => duplicate(viewing.id)}>복제</button>
-          <Menu label="장면 설정" title="이 장면의 시작 지정, 배경, 배경음, 이름, 삭제" align="right">
-            {(close) => settings(viewing, close)}
+          <Menu label="장면 설정" title="복제, 순서, 시작 지정, 배경, 배경음, 이름, 삭제" align="right">
+            {(close) => (
+              <>
+                <MenuLabel>이 장면</MenuLabel>
+                <button type="button" className="btn" data-testid="scene-duplicate" title="이 장면의 토큰·소품·안개·배경을 그대로 복사해요" disabled={!enabled || scenes.length >= MAX_SCENES} onClick={() => { duplicate(viewing.id); close(); }}>복제</button>
+                <button type="button" className="btn" data-testid="scene-move-up" disabled={!enabled || index <= 0} onClick={() => { move(index - 1); close(); }}>앞으로 옮기기</button>
+                <button type="button" className="btn" data-testid="scene-move-down" disabled={!enabled || index < 0 || index >= scenes.length - 1} onClick={() => { move(index + 1); close(); }}>뒤로 옮기기</button>
+                {settings(viewing, close)}
+              </>
+            )}
           </Menu>
         </div>
       )}
