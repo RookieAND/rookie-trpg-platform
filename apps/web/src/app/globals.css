@@ -780,3 +780,5 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .sep-line { height: 1px; margin: 8px 0 2px; background: var(--line); }
 .spec-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .spec-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+/* PL 표식 막대는 보드 아래 가운데(끌어서 보기 옮기는 자리)를 가리지 않게 왼쪽 아래에 둔다 */
+.pl-marker-dock { left: 12px; transform: none; bottom: 12px; max-width: calc(50% - 24px); }

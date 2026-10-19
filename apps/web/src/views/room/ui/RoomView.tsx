@@ -358,7 +358,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
             <StageCues roomId={roomId} enabled={state.sessionStatus !== "PAUSED"} send={send} source={cueSource} sessionActive={active} notify={notices.notify} />
           )}
           {role === "pl" && selected && canEditMarkers(role, me.userId, selected) && (
-            <div className="dock dock-hint" data-testid="pl-marker-dock">
+            <div className="dock dock-hint pl-marker-dock" data-testid="pl-marker-dock">
               <span className="dock-note">{selected.name}</span>
               <MarkerButton obj={selected} canSecret={false} enabled={active} send={send} />
             </div>
