@@ -850,7 +850,7 @@ try {
   // 보드 단축키·오른쪽 클릭 메뉴: Backspace 삭제 + Ctrl+Z, Ctrl+D 복제, Esc 선택 해제, Tab 이동, 메뉴 항목
   {
     const sel = kp.getByTestId("selected-bar");
-    const selName = () => sel.getByLabel("선택한 오브젝트 이름").inputValue();
+    const selName = () => sel.getByLabel("선택한 토큰·소품 이름").inputValue();
     await undoTok.click();
     await kp.keyboard.press("Backspace");
     await undoTok.waitFor({ state: "detached" });
@@ -1987,7 +1987,7 @@ try {
 
     // GM이 이름·소유자를 바꾼다: 도윤 토큰을 NPC로 풀고 이름 변경 → 도윤은 못 움직임
     await kpT.getByTestId(`obj-${names[1]}`).click();
-    await kpT.getByLabel("선택한 오브젝트 이름").fill("문지기 " + run);
+    await kpT.getByLabel("선택한 토큰·소품 이름").fill("문지기 " + run);
     await kpT.getByRole("button", { name: "이름 바꾸기" }).click();
     await pls[0].getByTestId(`obj-문지기 ${run}`).waitFor();
     await kpT.getByLabel("선택한 토큰 소유자").selectOption("");
