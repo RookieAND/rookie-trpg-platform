@@ -80,18 +80,23 @@ export function RoomHeader({
   const prep = useScenarioPrep({ me, roomId, roomName, onRenamed, notify, onImported });
   return (
     <header className="topbar">
-      <Link href="/" className="brand" aria-label="로비로 가기">{SERVICE_NAME}</Link>
-      <Link href="/" className="crumb">← 로비</Link>
-      {roomName && <span className="room-name" data-testid="room-name" title={roomName}>{roomName}</span>}
-      <span className={`badge ${isKp ? "kp" : ""}`}>{ROLE_LABEL[role]}</span>
-      {role === "spectator" && <span className="badge paused" data-testid="spectator-badge" title="보기만 할 수 있어요. 굴림·이동·편집은 막혀 있어요">관전 중</span>}
-      {kpAway && <span className="badge paused" role="status" data-testid="kp-away-badge">GM 끊김</span>}
-      <span className={`badge status ${status === "ACTIVE" ? "live" : ""} ${status === "PAUSED" ? "paused" : ""}`} data-testid="session-status">
-        <span className="st-long">{sessionNumber > 0 ? `세션 ${sessionNumber} · ` : "세션 시작 전 · "}</span>
-        {SESSION_STATUS_LABEL[status]}
-      </span>
-      <span className="badge plain conn" data-testid="connection" data-state={connection}>{CONNECTION_LABEL[connection]}</span>
-      {soundHint}
+      <div className="hd-id">
+        <Link href="/" className="brand" aria-label="로비로 가기">{SERVICE_NAME}</Link>
+        <Link href="/" className="crumb" title="로비로 돌아가기"><span aria-hidden>‹</span> 로비</Link>
+        <span className="sep" />
+        {roomName && <span className="room-name" data-testid="room-name" title={roomName}>{roomName}</span>}
+        <span className={`badge ${isKp ? "kp" : ""}`}>{ROLE_LABEL[role]}</span>
+        {role === "spectator" && <span className="badge paused" data-testid="spectator-badge" title="보기만 할 수 있어요. 굴림·이동·편집은 막혀 있어요">관전 중</span>}
+        {kpAway && <span className="badge paused" role="status" data-testid="kp-away-badge">GM 끊김</span>}
+      </div>
+      <div className="hd-state">
+        <span className={`badge status ${status === "ACTIVE" ? "live" : ""} ${status === "PAUSED" ? "paused" : ""}`} data-testid="session-status">
+          <span className="st-long">{sessionNumber > 0 ? `세션 ${sessionNumber} · ` : "세션 시작 전 · "}</span>
+          {SESSION_STATUS_LABEL[status]}
+        </span>
+        <span className="badge plain conn" data-testid="connection" data-state={connection}>{CONNECTION_LABEL[connection]}</span>
+        {soundHint}
+      </div>
       <div className="spacer" />
       <span className="presence" title={members.filter((m) => m.online && m.role !== "spectator").map((m) => m.name).join(", ")}>접속 {members.filter((m) => m.online && m.role !== "spectator").map((m) => m.name).join(", ")}</span>
       {isKp && (

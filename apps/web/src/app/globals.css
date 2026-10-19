@@ -68,10 +68,16 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 .room { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
 .topbar { height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--bg); }
-.brand { font-weight: 650; letter-spacing: -.01em; font-size: 13.5px; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
+.brand { flex: none; white-space: nowrap; font-weight: 650; letter-spacing: -.01em; font-size: 13.5px; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
 .brand::before { content: ""; flex: none; width: 1.55em; height: 1.2em; background: url(/logo-128.png) center / contain no-repeat; }
-.crumb { color: var(--muted); text-decoration: none; font-size: 13px; }
-.crumb:hover { color: var(--text); }
+.crumb { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px 0 8px; border-radius: var(--radius); color: var(--text-2); text-decoration: none; font-size: 13px; transition: background .12s, color .12s; }
+.crumb:hover { color: var(--text); background: var(--hover); }
+.hd-id, .hd-state { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hd-id { flex: 0 1 auto; }
+.hd-state { flex: none; padding-left: 10px; margin-left: 2px; border-left: 1px solid var(--line-2); height: 20px; }
+.topbar .room-name { font-weight: 600; font-size: 13.5px; max-width: 30ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar .sep { margin: 0 4px; }
+.presence::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--ok); vertical-align: 1px; }
 .presence { color: var(--muted); font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .body { flex: 1; min-height: 0; display: flex; }
 .board { flex: 1; min-width: 0; position: relative; background: #0a0b0d; }
@@ -938,3 +944,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .select-check { flex: none; color: var(--accent); font-size: 12px; }
 .select-opt[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
 @media (pointer: coarse) { .select-opt { min-height: 40px; font-size: 15px; } }
+
+/* 휴대폰은 한 줄에 납작하게 펼친다: 묶음 틀은 없는 셈 치고 안의 것들을 그대로 늘어놓는다 */
+.room.phone .hd-id, .room.phone .hd-state { display: contents; }
+.room.phone .hd-state { border: 0; }
