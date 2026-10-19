@@ -104,10 +104,18 @@ export function pinchView(start: View, f: Frame, p: [Pt, Pt], q: [Pt, Pt]): View
   return viewAnchored(start.w / factor, b, f, m1.x, m1.y);
 }
 
-/** 휠 한 번의 확대 비율. deltaY<0이면 확대. 트랙패드 핀치(ctrlKey)는 값이 작아서 더 크게 반영한다. */
+/** 트랙패드 핀치로 보는 최대 변화량. 마우스 휠은 한 칸이 보통 ±100(또는 줄 단위)이라 이보다 크다. */
+const PINCH_MAX_DELTA = 40;
+
+/**
+ * 휠 한 번의 확대 비율. deltaY<0이면 확대.
+ * 트랙패드 핀치는 Ctrl이 눌린 채 작은 값(fractional)으로 와서 더 크게 반영하고,
+ * Ctrl·Cmd를 누른 마우스 휠은 일반 휠과 같은 비율로 한 칸에 약 1.2배씩 움직인다.
+ */
 export function wheelFactor(deltaY: number, deltaMode = 0, ctrl = false): number {
   const px = deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * 400 : deltaY;
-  const k = ctrl ? 0.01 : 0.0018;
+  const pinch = ctrl && deltaMode === 0 && Math.abs(px) < PINCH_MAX_DELTA;
+  const k = pinch ? 0.01 : 0.0018;
   return Math.exp(-clamp(px, -240, 240) * k);
 }
 

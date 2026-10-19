@@ -86,8 +86,19 @@ describe("확대·축소(커서 기준)", () => {
     expect(wheelFactor(-100)).toBeGreaterThan(1);
     expect(wheelFactor(100)).toBeLessThan(1);
     expect(wheelFactor(-100)).toBeCloseTo(1 / wheelFactor(100));
-    expect(wheelFactor(-100, 0, true)).toBeGreaterThan(wheelFactor(-100));
     expect(wheelFactor(-100000)).toBeLessThan(10); // 한 번에 너무 커지지 않는다
+  });
+  it("Ctrl·Cmd를 누른 마우스 휠도 일반 휠처럼 한 칸에 조금씩만 움직인다", () => {
+    // 마우스 휠 한 칸(±100): Ctrl 여부와 상관없이 같은 비율(약 1.2배)
+    expect(wheelFactor(-100, 0, true)).toBeCloseTo(wheelFactor(-100, 0, false));
+    expect(wheelFactor(-100, 0, true)).toBeLessThan(1.5);
+    expect(wheelFactor(100, 0, true)).toBeGreaterThan(0.6);
+    // 줄 단위 휠(파이어폭스)도 마찬가지
+    expect(wheelFactor(-3, 1, true)).toBeCloseTo(wheelFactor(-3, 1, false));
+  });
+  it("트랙패드 핀치(Ctrl + 작은 값)는 더 크게 반영한다", () => {
+    expect(wheelFactor(-5, 0, true)).toBeGreaterThan(wheelFactor(-5, 0, false));
+    expect(wheelFactor(-5, 0, true)).toBeCloseTo(1 / wheelFactor(5, 0, true));
   });
 });
 

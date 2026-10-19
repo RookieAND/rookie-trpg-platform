@@ -26,7 +26,7 @@ export function shortcutGroups({ isKp, mod }: { isKp: boolean; mod: string }): S
       items: [
         { keys: ["+", "-"], text: "확대·축소해요" },
         { keys: ["0"], text: "보드 전체가 보이게 맞춰요" },
-        { keys: ["마우스 휠"], text: "커서 자리를 기준으로 확대·축소해요" },
+        { keys: ["마우스 휠", "Ctrl(Cmd) + 휠"], text: "커서 자리를 기준으로 확대·축소해요" },
         { keys: ["빈 곳 끌기"], text: "보기를 옮겨요 (터치는 두 손가락으로 모으고 벌려 확대해요)" },
         { keys: ["Alt+클릭", "더블클릭", "길게 누르기"], text: "그 자리를 모두에게 가리켜요" },
       ],

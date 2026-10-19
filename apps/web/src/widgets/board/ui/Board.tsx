@@ -194,7 +194,8 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const f = wheelFactor(e.deltaY, e.deltaMode, e.ctrlKey);
+      // Ctrl(윈도·리눅스)과 Cmd(맥)를 누른 휠도 같은 확대·축소다. 핀치 여부는 값의 크기로 가른다.
+      const f = wheelFactor(e.deltaY, e.deltaMode, e.ctrlKey || e.metaKey);
       const r = el.getBoundingClientRect();
       setView((v) => zoomAt(v, { left: r.left, top: r.top, width: r.width, height: r.height }, f, e.clientX, e.clientY));
     };
