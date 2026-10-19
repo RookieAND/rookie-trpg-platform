@@ -87,7 +87,9 @@ try {
   // 창을 다시 열어도 링크가 그대로여야 먼저 보낸 링크가 죽지 않는다
   await kp.getByRole("button", { name: "초대", exact: true }).click();
   assert.equal(await kp.getByLabel("초대 링크 주소").inputValue(), inviteLink);
+  await kp.waitForTimeout(150);
   await kp.keyboard.press("Escape");
+  await kp.getByRole("dialog").waitFor({ state: "detached" });
   step("GM이 초대 링크를 만듦(다시 열어도 같은 링크)");
 
   // 디스코드 알림: 잘못된 주소는 거절, 올바른 형식은 저장되고 연결됨으로 보임
