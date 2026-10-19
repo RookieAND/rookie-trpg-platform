@@ -10,6 +10,16 @@ import { dropIndicator, dropSide, reorderTarget, type DropSide } from "../model/
 export const COMPACT_QUERY = "(max-width: 1024px)";
 
 /** GM의 장면 막대: 장면을 고르고, 만들고, 지금 장면으로 바꾼다(컷/페이드). 활성이 아닌 장면은 PL에게 보이지 않아 미리 꾸며 둘 수 있다. */
+/** 장면 탭을 그대로 늘어놓는 최대 개수. 이보다 많으면 현재 장면 이동기+목록으로 바꾼다(시험에서 localStorage로 조절). */
+function sceneTabsMax(): number {
+  try {
+    const v = Number(globalThis.localStorage?.getItem("rc-scene-tabs-max"));
+    return Number.isFinite(v) && v > 0 ? v : 6;
+  } catch {
+    return 6;
+  }
+}
+
 export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled, canActivate = enabled, send, notify }: { me: Caller; scenes: Scene[]; tracks: AudioTrack[]; activeId: string; viewId: string; onView: (id: string) => void; enabled: boolean; canActivate?: boolean; send: (c: ClientCommand) => unknown; /** 복제 같은 동작 결과를 한 줄로 알린다 */ notify?: (text: string) => void }) {
   const ask = useAsk();
   const compact = useMediaQuery(COMPACT_QUERY);
@@ -29,7 +39,7 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
   const isActive = viewId === activeId;
   const partyOpt = bringParty ? {} : { bringParty: false };
   const index = scenes.findIndex((s) => s.id === viewId);
-  const many = scenes.length > 6;
+  const many = scenes.length > sceneTabsMax();
 
   // 복제하면 새로 생긴 장면(원본 바로 뒤)을 바로 보여 준다.
   const copyFrom = useRef<Set<string> | null>(null);

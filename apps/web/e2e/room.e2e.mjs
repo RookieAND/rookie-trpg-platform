@@ -53,6 +53,8 @@ await __tmp.close();
 const ctx = async () => {
   const c = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   c.setDefaultTimeout(Number(process.env.E2E_TIMEOUT_MS ?? 30000));
+  // 기존 시험은 장면 탭을 직접 누른다. 많은 장면용 이동기·목록은 별도 단계에서 확인한다.
+  await c.addInitScript(() => { try { localStorage.setItem("rc-scene-tabs-max", "99"); } catch {} });
   // E2E_DEBUG=1이면 화면의 스크립트 오류와 console.error를 그대로 보여 준다(개발 서버의 오류 창이 클릭을 가릴 때 원인을 찾는 용도).
   if (process.env.E2E_DEBUG) {
     c.on("page", (p) => {

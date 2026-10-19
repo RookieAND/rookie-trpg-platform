@@ -1033,3 +1033,4 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .party-card.clickable { cursor: pointer; }
 .party-card.clickable:hover, .party-card.clickable:focus-visible { border-color: rgba(124,134,247,.8); outline: none; }
 @media (max-width: 1100px) { .party.gm .party-card { width: 128px; } }
+.board:has(> .scenebar) .party.gm { top: calc(var(--sb-h, 44px) + 56px); }
