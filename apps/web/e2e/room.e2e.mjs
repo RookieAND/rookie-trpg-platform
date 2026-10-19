@@ -22,6 +22,19 @@ LocatorProto.selectOption = async function (arg, opts) {
   const opt = typeof arg === "string" ? list.locator(`[role="option"][data-value="${arg.replace(/"/g, '\\"')}"]`) : list.locator('[role="option"]').filter({ has: page.locator(".select-opt-label", { hasText: new RegExp("^\\s*" + String(arg.label).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*$") }) });
   await opt.first().click(opts);
 };
+// 시트 대화상자가 열린 채 그 밖의 것을 누르려 하면 먼저 닫는다(대화상자가 화면을 덮기 때문)
+const __origClick = LocatorProto.click;
+LocatorProto.click = async function (opts) {
+  const page = this.page();
+  if ((await page.getByTestId("sheet-modal").count()) > 0) {
+    const inside = await this.evaluate((el) => Boolean(el.closest('[data-testid="sheet-modal"], [role="dialog"], [data-testid="toast"], [data-testid="con-banner"], [role="status"], [role="alert"]')), undefined, { timeout: 2000 }).catch(() => false);
+    if (!inside) {
+      await page.getByTestId("sheet-close").click();
+      await page.getByTestId("sheet-modal").waitFor({ state: "detached" });
+    }
+  }
+  return __origClick.call(this, opts);
+};
 const __origInputValue = LocatorProto.inputValue;
 LocatorProto.inputValue = async function (opts) {
   if ((await this.getAttribute("role", opts)) === "combobox") return (await this.getAttribute("data-value", opts)) ?? "";
@@ -64,6 +77,16 @@ const openSettings = async (page) => { if (!(await page.getByRole("menu").count(
 // 판정 요청 폼과 안개 더보기는 접혀 있다. 필요할 때 펼친다.
 const openAsk = async (page) => { if (!(await page.getByLabel("요청할 기능").count())) await page.getByRole("button", { name: "판정 요청" }).click(); };
 // GM 데스크톱의 보드 아래 도구 줄은 놓기·안개·연출 탭이다. 휴대폰에는 이 탭이 없어서(도구 시트를 쓴다) 아무 일도 하지 않는다.
+// 시트는 탭의 인물 목록에서 카드를 눌러 대화상자로 연다.
+const closeSheet = async (page) => { if (await page.getByTestId("sheet-modal").count()) { await page.getByTestId("sheet-close").click(); await page.getByTestId("sheet-modal").waitFor({ state: "detached" }); } };
+const sheetTabOnly = async (page) => { await closeSheet(page); await page.getByRole("tab", { name: "시트" }).click(); };
+const sheetTab = async (page, name) => {
+  await closeSheet(page);
+  await page.getByRole("tab", { name: "시트" }).click();
+  const cards = page.getByTestId("sheet-card");
+  await (name ? cards.filter({ has: page.locator(`b.sl-name`, { hasText: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) }) }) : cards).first().click();
+  await page.getByTestId("sheet-modal").waitFor();
+};
 const dockTab = async (page, id) => { const t = page.getByTestId(`dock-tab-${id}`); if ((await t.count()) && (await t.getAttribute("aria-selected")) !== "true") await t.click(); };
 // 장면 막대의 ＋ 버튼으로 화면 안 대화상자를 열어 새 장면을 만든다.
 const addScene = async (page, name) => { await page.getByTestId("scene-add").click(); const d = page.getByTestId("ask-dialog"); await d.getByLabel("장면 이름").fill(name); await d.locator('button[type="submit"]').click(); await d.waitFor({ state: "detached" }); };
@@ -353,12 +376,13 @@ try {
   // 룸에서 불러오기 → HP 조절 → 시트로 굴리기
   await pl.getByRole("tab", { name: "시트" }).click();
   await pl.getByTestId("vault-item").filter({ hasText: CHAR }).getByRole("button", { name: "불러오기" }).click();
+  await sheetTab(pl);
   await pl.getByTestId("stat-hp").getByText("10/10").waitFor();
   step("PL이 보관함 캐릭터를 룸으로 불러옴");
 
   await pl.getByRole("button", { name: "HP 감소" }).click();
   await pl.getByTestId("stat-hp").getByText("9/10").waitFor();
-  await kp.getByRole("tab", { name: "시트" }).click();
+  await sheetTab(kp);
   await kp.getByTestId("stat-hp").getByText("9/10").waitFor();
   step("PL의 HP 변경이 GM 시트에도 반영됨");
 
@@ -419,14 +443,14 @@ try {
   await pl.getByTestId("toast").getByText(new RegExp(`${CHAR} · 도서관 이용 · \\d+`)).waitFor();
   assert.equal(await pl.getByRole("tab", { name: "시트" }).getAttribute("aria-selected"), "true");
   assert.equal(await pl.getByRole("tab", { name: "굴림" }).getAttribute("aria-selected"), "false");
-  await kp.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(kp); await kp.getByRole("tab", { name: "굴림" }).click();
   await kp.getByTestId("roll-entry").getByText(`${CHAR} · 도서관 이용`).waitFor();
-  await pl.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
   assert.equal(await pl.getByTestId("roll-entry").first().getByText(`${CHAR} · 도서관 이용`).count(), 1);
   step("시트로 굴린 결과가 라벨과 함께 로그에 남음");
 
   // SAN 체크: 손실을 2/2로 고정해 결과가 무작위여도 SAN이 정확히 2 줄어든다
-  await pl.getByRole("tab", { name: "시트" }).click();
+  await sheetTab(pl);
   const sanBefore = Number((await pl.getByTestId("stat-san").innerText()).split("/")[0]);
   await pl.getByLabel("SAN 손실").fill("2/2");
   await pl.getByRole("button", { name: "SAN 체크", exact: true }).click();
@@ -446,28 +470,28 @@ try {
   await pl.getByRole("button", { name: "SAN 체크", exact: true }).click();
   await pl.getByRole("button", { name: "SAN 체크 굴리기" }).click();
   await kp.getByTestId("roll-entry").getByText(`${CHAR} · SAN 체크`).waitFor();
-  await pl.getByRole("tab", { name: "시트" }).click();
+  await sheetTab(pl);
   await pl.getByTestId("stat-san").getByText(new RegExp(`^${sanBefore - 2}/`)).waitFor();
   await pl.getByTestId("san-day").getByText("오늘 손실 2").waitFor();
-  await pl.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
   step("SAN 체크가 로그에 남고 SAN과 오늘 손실이 갱신됨");
   // SAN 효과: 5 이상 잃으면 절제된 화면 효과가 나오고, 내가 효과를 끄면 나오지 않는다
-  await pl.getByRole("tab", { name: "시트" }).click();
+  await sheetTab(pl);
   await pl.getByLabel("SAN 손실").fill("6/6");
   await pl.getByRole("button", { name: "SAN 체크", exact: true }).click();
   await pl.getByRole("button", { name: "SAN 체크 굴리기" }).click();
   await pl.getByTestId("san-effect").waitFor();
   await pl.getByTestId("san-effect").waitFor({ state: "detached", timeout: 6000 });
-  await pl.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
   step("SAN 큰 손실에는 화면 가장자리가 어두워지는 효과가 나왔다 사라짐");
 
   // 푸시와 행운: 서버 주사위라 결과를 정할 수 없으니 실패가 나올 때까지 시트 판정을 굴린다
   const rollSkill = async () => {
     const entries = pl.getByTestId("roll-entry");
     const before = await entries.count();
-    await pl.getByRole("tab", { name: "시트" }).click();
+    await sheetTab(pl);
     await pl.getByRole("button", { name: "도서관 이용 굴리기" }).click();
-    await pl.getByRole("tab", { name: "굴림" }).click();
+    await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
     await pl.waitForFunction((n) => document.querySelectorAll('[data-testid="roll-entry"]').length > n, before);
     await pl.waitForTimeout(250);
     return entries.first();
@@ -507,9 +531,9 @@ try {
   for (let i = 0; i < 40 && !combatChecked; i++) {
     const entries = pl.getByTestId("roll-entry");
     const before = await entries.count();
-    await pl.getByRole("tab", { name: "시트" }).click();
+    await sheetTab(pl);
     await pl.getByRole("button", { name: "맨손 격투 굴리기" }).click();
-    await pl.getByRole("tab", { name: "굴림" }).click();
+    await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
     await pl.waitForFunction((n) => document.querySelectorAll('[data-testid="roll-entry"]').length > n, before);
     await pl.waitForTimeout(250);
     const top = entries.first();
@@ -528,9 +552,9 @@ try {
   await kp.getByLabel("증상 목록").fill("공포에 얼어붙는다\n비명을 지르며 달아난다");
   await kp.getByRole("button", { name: "저장", exact: true }).click();
   await kp.keyboard.press("Escape");
-  await kp.getByRole("tab", { name: "시트" }).click();
+  await sheetTab(kp);
   await kp.getByLabel("광기 상태").selectOption("temporary");
-  await pl.getByRole("tab", { name: "시트" }).click();
+  await sheetTab(pl);
   await pl.getByTestId("madness-badge").getByText("일시적 광기").waitFor();
   assert.equal(await pl.getByLabel("광기 상태").count(), 0, "PL에게는 광기 지정 컨트롤이 없어야 함");
   await kp.getByRole("button", { name: "증상 굴리기(요약)" }).click();
@@ -541,8 +565,8 @@ try {
   await pl.keyboard.press("Escape");
   await kp.getByLabel("광기 상태").selectOption("none");
   await pl.getByTestId("madness-badge").waitFor({ state: "detached" });
-  await pl.getByRole("tab", { name: "굴림" }).click();
-  await kp.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(kp); await kp.getByRole("tab", { name: "굴림" }).click();
   step("광기 상태 표시, 증상 굴림은 주인과 GM에게만, 해제하면 사라짐");
 
   // 판정 요청: GM이 요청하면 PL 화면에 배너가 뜨고, 누르면 내 캐릭터로 굴려짐
@@ -565,15 +589,15 @@ try {
   step("탭 목록이 화살표 키로 움직임");
 
   // 무기·상태·소지품
-  await pl.getByRole("tab", { name: "시트" }).click();
+  await sheetTab(pl);
   await pl.getByTestId("weapons").getByText("주먹").waitFor();
   await pl.getByRole("button", { name: "주먹 피해" }).click();
-  await pl.getByRole("tab", { name: "굴림" }).click(); // 시트에서 굴려도 탭이 바뀌지 않으니 기록을 보려면 굴림 탭으로 간다
+  await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click(); // 시트에서 굴려도 탭이 바뀌지 않으니 기록을 보려면 굴림 탭으로 간다
   await pl.getByTestId("roll-entry").getByText(`${CHAR} · 주먹 피해`).first().waitFor();
-  await pl.getByRole("tab", { name: "시트" }).click();
+  await sheetTab(pl);
   // 상태 표시는 GM만 바꾼다: PL 시트에는 토글이 없고, GM이 켜면 PL 시트에 칩으로 보인다
   assert.equal(await pl.getByTestId("conditions").count(), 0, "PL은 상태 표시를 직접 바꿀 수 없어요");
-  await kp.getByRole("tab", { name: "시트" }).click();
+  await sheetTab(kp);
   await kp.getByTestId("conditions").getByRole("button", { name: "중상" }).click();
   await kp.getByTestId("conditions").getByRole("button", { name: "중상", pressed: true }).waitFor();
   await pl.getByTestId("sheet-status").getByTestId("status-chips").getByText("중상").waitFor();
@@ -581,8 +605,8 @@ try {
   await kp.getByTestId("conditions").getByRole("button", { name: "중상" }).click();
   await kp.getByTestId("conditions").getByRole("button", { name: "중상", pressed: false }).waitFor();
   await pl.getByTestId("status-chips").getByText("중상").waitFor({ state: "detached" });
-  await pl.getByRole("tab", { name: "굴림" }).click();
-  await kp.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(kp); await kp.getByRole("tab", { name: "굴림" }).click();
   step("무기 피해 굴림이 로그에 남고, 중상 표시는 GM만 바꾸며 PL 시트에는 칩으로 보이고, 소지품이 GM 시트에 반영됨");
 
   // 주사위 식: (2d6+6)*5 처럼 괄호·곱셈을 쓰고, 항별 결과가 로그에 남는다. 잘못된 식은 한국어로 거절한다
@@ -622,7 +646,7 @@ try {
   step("주사위 식: (2d6+6)*5와 1d10+db가 항별 결과와 함께 로그에 남고, 잘못된 식은 한국어로 거절됨");
 
   // 핸드아웃: 초안 → 특정 PL에게 공개 → 다시 초안
-  await kp.getByRole("tab", { name: "핸드아웃" }).click();
+  await closeSheet(kp); await kp.getByRole("tab", { name: "핸드아웃" }).click();
   await kp.getByRole("button", { name: "새 핸드아웃" }).click();
   await kp.getByLabel("핸드아웃 제목").fill("낡은 편지");
   await kp.getByLabel("핸드아웃 내용").fill("자정에 서재로 와 주게.");
@@ -631,7 +655,7 @@ try {
   await kp.getByRole("button", { name: "저장", exact: true }).click();
   await kp.getByTestId("handout-item").getByText("낡은 편지").waitFor();
   await pl.getByTestId("handout-new").waitFor(); // 핸드아웃 탭을 안 보는 PL에게 새 핸드아웃 표시
-  await pl.getByRole("tab", { name: "핸드아웃" }).click();
+  await closeSheet(pl); await pl.getByRole("tab", { name: "핸드아웃" }).click();
   await pl.getByTestId("handout-new").waitFor({ state: "detached" });
   await pl.getByTestId("handout-item").getByText("낡은 편지").waitFor();
   await pl.getByTestId("handout-item").getByText("낡은 편지").click();
@@ -674,8 +698,8 @@ try {
     await pl.getByTestId("handout-item").waitFor({ state: "detached" });
   }
   step("초안은 펼쳐 보이기가 막힌 이유가 보이고, 공개하기 한 번으로 전원 공개와 펼쳐 보이기가 됨");
-  await kp.getByRole("tab", { name: "굴림" }).click();
-  await pl.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(kp); await kp.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
 
 
   // 새 토큰의 소유자 기본값은 "소유자 없음(NPC)": 이름을 비워도 PL 이름이 붙지 않고, PL은 그 토큰을 움직일 수 없다
@@ -728,22 +752,22 @@ try {
   await kp.getByTestId("obj-서하").click();
   await kp.getByRole("button", { name: "이미지 떼기" }).click();
   await pl.getByTestId("img-서하").waitFor({ state: "detached" });
-  await kp.getByRole("tab", { name: "핸드아웃" }).click();
+  await closeSheet(kp); await kp.getByRole("tab", { name: "핸드아웃" }).click();
   await kp.getByRole("button", { name: "새 핸드아웃" }).click();
   await kp.getByLabel("핸드아웃 제목").fill("사진 한 장");
   await kp.getByLabel("이미지 넣기 파일").setInputFiles(file);
   await kp.getByAltText("핸드아웃 이미지 미리보기").waitFor();
   await kp.getByLabel("공개 범위").selectOption("all");
   await kp.getByRole("button", { name: "저장", exact: true }).click();
-  await pl.getByRole("tab", { name: "핸드아웃" }).click();
+  await closeSheet(pl); await pl.getByRole("tab", { name: "핸드아웃" }).click();
   await pl.getByTestId("handout-item").getByText("사진 한 장").click();
   await pl.getByAltText("사진 한 장 이미지").waitFor();
   await kp.getByTestId("handout-item").getByRole("button", { name: "삭제" }).first().waitFor();
   await kp.getByTestId("handout-item").filter({ hasText: "사진 한 장" }).getByRole("button", { name: "삭제" }).click();
   await confirmAsk(kp);
   await pl.getByTestId("handout-item").waitFor({ state: "detached" });
-  await kp.getByRole("tab", { name: "굴림" }).click();
-  await pl.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(kp); await kp.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
   step("이미지 업로드: 토큰·장면 배경·핸드아웃 이미지가 PL 화면에 나타나고 떼면 사라짐");
 
   // PL이 자기 토큰을 끌어서 이동
@@ -820,11 +844,11 @@ try {
   step("GM 전용 오브젝트는 PL 화면에 없음");
 
   // 시트→토큰: GM이 시트 탭에서 "토큰으로 놓기"를 누르면 그 캐릭터 이름·소유자로 토큰이 생긴다
-  await kp.getByRole("tab", { name: "시트" }).click();
+  await sheetTab(kp);
   await kp.getByRole("button", { name: "토큰으로 놓기" }).click();
   await pl.getByTestId(`obj-${CHAR}`).waitFor();
   assert.equal(await pl.getByTestId(`obj-${CHAR}`).getAttribute("data-mine"), "true");
-  await kp.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(kp); await kp.getByRole("tab", { name: "굴림" }).click();
   step("시트 탭의 '토큰으로 놓기'로 캐릭터 이름·소유자 토큰이 생기고 그 PL 화면에서 '나'로 표시됨");
 
   // 안개와 시야: 안개 속 오브젝트는 PL 화면에서 아예 사라지고, 시야·밝힌 영역으로 다시 보임
@@ -1109,7 +1133,7 @@ try {
     step("이미지 고르기: 이 룸에서 쓴 이미지를 다시 고르면 새로 올리지 않음(툴바·오른쪽 클릭 메뉴 모두)");
 
     // 핸드아웃 편집기의 이미지 칸에 끌어다 놓기
-    await kp.getByRole("tab", { name: "핸드아웃" }).click();
+    await closeSheet(kp); await kp.getByRole("tab", { name: "핸드아웃" }).click();
     await kp.getByRole("button", { name: "새 핸드아웃" }).click();
     await kp.evaluate(async (mk) => {
       const file = await eval(mk);
@@ -1120,7 +1144,7 @@ try {
     }, makePng("편지.png", "#eee"));
     await kp.getByAltText("핸드아웃 이미지 미리보기").waitFor();
     await kp.getByRole("button", { name: "취소" }).click();
-    await kp.getByRole("tab", { name: "굴림" }).click();
+    await closeSheet(kp); await kp.getByRole("tab", { name: "굴림" }).click();
     step("핸드아웃 편집기의 이미지 칸에 파일을 끌어다 놓으면 이미지가 들어감");
 
     // 정리: 시험용 오브젝트·배경·그림을 되돌려 놓는다
@@ -1418,13 +1442,13 @@ try {
   const SECRET_NPC = "비밀교단원 " + run;
   {
     const fs = await import("node:fs/promises");
-    await kp2.getByRole("tab", { name: "시트" }).click();
+    await sheetTabOnly(kp2);
     const [tpl] = await Promise.all([kp2.waitForEvent("download"), kp2.getByRole("button", { name: "양식 받기" }).click()]);
     const raw = (await fs.readFile(await tpl.path())).toString("utf8");
     await kp2.getByRole("button", { name: "CSV로 가져오기" }).click();
     await kp2.getByLabel("CSV 붙여넣기").fill(raw.replace("이름,\r\n", `이름,${SECRET_NPC}\r\n`));
     await kp2.getByTestId("csv-apply").click();
-    await kp2.getByLabel("캐릭터 선택").selectOption({ label: SECRET_NPC });
+    await sheetTab(kp2, SECRET_NPC);
     await kp2.getByRole("tab", { name: /^전투/ }).click();
     await kp2.getByRole("button", { name: "전투 종료" }).click();
     await confirmAsk(kp2);
@@ -1441,19 +1465,19 @@ try {
     await kp2.getByRole("button", { name: "전투 종료" }).click();
     await confirmAsk(kp2);
     await kp2.getByRole("button", { name: "전투 시작" }).waitFor();
-    await kp2.getByRole("tab", { name: "굴림" }).click();
-    await pl.getByRole("tab", { name: "굴림" }).click();
+    await closeSheet(kp2); await kp2.getByRole("tab", { name: "굴림" }).click();
+    await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
   }
   step("전투 순서: GM 전용 NPC 시트는 PL에게 '알 수 없는 상대'로만 보이고(이름·DEX 숨김), GM에게는 그대로 보임");
-  await kp2.getByRole("tab", { name: "굴림" }).click();
-  await pl.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(kp2); await kp2.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
 
   // 피해 적용과 부상 규칙(7판): 중상 → 빈사 → 응급처치/회복, 상태 칩은 시트와 전투 순서에 같이 보임
   {
     const hpOf = (page) => page.getByTestId("stat-hp");
-    await kp2.getByRole("tab", { name: "시트" }).click();
-    await kp2.getByLabel("캐릭터 선택").selectOption({ label: CHAR });
-    await pl.getByRole("tab", { name: "시트" }).click();
+    await sheetTab(kp2);
+    await sheetTab(kp2, CHAR);
+    await sheetTab(pl);
     await hpOf(kp2).getByText("9/10").waitFor();
     await hpOf(pl).getByText("9/10").waitFor();
     assert.equal(await pl.getByTestId("gm-vitals").count(), 0, "PL 시트에는 피해·회복 입력이 없어요");
@@ -1487,11 +1511,11 @@ try {
     await kp2.getByTestId("initiative-entry").filter({ hasText: CHAR }).getByTestId("initiative-status").getByText("중상").waitFor();
     await pl.getByTestId("initiative-entry").filter({ hasText: CHAR }).getByTestId("initiative-status").getByText("중상").waitFor();
     // 4) HP가 0이 되면 중상 상태라 빈사
-    await kp2.getByRole("tab", { name: "시트" }).click();
+    await sheetTab(kp2);
     await kp2.getByLabel("적용할 피해").fill("3");
     await kp2.getByTestId("sheet-apply-damage").click();
     await hpOf(kp2).getByText("0/10").waitFor();
-    await pl.getByRole("tab", { name: "시트" }).click();
+    await sheetTab(pl);
     await pl.getByTestId("sheet-status").getByTestId("status-chips").getByText("빈사").waitFor();
     await pl.getByTestId("wound-hint").getByText(/빈사 상태예요/).waitFor();
     await pl.getByRole("tab", { name: /^전투/ }).click();
@@ -1501,10 +1525,10 @@ try {
     const turns = await kp2.getByTestId("initiative-entry").count();
     for (let i = 0; i < turns; i++) await kp2.getByRole("button", { name: "다음 차례" }).click();
     await kp2.getByTestId("initiative-round").getByText("2라운드").waitFor();
-    await pl.getByRole("tab", { name: "시트" }).click();
+    await sheetTab(pl);
     await pl.getByTestId("wound-hint").getByText(/1라운드째/).waitFor();
     // 6) 응급처치: HP 1, 빈사는 풀리고 중상은 남는다
-    await kp2.getByRole("tab", { name: "시트" }).click();
+    await sheetTab(kp2);
     await kp2.getByTestId("heal-firstaid").click();
     await hpOf(pl).getByText("1/10").waitFor();
     await pl.getByTestId("sheet-status").getByTestId("status-chips").getByText("중상").waitFor();
@@ -1522,7 +1546,7 @@ try {
 
     // 8) 피해 굴림 결과를 굴림 기록에서 대상 시트에 적용 (같은 피해는 같은 캐릭터에게 한 번만)
     await kp2.getByRole("button", { name: "주먹 피해" }).click();
-    await kp2.getByRole("tab", { name: "굴림" }).click();
+    await closeSheet(kp2); await kp2.getByRole("tab", { name: "굴림" }).click();
     const dmgEntry = kp2.getByTestId("roll-entry").first();
     await dmgEntry.getByTestId("damage-apply").waitFor();
     assert.equal(await pl.getByTestId("damage-apply").count(), 0, "PL에게는 피해 적용 버튼이 없어요");
@@ -1534,7 +1558,7 @@ try {
     step("피해 굴림 결과를 굴림 기록의 '피해 적용'으로 대상 시트에 넣고, 같은 대상에게는 다시 못 넣음");
 
     // 9) 정리: HP를 9로 되돌리고(잘못 누른 값을 고치는 직접 입력도 상태를 맞춘다) 전투를 끝낸다
-    await kp2.getByRole("tab", { name: "시트" }).click();
+    await sheetTab(kp2);
     const gbox = kp2.getByLabel("HP 직접 입력");
     await gbox.fill("9");
     await gbox.press("Enter");
@@ -1543,13 +1567,13 @@ try {
     await kp2.getByRole("button", { name: "전투 종료" }).click();
     await confirmAsk(kp2);
     await kp2.getByRole("button", { name: "전투 시작" }).waitFor();
-    await kp2.getByRole("tab", { name: "굴림" }).click();
-    await pl.getByRole("tab", { name: "굴림" }).click();
+    await closeSheet(kp2); await kp2.getByRole("tab", { name: "굴림" }).click();
+    await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
   }
 
   // 대항 판정: GM이 NPC 시트와 PL 시트를 맞붙이면 두 굴림이 로그 한 항목으로 남는다
   {
-    await kp2.getByRole("tab", { name: "굴림" }).click();
+    await closeSheet(kp2); await kp2.getByRole("tab", { name: "굴림" }).click();
     const form = kp2.getByTestId("opposed-form");
     await form.getByRole("button", { name: "대항 판정" }).click();
     await form.getByLabel("주도하는 캐릭터").selectOption({ label: SECRET_NPC });
@@ -1618,7 +1642,7 @@ try {
   assert.equal(await kp2.getByLabel("엔딩 이름 (선택)").inputValue(), "새벽의 생존자");
   await kp2.keyboard.press("Escape");
   step("세션 흐름: 비트·분기를 짜면 조건이 맞을 때 GM에게만 제안하고, 엔딩 확정 뒤 종료 창이 엔딩 이름으로 채워짐");
-  await kp2.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(kp2); await kp2.getByRole("tab", { name: "굴림" }).click();
 
   // 세션 종료 → 보관함에 반영
   await kp2.getByRole("button", { name: "세션 종료" }).click();
@@ -1636,7 +1660,7 @@ try {
   await pl.keyboard.press("Escape");
   assert.equal(await pl.getByRole("dialog", { name: "세션 정산" }).count(), 0);
   step("세션 종료 때 엔딩 이름이 모두에게 보이고 닫을 수 있음(NPC 시트의 SAN 보상은 GM에게만)");
-  await pl.getByRole("tab", { name: "시트" }).click();
+  await sheetTab(pl);
   await pl.getByRole("button", { name: "보관함에 반영" }).click();
   await pl.getByText("보관함에 반영했어요").waitFor();
   const vault = await (
@@ -1666,7 +1690,7 @@ try {
   }
 
   // 매크로: 이름 붙여 저장한 식을 한 번에 굴리고, 잘못된 식은 거절하며, 다시 열어도 남아 있다
-  await pl.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
   await pl.getByRole("button", { name: "매크로 편집" }).click();
   await pl.getByLabel("매크로 이름").fill("한 방 " + run);
   await pl.getByLabel("매크로 굴림 식").fill("ㅁㅁㅁ");
@@ -1704,7 +1728,7 @@ try {
   step("서재 충돌: 다른 기기가 먼저 저장해도 항목 단위로 합쳐져 둘 다 남음");
 
   // 굴림 기록 저장: 이 화면에서 보인 굴림이 마크다운 파일로 내려오고, 비밀 굴림 안내가 붙는다
-  await pl.getByRole("tab", { name: "굴림" }).click();
+  await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
   const [dl] = await Promise.all([pl.waitForEvent("download"), pl.getByRole("button", { name: "굴림 기록 저장" }).click()]);
   assert.match(dl.suggestedFilename(), /^roll-log-\d{8}\.md$/);
   const saved = await (await import("node:fs/promises")).readFile(await dl.path(), "utf8");
@@ -1800,7 +1824,7 @@ try {
   step("음향: 비트 큐에 묶은 배경음이 비트에 들어가면 흐르고, 음원을 지우면 목록에서 사라짐");
 
   // GM 전용 노트: PL에게 안 보이고, 펼쳐 보이기 버튼도 없다
-  await kp2.getByRole("tab", { name: "핸드아웃" }).click();
+  await closeSheet(kp2); await kp2.getByRole("tab", { name: "핸드아웃" }).click();
   await kp2.getByRole("button", { name: "새 핸드아웃" }).click();
   await kp2.getByLabel("핸드아웃 제목").fill("진상 " + run);
   await kp2.getByLabel("핸드아웃 내용").fill("범인은 이웃");
@@ -1809,7 +1833,7 @@ try {
   const note = kp2.getByTestId("handout-item").filter({ hasText: "진상 " + run });
   await note.getByText("GM 노트").waitFor();
   assert.equal(await note.getByRole("button", { name: "펼쳐 보이기" }).count(), 0);
-  await pl.getByRole("tab", { name: "핸드아웃" }).click();
+  await closeSheet(pl); await pl.getByRole("tab", { name: "핸드아웃" }).click();
   await pl.waitForTimeout(400);
   assert.equal(await pl.getByText("진상 " + run).count(), 0);
   step("GM 전용 노트는 PL에게 보이지 않고 펼쳐 보일 수도 없음");
@@ -1966,7 +1990,7 @@ try {
       await kpT.getByTestId("chat-input").fill("/hr 1d100");
       await kpT.getByTestId("chat-input").press("Enter");
       await kpT.getByTestId("chat-list").locator('[data-kind="secret"]').waitFor();
-      await kpT.getByRole("tab", { name: "기록" }).click();
+      await closeSheet(kpT); await kpT.getByRole("tab", { name: "기록" }).click();
       await kpT.getByTestId("log-list").getByTestId("log-item").first().waitFor();
       const gmMd = await readDownload(kpT, "log-export-md");
       assert.match(gmMd, /GM용 기록/);
@@ -1999,7 +2023,7 @@ try {
       assert.ok((await kpT.getByTestId("log-item").count()) > 0);
       assert.equal(await kpT.getByTestId("log-item").evaluateAll((els) => els.some((e) => e.getAttribute("data-kind") !== "roll")), false);
       await kpT.getByTestId("log-reset").click();
-      for (const p of [kpT, ...pls]) await p.getByRole("tab", { name: "굴림" }).click();
+      for (const p of [kpT, ...pls]) { await closeSheet(p); await p.getByRole("tab", { name: "굴림" }).click(); }
       step("세션 기록: GM용·참가자용 마크다운/JSON 내보내기에 굴림·대화 발췌가 있고 귓속말·GM 전용은 참가자 버전에 없으며 종류 필터가 동작");
     }
 
@@ -2181,7 +2205,7 @@ try {
   // 룸 시트: CSV로 내보내기, 수정한 기능만 보기, 묶음 접기. GM은 CSV로 NPC를 룸에 등록한다
   {
     const fs = await import("node:fs/promises");
-    await pl.getByRole("tab", { name: "시트" }).click();
+    await sheetTab(pl);
     const [dl] = await Promise.all([pl.waitForEvent("download"), pl.getByRole("button", { name: "CSV로 내보내기" }).click()]);
     const raw = await fs.readFile(await dl.path());
     const text = raw.toString("utf8");
@@ -2203,15 +2227,15 @@ try {
     await sheet.getByTestId("skill-도서관 이용").waitFor();
 
     const NPC = "CSV 조수 " + run;
-    await kp2.getByRole("tab", { name: "시트" }).click();
+    await sheetTabOnly(kp2);
     await kp2.getByRole("button", { name: "CSV로 가져오기" }).click();
     await kp2.getByLabel("CSV 붙여넣기").fill(text.replace(CHAR, NPC));
     await kp2.getByTestId("csv-preview").getByText(NPC).waitFor();
     await kp2.getByTestId("csv-apply").click();
-    await kp2.getByLabel("캐릭터 선택").selectOption({ label: NPC });
-    assert.equal(await selCurrent(kp2.getByLabel("캐릭터 선택")), NPC);
+    await sheetTab(kp2, NPC);
+    assert.equal(await kp2.getByTestId("sheet-modal").getByRole("dialog").getAttribute("aria-label"), `시트 · ${NPC}`);
     await kp2.getByTestId("stat-hp").getByText("9/10").waitFor();
-    assert.equal(await pl.getByLabel("캐릭터 선택").count(), 0, "PL은 GM이 등록한 NPC 시트를 받지 않음");
+    assert.equal(await pl.getByTestId("sheet-card").filter({ hasText: NPC }).count(), 0, "PL은 GM이 등록한 NPC 시트를 받지 않음");
   }
   step("룸 시트: CSV 내보내기, 수정한 기능만 보기·묶음 접기가 동작하고, GM은 CSV로 시트를 룸에 등록함(PL은 이미 있으면 가져오기 버튼이 없음)");
 
@@ -2221,28 +2245,28 @@ try {
   const tabOn = (page, name) => page.locator('[role="tab"][aria-selected="true"]').filter({ hasText: name });
   {
     await kp2.getByRole("tab", { name: /진행 중/ }).click(); // GM이 PL과 같은 장면을 보게 한다
-    await kp2.getByRole("tab", { name: "시트" }).click();
+    await sheetTab(kp2);
     // 1) PL의 시트를 이은 토큰: 그 PL에게 HP 막대가 보이고, 시트의 HP와 같음
-    await kp2.getByLabel("캐릭터 선택").selectOption({ label: CHAR });
+    await sheetTab(kp2, CHAR);
     await kp2.getByRole("button", { name: "토큰으로 놓기" }).click();
     const linked = pl.locator('[data-mine="true"][data-linked="true"]').first();
     await linked.waitFor();
     const linkedName = (await linked.getAttribute("data-testid")).slice(4);
     const bar = hpBar(pl, linkedName);
     await bar.waitFor({ state: "attached" });
-    await pl.getByRole("tab", { name: "시트" }).click();
+    await sheetTab(pl);
     const [hp, max] = (await pl.getByTestId("stat-hp").innerText()).split("/").map(Number);
     assert.equal(Number(await bar.getAttribute("data-hp")), hp);
     assert.equal(Number(await bar.getAttribute("data-max")), max);
     // 2) 토큰을 누르면(끌지 않고) 그 시트가 시트 탭에 열림 — PL은 자기 토큰만
-    await pl.getByRole("tab", { name: "굴림" }).click();
-    await linked.click();
-    await tabOn(pl, "시트").waitFor();
-    step("토큰↔시트 연결: PL 자신의 연결 토큰 아래에 시트와 같은 HP 막대가 보이고, 토큰을 누르면 시트 탭이 열림");
+    await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
+    await linked.dblclick(); // 토큰을 두 번 누르면 시트가 열림(한 번은 선택)
+    await pl.getByTestId("sheet-modal").waitFor();
+    step("토큰↔시트 연결: PL 자신의 연결 토큰 아래에 시트와 같은 HP 막대가 보이고, 토큰을 두 번 누르면 시트가 열림");
 
     // 3) NPC 시트를 이은 토큰: GM에게는 HP가 보이고 PL에게는 'HP 공개'를 켤 때까지 안 보임
-    await kp2.getByRole("tab", { name: "시트" }).click();
-    await kp2.getByLabel("캐릭터 선택").selectOption({ label: NPC });
+    await sheetTab(kp2);
+    await sheetTab(kp2, NPC);
     await kp2.getByTestId("npc-badge").waitFor();
     await kp2.getByRole("button", { name: "토큰으로 놓기" }).click();
     await pl.getByTestId(`obj-${NPC}`).waitFor();
@@ -2250,20 +2274,20 @@ try {
     assert.equal(Number(await hpBar(kp2, NPC).getAttribute("data-max")), 10);
     assert.equal(await hpBar(pl, NPC).count(), 0, "NPC의 HP는 PL에게 숨김");
     await kp2.getByTestId(`pick-${NPC}`).dispatchEvent("click");
-    await kp2.getByTestId("hp-public").click();
+    await closeSheet(kp2); await kp2.getByTestId("hp-public").click();
     await hpBar(pl, NPC).waitFor({ state: "attached" });
-    await kp2.getByTestId("hp-public").click();
+    await closeSheet(kp2); await kp2.getByTestId("hp-public").click();
     await hpBar(pl, NPC).waitFor({ state: "detached" });
     // PL은 NPC 토큰을 눌러도 NPC 시트를 열지 못한다
-    await pl.getByRole("tab", { name: "굴림" }).click();
+    await closeSheet(pl); await pl.getByRole("tab", { name: "굴림" }).click();
     await pl.getByTestId(`obj-${NPC}`).click();
     assert.equal(await pl.getByRole("tab", { name: "시트" }).getAttribute("aria-selected"), "false");
     // GM이 토큰을 누르면 시트가 열림
-    await kp2.getByRole("tab", { name: "굴림" }).click();
-    await kp2.getByTestId(`obj-${NPC}`).click();
-    await tabOn(kp2, "시트").waitFor();
-    assert.equal(await selCurrent(kp2.getByLabel("캐릭터 선택")), NPC);
-    step("NPC 토큰의 HP는 GM에게만 보이고 'HP 공개'로 PL에게 열고 닫을 수 있으며, GM이 토큰을 누르면 그 NPC 시트가 열림");
+    await closeSheet(kp2); await kp2.getByRole("tab", { name: "굴림" }).click();
+    await kp2.getByTestId(`obj-${NPC}`).dblclick();
+    await kp2.getByTestId("sheet-modal").waitFor();
+    assert.equal(await kp2.getByTestId("sheet-modal").getByRole("dialog").getAttribute("aria-label"), `시트 · ${NPC}`);
+    step("NPC 토큰의 HP는 GM에게만 보이고 'HP 공개'로 PL에게 열고 닫을 수 있으며, GM이 토큰을 두 번 누르면 그 NPC 시트가 열림");
 
     // 4) 이어지지 않은 토큰에 시트 연결 고르기 → HP 막대, 연결 해제 → 막대 사라짐
     const plain = "연결시험 " + run;
@@ -2280,7 +2304,7 @@ try {
   // 준비 도구 2: NPC 시트 만들기(빠른 NPC) → 무기·기능 고치기 → 피해 → 토큰 HP 막대 → 시트를 빼면 연결이 풀림
   {
     const N = "불량배 " + run;
-    await kp2.getByRole("tab", { name: "시트" }).click();
+    await sheetTab(kp2);
     await kp2.getByTestId("npc-new").click();
     await kp2.getByTestId("npc-name").fill(N);
     await kp2.getByTestId("npc-preset").selectOption({ label: "불량배" });
@@ -2288,7 +2312,7 @@ try {
     await kp2.getByTestId("npc-create").click();
     await kp2.getByTestId("npc-dialog").waitFor({ state: "detached" });
     await kp2.getByTestId("npc-badge").waitFor();
-    await kp2.waitForFunction((n) => document.querySelector('[role="combobox"][aria-label="캐릭터 선택"] .select-label')?.textContent.trim() === n, N);
+    await kp2.getByRole("dialog", { name: `시트 · ${N}` }).waitFor();
     await kp2.getByTestId("stat-hp").getByText("12/12").waitFor();
     await kp2.getByTestId("weapon-곤봉").waitFor();
     await hpBar(kp2, N).waitFor({ state: "attached" }); // '토큰도 같이 놓기' 기본값
@@ -2296,7 +2320,7 @@ try {
     // PL에게는 시트도 HP 막대도 가지 않음
     await pl.getByTestId(`obj-${N}`).waitFor();
     assert.equal(await hpBar(pl, N).count(), 0);
-    assert.equal(await pl.getByLabel("캐릭터 선택").count(), 0);
+    assert.equal(await pl.getByTestId("sheet-card").filter({ hasText: N }).count(), 0);
     // 무기·기능 고치기(GM)
     await kp2.getByLabel("새 무기 이름").fill("단검");
     await kp2.getByLabel("새 무기 피해").fill("1d4+db");
@@ -2436,7 +2460,7 @@ try {
     await pl.getByRole("tab", { name: /^핸드아웃/ }).click();
     await pl.getByText("찢어진 쪽지").waitFor();
     assert.equal(await pl.getByText("관리인의 비밀").count(), 0);
-    assert.equal(await pl.getByLabel("캐릭터 선택").count(), 0);
+    assert.equal(await pl.getByTestId("sheet-card").filter({ hasText: SECRET_NPC }).count(), 0);
     // 되돌리기 토스트
     await toast.getByTestId("toast-action").click();
     await waitNames((n) => !n.includes("지하실"));

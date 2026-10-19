@@ -121,7 +121,8 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
   };
   useEffect(() => cancelPress, []);
   // 토큰을 눌렀다 떼면(거의 움직이지 않고 짧게) 이어진 시트를 연다.
-  const tap = useRef<{ id: string; cx: number; cy: number; at: number } | null>(null);
+  const tap = useRef<{ id: string; cx: number; cy: number; at: number; mouse: boolean } | null>(null);
+  const lastTap = useRef<{ id: string; at: number } | null>(null);
 
   // 보드 요소의 크기를 지켜본다(이름표·토큰 크기를 화면 배율에 맞추는 데 쓴다).
   useEffect(() => {
@@ -398,7 +399,13 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
         tap.current = null;
         if (t && onOpenSheet && Math.hypot(e.clientX - t.cx, e.clientY - t.cy) < 6 && Date.now() - t.at < LONG_PRESS_MS) {
           const o = objects.find((x) => x.id === t.id);
-          if (o?.characterId) onOpenSheet(o);
+          // 손가락은 한 번 누르면, 마우스는 두 번 누르면 시트가 열린다(한 번은 선택·이동용).
+          const prev = lastTap.current;
+          lastTap.current = { id: t.id, at: Date.now() };
+          if (o?.characterId && (!t.mouse || (prev && prev.id === t.id && Date.now() - prev.at < 450))) {
+            lastTap.current = null;
+            onOpenSheet(o);
+          }
         }
         if (pan.current) {
           pan.current = null;
@@ -494,7 +501,7 @@ export function Board({ objects, background, me, canInteract, onMove, selectedId
                 return void onPing(Math.round(p.x), Math.round(p.y));
               }
               startPress(e, o);
-              tap.current = o.characterId && onOpenSheet ? { id: o.id, cx: e.clientX, cy: e.clientY, at: Date.now() } : null;
+              tap.current = o.characterId && onOpenSheet ? { mouse: e.pointerType === "mouse", id: o.id, cx: e.clientX, cy: e.clientY, at: Date.now() } : null;
               onSelect(o.id);
               if (canMove(o)) {
                 onDragStart?.(o);

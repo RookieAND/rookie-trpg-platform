@@ -433,7 +433,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 /* 알림: 토스트 · 연결 배너 · 내 차례 */
 /* 알림은 보드 아래 가운데(--toast-cx)에서, 보드 아래 구석의 것·도구 묶음 위(--toast-b)에 뜬다. 값은 RoomView가 잰다. */
-.toasts { position: fixed; z-index: 30; left: var(--toast-cx, 50%); bottom: var(--toast-b, 16px); top: auto; transform: translateX(-50%); display: grid; gap: 6px; width: max-content; max-width: min(calc(100vw - 32px), var(--toast-w, 100vw), 520px); pointer-events: none; }
+.toasts { position: fixed; z-index: 46; left: var(--toast-cx, 50%); bottom: var(--toast-b, 16px); top: auto; transform: translateX(-50%); display: grid; gap: 6px; width: max-content; max-width: min(calc(100vw - 32px), var(--toast-w, 100vw), 520px); pointer-events: none; }
 .toast { pointer-events: none; display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 12px; border-radius: var(--radius-lg); border: 1px solid var(--line-2); background: var(--panel-3); box-shadow: var(--shadow); font-size: 12.5px; color: var(--text); animation: toast-in .16s ease-out; }
 .toast.error { border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: color-mix(in srgb, var(--panel-2) 90%, var(--danger) 10%); }
 .toast.info { border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: color-mix(in srgb, var(--panel-2) 92%, var(--ok) 8%); }
@@ -948,3 +948,43 @@ input[type="checkbox"] { accent-color: var(--accent); }
 /* 휴대폰은 한 줄에 납작하게 펼친다: 묶음 틀은 없는 셈 치고 안의 것들을 그대로 늘어놓는다 */
 .room.phone .hd-id, .room.phone .hd-state { display: contents; }
 .room.phone .hd-state { border: 0; }
+
+/* 시트 목록(인물만) + 시트 대화상자 */
+.sheet-cards { padding: 8px 12px; display: grid; gap: 10px; align-content: start; }
+.sl-title { margin: 4px 0 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); letter-spacing: .02em; }
+.sl-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sl-card { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; text-align: left; border: 1px solid var(--line-2); border-radius: var(--radius-lg, 10px); background: rgba(255,255,255,.03); color: var(--text); font: inherit; cursor: pointer; transition: background .12s, border-color .12s; }
+.sl-card:hover { background: var(--hover); }
+.sl-card.on { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.sl-avatar { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 650; background: color-mix(in srgb, var(--accent) 22%, var(--panel-3)); color: var(--text); }
+.sl-main { flex: 1 1 auto; min-width: 0; display: grid; gap: 1px; }
+.sl-name { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-sub { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sl-vit { flex: none; display: grid; gap: 1px; text-align: right; font-size: 11.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.sl-vit i { font-style: normal; color: var(--muted); }
+.sheet-modal { position: fixed; inset: 0; z-index: 45; display: grid; place-items: start center; padding: clamp(112px, 22vh, 190px) 16px 16px; pointer-events: none; }
+.sheet-dlg { pointer-events: auto; width: min(880px, 100%); max-height: 100%; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--radius-lg, 12px); box-shadow: 0 0 0 1px rgba(0,0,0,.4), 0 16px 48px rgba(0,0,0,.6); overflow: hidden; }
+.sheet-dlg-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.sheet-dlg-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.sheet-dlg-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.sheet-dlg-body .sheet { padding: 8px 14px 14px; }
+@media (max-width: 720px) {
+  .sheet-modal { padding: 0; place-items: stretch; pointer-events: auto; }
+  .sheet-dlg { width: 100%; max-height: 100%; height: 100%; border-radius: 0; border: 0; }
+}
+
+/* 선택 상자: 이름 / 소유자·시트 / 동작 세 줄로 가지런히 */
+.sel-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.sel-top .sel-name { flex: 1 1 200px; flex-direction: column; align-items: stretch; }
+.sel-top .sel-name .dock-input { width: 100%; max-width: none; }
+.sel-fields { align-items: flex-end; }
+.sel-fields .sel-field { flex: 1 1 150px; flex-direction: column; align-items: stretch; gap: 3px; }
+.sel-fields .dock-input, .sel-fields .select-trigger { width: 100%; max-width: none; }
+.sel-actions .btn.danger { margin-left: auto; }
+.sel-panel .sel-row .btn { height: 28px; }
+@media (min-width: 821px) {
+  .board:has(> .tooldock) > .dock[data-testid="selected-bar"] { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 8px 10px; width: min(460px, calc(100% - 180px)); max-width: none !important; }
+  .dock[data-testid="selected-bar"] > .dock-label { margin: 0; font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .03em; }
+}
+/* 휴대폰·시트 안에서는 예전처럼 한 덩어리로 흐른다 */
+.sheet-grid .sel-row { display: contents; }

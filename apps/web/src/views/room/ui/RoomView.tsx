@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { countsLine, josa, type GameObject, type Role } from "@coc-vtt/shared";
 import { SheetCsvImport } from "@/entities/character";
 import { beginDiscordLogin, refreshStoredSession, useIdentity, type Identity } from "@/entities/user";
@@ -11,7 +12,7 @@ import { roomTitle, useDocumentTitle, usePhone } from "@/shared/lib";
 import { MarkerButton, ObjectToolbar, PlaceControls, QuickTokenButton, SelectedControls, canEditMarkers, uniqueName, useBoardInteractions, usePlacement } from "@/features/board-objects";
 import { ShortcutHelp, useShortcutHelp } from "@/features/shortcut-help";
 import { FogToolbar } from "@/features/manage-fog";
-import { Hint, ImageLibraryProvider, ScrollTabs, roomImageIds, useImageLibraryStore } from "@/shared/ui";
+import { Hint, ImageLibraryProvider, ScrollTabs, roomImageIds, useImageLibraryStore, Dialog } from "@/shared/ui";
 import { SceneBar } from "@/features/manage-scenes";
 import { importedText } from "@/features/scenario-prep";
 import { StageCues } from "@/features/stage-cues";
@@ -47,7 +48,7 @@ import { rollBlockReason } from "../model/roll-reason";
 import { rollToastText, shouldToastRoll } from "../model/roll-toast";
 import { damageToastText } from "../model/damage-toast";
 import { playerGuideSteps, readGuideClosed, showPlayerGuide, writeGuideClosed } from "../model/player-guide";
-import { SheetPanel, SheetEmpty, type RollOptions } from "@/widgets/sheet-panel";
+import { SheetPanel, SheetEmpty, SheetList, type RollOptions } from "@/widgets/sheet-panel";
 import { RoomCharacterCreate } from "@/widgets/character-creator";
 import { PanelDock, ToolSheet } from "@/widgets/phone-bars";
 import { ToolDock } from "@/widgets/tool-dock";
@@ -95,6 +96,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   const [dockTab, setDockTab] = useState<"place" | "fog" | "cues">("place");
   const [tab, setTab] = useState<"roll" | "chat" | "sheet" | "handout" | "combat" | "flow" | "sound" | "log">("roll");
   const [sheetId, setSheetId] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [dismissedN, setDismissedN] = useState(0);
   const [viewSceneId, setViewSceneId] = useState<string | null>(null);
   const [fogPicking, setFogPicking] = useState(false);
@@ -135,6 +137,9 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   const objects = useMemo(() => Object.values(state.objects).filter((o) => o.sceneId === shownSceneId), [state.objects, shownSceneId]);
   const characters = useMemo(() => Object.values(state.characters), [state.characters]);
   const sheet = characters.find((c) => c.id === sheetId) ?? characters[0];
+  useEffect(() => {
+    if (sheetOpen && !sheet) setSheetOpen(false);
+  }, [sheetOpen, sheet]);
   // GM에게 보이는 시트 중 PL의 것이 아닌 것이 NPC 시트다(서버는 PL에게 NPC 시트를 보내지 않는다).
   const npcIds = useMemo(() => {
     const pls = new Set(state.members.filter((m) => m.role === "pl").map((m) => m.userId));
@@ -252,6 +257,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     if (!added) return;
     npcPending.current = null;
     setSheetId(added.id);
+    setSheetOpen(true);
     setTab("sheet");
     if (p.place) send({ type: "object.add", data: { kind: "token", name: uniqueName(added.name, objects.map((o) => o.name)), x: 500, y: 400, layer: "object", visibleTo: "all", sceneId: shownSceneId, autoPlace: true, characterId: added.id } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -278,9 +284,10 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     }
   };
   sheetActs.current = { placeSheetToken, sheet, showTab };
+  /** 시트를 대화상자로 연다(시트 탭의 목록에서도, 토큰을 눌러도). */
   const openSheet = (characterId: string) => {
     setSheetId(characterId);
-    showTab("sheet");
+    setSheetOpen(true);
   };
   // 휴대폰이 아니게 되면(화면을 돌리거나 키우면) 서랍·시트를 접어 둔다. 고른 것이 없어지면 선택 묶음에서 나온다.
   useEffect(() => {
@@ -658,11 +665,6 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
             <div className="sheet-wrap">
               {(isKp || role === "spectator" || !hasOwn) && (
                 <div className="sheet-top" data-testid="sheet-top">
-                  {isKp && sheet && (
-                    <button className="btn" data-testid="sheet-place-token" disabled={!canEditBoard} title="이 시트에 이어진 토큰을 지금 보는 장면에 놓아요" onClick={() => placeSheetToken(sheet)}>
-                      토큰으로 놓기
-                    </button>
-                  )}
                   {isKp && (
                     <NpcSheetButton
                       count={characters.length}
@@ -679,10 +681,35 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                   {characters.length === 0 && <SheetEmpty role={role} canLoad={!hasOwn} />}
                 </div>
               )}
-              {characters.length > 0 && (
-                <SheetPanel
-                  characters={characters}
-                  selectedId={sheet?.id ?? null}
+              {characters.length > 0 && <SheetList characters={characters} npcIds={npcIds} members={state.members} selectedId={sheetOpen ? sheet?.id ?? null : null} onOpen={openSheet} />}
+              <div className="sheet-foot">
+                {role !== "spectator" && (isKp || !hasOwn) && <LoadCharacter me={me} send={send} disabled={paused && !isKp} {...(isKp ? { title: "보관함에서 NPC·캐릭터 불러오기" } : {})} />}
+                {role !== "spectator" && (isKp || !hasOwn) && (
+                  <SheetCsvImport me={me} applyLabel="룸에 등록" disabled={paused && !isKp} onApply={(data) => send({ type: "character.add", data })} />
+                )}
+              </div>
+            </div>
+          )}
+        </aside>
+      </div>
+    {sheetOpen && sheet && createPortal(
+      <div className="sheet-modal" data-testid="sheet-modal">
+        <Dialog label={`시트 · ${sheet.name}`} className="sheet-dlg" onClose={() => setSheetOpen(false)}>
+          <div className="sheet-dlg-head">
+            <div className="sheet-dlg-tools">
+              {isKp && sheet && (
+                    <button className="btn" data-testid="sheet-place-token" disabled={!canEditBoard} title="이 시트에 이어진 토큰을 지금 보는 장면에 놓아요" onClick={() => placeSheetToken(sheet)}>
+                      토큰으로 놓기
+                    </button>
+                  )}
+              {state.sessionStatus === "IDLE" && state.sessionNumber > 0 && sheet && sheet.ownerId === me.userId && <SaveToVaultButton key={`${sheet.id}-${sheet.rev}`} me={me} character={sheet} />}
+            </div>
+            <button type="button" className="btn ghost" data-testid="sheet-close" aria-label="시트 닫기" onClick={() => setSheetOpen(false)}>닫기 ✕</button>
+          </div>
+          <div className="sheet-dlg-body">
+            <SheetPanel
+                  characters={[sheet]}
+                  selectedId={sheet.id}
                   onSelect={setSheetId}
                   canAct={active && role !== "spectator"}
                   rollWhy={rollBlockReason(role, state.sessionStatus)}
@@ -701,24 +728,17 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                   onApplyDamage={isKp ? (characterId, amount, armor) => send({ type: "damage.apply", data: { characterId, amount, armor } }) : undefined}
                   onHeal={isKp ? (characterId, kind, amount) => send({ type: "hp.heal", data: { characterId, kind, ...(amount !== undefined ? { amount } : {}) } }) : undefined}
                   npcIds={npcIds}
-                  onRemove={isKp || (role === "pl" && state.sessionStatus === "IDLE" && state.sessionNumber === 0 && sheet?.ownerId === me.userId) ? (characterId) => send({ type: "character.remove", data: { id: characterId } }) : undefined}
+                  onRemove={isKp || (role === "pl" && state.sessionStatus === "IDLE" && state.sessionNumber === 0 && sheet.ownerId === me.userId) ? (characterId) => send({ type: "character.remove", data: { id: characterId } }) : undefined}
                   onRoll={(characterId, name, o: RollOptions) => {
                     // 시트를 보던 자리에서 결과를 토스트로 알려 주고, 굴림 탭으로 옮기지 않는다(굴림 기록에는 그대로 쌓인다).
                     if (send({ type: "roll.request", data: { secret: o.secret === true, skill: { characterId, name, bonus: o.bonus, ...(o.difficulty ? { difficulty: o.difficulty } : {}) } } }) !== false) sheetRollAt.current = Date.now();
                   }}
                 />
-              )}
-              <div className="sheet-foot">
-                {role !== "spectator" && (isKp || !hasOwn) && <LoadCharacter me={me} send={send} disabled={paused && !isKp} {...(isKp ? { title: "보관함에서 NPC·캐릭터 불러오기" } : {})} />}
-                {role !== "spectator" && (isKp || !hasOwn) && (
-                  <SheetCsvImport me={me} applyLabel="룸에 등록" disabled={paused && !isKp} onApply={(data) => send({ type: "character.add", data })} />
-                )}
-                {state.sessionStatus === "IDLE" && state.sessionNumber > 0 && sheet && sheet.ownerId === me.userId && <SaveToVaultButton key={`${sheet.id}-${sheet.rev}`} me={me} character={sheet} />}
-              </div>
-            </div>
-          )}
-        </aside>
-      </div>
+          </div>
+        </Dialog>
+      </div>,
+      document.body,
+    )}
     {shortcutHelp.open && <ShortcutHelp isKp={isKp} onClose={shortcutHelp.close} />}
     </div>
     </ImageLibraryProvider>

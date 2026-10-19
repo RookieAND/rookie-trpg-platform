@@ -115,12 +115,16 @@ export function SelectedControls({ me, enabled, players, selected, characters = 
   };
   return (
     <>
+      <div className="sel-row sel-top">
         <span className="sel-field sel-name">
           <input className="dock-input" aria-label="선택한 토큰·소품 이름" value={rename} maxLength={LIMITS.objectName} disabled={!enabled}
             onChange={(e) => setRename(e.target.value)} onBlur={commitRename} onKeyDown={(e) => e.key === "Enter" && commitRename()} />
           <LimitNote label="이름" max={LIMITS.objectName} value={rename} />
         </span>
         <button className="btn" disabled={!enabled || !rename.trim() || rename.trim() === selected.name} onClick={commitRename}>이름 바꾸기</button>
+      </div>
+      {selected.kind === "token" && (
+        <div className="sel-row sel-fields">
         {selected.kind === "token" && (
           <label className="sel-field">
             <span className="sel-cap" aria-hidden>소유자</span>
@@ -142,6 +146,9 @@ export function SelectedControls({ me, enabled, players, selected, characters = 
             </Select>
           </label>
         )}
+        </div>
+      )}
+      <div className="sel-row sel-actions">
         {selected.kind === "token" && selected.characterId && (
           <>
             <button className="btn" data-testid="open-linked-sheet" disabled={!onOpenSheet} onClick={() => onOpenSheet?.(selected.characterId!)}>시트 열기</button>
@@ -165,6 +172,7 @@ export function SelectedControls({ me, enabled, players, selected, characters = 
           <ImageUploadButton me={me} label="이미지" current={selected.image} disabled={!enabled} onUploaded={(image) => send({ type: "object.update", data: { id: selected.id, image } })} />
           {selected.image && <button className="btn" disabled={!enabled} onClick={() => send({ type: "object.update", data: { id: selected.id, image: null } })}>이미지 떼기</button>}
           <button className="btn danger" disabled={!enabled} title="지워도 Ctrl+Z 로 되돌릴 수 있어요" onClick={() => (send({ type: "object.remove", data: { id: selected.id } }), onDeselect())}>삭제</button>
+      </div>
     </>
   );
 }
