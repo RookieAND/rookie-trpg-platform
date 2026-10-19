@@ -343,10 +343,10 @@ describe("GM이 참가자를 내보낸다", () => {
   it("관전자를 내보내면 알림을 받고 목록에서 사라지며, 차단되어 다시 들어올 수 없다", () => {
     const w = world();
     must(w.room.handle(kp, cmd("session.start", {})));
-    expect(w.room.handle(pl1, cmd("member.remove", { userId: "sp1" }))).toMatchObject({ ok: false, code: "forbidden" });
-    expect(w.room.handle(kp, cmd("member.remove", { userId: "kp1" }))).toMatchObject({ ok: false, code: "forbidden" });
-    expect(w.room.handle(kp, cmd("member.remove", { userId: "nobody" }))).toMatchObject({ ok: false, code: "not_found" });
-    const out = must(w.room.handle(kp, cmd("member.remove", { userId: "sp1" })));
+    expect(w.room.handle(pl1, cmd("member.remove", { userId: "sp1", ban: true }))).toMatchObject({ ok: false, code: "forbidden" });
+    expect(w.room.handle(kp, cmd("member.remove", { userId: "kp1", ban: true }))).toMatchObject({ ok: false, code: "forbidden" });
+    expect(w.room.handle(kp, cmd("member.remove", { userId: "nobody", ban: true }))).toMatchObject({ ok: false, code: "not_found" });
+    const out = must(w.room.handle(kp, cmd("member.remove", { userId: "sp1", ban: true })));
     const removed = out.filter((o) => o.event.type === "member.removed");
     expect(removed).toHaveLength(1);
     expect(removed[0]!.audience.users).toEqual(["sp1"]);
@@ -365,9 +365,9 @@ describe("GM이 참가자를 내보낸다", () => {
   it("PL도 내보내고 차단할 수 있다. 자기 자신과 GM은 안 된다", () => {
     const w = world();
     must(w.room.handle(kp, cmd("session.start", {})));
-    expect(w.room.handle(pl1, cmd("member.remove", { userId: "pl2" }))).toMatchObject({ ok: false, code: "forbidden" });
-    expect(w.room.handle(kp, cmd("member.remove", { userId: "kp1" }))).toMatchObject({ ok: false, code: "forbidden" });
-    const out = must(w.room.handle(kp, cmd("member.remove", { userId: "pl2" })));
+    expect(w.room.handle(pl1, cmd("member.remove", { userId: "pl2", ban: true }))).toMatchObject({ ok: false, code: "forbidden" });
+    expect(w.room.handle(kp, cmd("member.remove", { userId: "kp1", ban: true }))).toMatchObject({ ok: false, code: "forbidden" });
+    const out = must(w.room.handle(kp, cmd("member.remove", { userId: "pl2", ban: true })));
     expect(out.some((o) => o.event.type === "member.removed" && o.audience.users?.[0] === "pl2")).toBe(true);
     expect(w.room.roleOf("pl2")).toBeNull();
     expect(w.room.isBanned("pl2")).toBe(true);
@@ -396,7 +396,7 @@ describe("GM이 참가자를 내보낸다", () => {
   it("차단은 GM만 풀 수 있고, 저장하고 다시 열어도 남는다", () => {
     const w = world();
     must(w.room.handle(kp, cmd("session.start", {})));
-    must(w.room.handle(kp, cmd("member.remove", { userId: "pl2" })));
+    must(w.room.handle(kp, cmd("member.remove", { userId: "pl2", ban: true })));
     expect(w.room.handle(pl1, cmd("member.unban", { userId: "pl2" }))).toMatchObject({ ok: false, code: "forbidden" });
     expect(w.room.handle(kp, cmd("member.unban", { userId: "nobody" }))).toMatchObject({ ok: false, code: "not_found" });
     const back = Room.fromData(JSON.parse(JSON.stringify(w.room.toData())));

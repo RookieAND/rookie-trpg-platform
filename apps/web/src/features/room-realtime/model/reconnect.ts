@@ -1,5 +1,8 @@
-/** 다시 붙어도 소용없는 거절 코드: 인증 실패, 접근 거절, 없는 룸, 정원 초과, GM이 내보냄(4410) 등. 4408은 일시적이라 제외한다. */
-export const isFinalClose = (code: number) => code >= 4401 && code <= 4410 && code !== 4408;
+/**
+ * 다시 붙어도 소용없는 거절 코드: 인증 실패, 접근 거절, 없는 룸, 정원 초과, GM이 내보냄(4410)·차단(4411),
+ * 같은 계정(4412)이나 같은 네트워크(4413)의 연결이 너무 많음 등. 4408은 일시적이라 제외한다.
+ */
+export const isFinalClose = (code: number) => code >= 4401 && code <= 4413 && code !== 4408;
 
 /** 연결이 닫힌 뒤 할 일. */
 export type CloseAction = "stop" | "retry" | "refresh";

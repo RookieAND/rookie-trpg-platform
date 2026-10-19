@@ -81,7 +81,8 @@ export function useRoom({ roomId, user, name, token: initialToken, invite, refre
 
     const connect = () => {
       setConnection("connecting");
-      const qs = new URLSearchParams(token ? { room: roomId, token } : { room: roomId, user, name });
+      // 로그인 토큰은 주소에 싣지 않고, 연결되자마자 첫 메시지(auth)로 보낸다(주소는 프록시·접속 기록에 남는다).
+      const qs = new URLSearchParams(token ? { room: roomId } : { room: roomId, user, name });
       if (invite) qs.set("invite", invite);
       const ws = new WebSocket(`${secureRealtimeUrl(REALTIME_URL, typeof location === "undefined" ? undefined : location.protocol)}?${qs}`);
       wsRef.current = ws;
@@ -95,6 +96,7 @@ export function useRoom({ roomId, user, name, token: initialToken, invite, refre
         if (wasDown.current && everOpened.current) setReconnected((n) => n + 1);
         everOpened.current = true;
         wasDown.current = false;
+        if (token) ws.send(JSON.stringify({ type: "auth", data: { token } }));
         ws.send(JSON.stringify({ type: "join", data: lastSeq.current > 0 ? { lastSeq: lastSeq.current } : {} }));
       };
       ws.onmessage = (e) => dispatch(JSON.parse(e.data as string) as ServerMessage);

@@ -56,7 +56,10 @@ const REJECTED: Record<number, string> = {
   4403: "이 룸에 들어갈 수 없어요. 초대 링크가 없거나 만료됐어요. GM에게 새 링크를 받아 주세요.",
   4404: "룸을 찾을 수 없어요. 룸을 만든 사람이 지웠을 수 있어요.",
   4409: "룸 인원이 가득 찼어요.",
-  4410: "GM이 관전에서 내보냈어요. 다시 들어오려면 GM에게 관전 링크를 받아 주세요.",
+  4410: "GM이 룸에서 내보냈어요. 다시 들어오려면 GM에게 새 링크를 받아 주세요.",
+  4411: "GM이 이 룸에서 내보내고 차단했어요. 다시 들어올 수 없어요.",
+  4412: "같은 계정으로 연 화면이 너무 많아서 이 화면을 닫았어요. 다른 탭을 닫고 다시 열어 주세요.",
+  4413: "이 네트워크에서 연결이 너무 많아요. 잠시 뒤에 다시 열어 주세요.",
 };
 
 export function RoomView({ roomId, invite }: { roomId: string; invite?: string }) {
@@ -179,7 +182,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     addChatHistory(page.messages);
     return page.hasMore;
   };
-  const logVersion = `${state.rolls.length}:${state.chat.at(-1)?.seq ?? 0}:${state.sessionStatus}:${state.sessionNumber}:${state.activeSceneId}:${state.initiative?.round ?? 0}:${state.flow?.current ?? ""}:${handoutList.length}`;
+  const logVersion = `${state.rolls.length}:${state.chat.at(-1)?.seq ?? 0}:${state.sessionStatus}:${state.sessionNumber}:${state.activeSceneId}:${state.initiative?.round ?? 0}:${state.flow?.current ?? ""}:${handoutList.length}:${state.historyPurges}`;
   const myTurn = isMyTurn(state.initiative, characters, me.userId);
   // 전투 중 지금 차례인 PL의 토큰들(칸 → 캐릭터 주인 → 그 PL의 토큰). 연결이 없으면 빈 목록이라 강조하지 않는다.
   const turnTokenIds = useMemo(() => findTurnTokens(state.initiative, characters, objects), [state.initiative, characters, objects]);
@@ -315,7 +318,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
       >
         보드로 건너뛰기
       </a>
-      <RoomHeader onShortcutHelp={shortcutHelp.show} me={me} roomId={roomId} roomName={roomName ?? ""} onRenamed={(n) => { setRoomName(n); notices.notify("룸 이름을 바꿨어요."); }} notify={notices.notify} onImported={onImported} role={role} status={state.sessionStatus} kpAway={kpAway} sessionNumber={state.sessionNumber} connection={connection} members={state.members} effects={state.effects} madnessTable={state.madnessTable} endingDefaults={endingDefaults} effectsEnabled={fx.enabled} onToggleEffects={fx.toggle} soundControl={<SoundControl prefs={sound.prefs} onChange={sound.update} unlocked={audio.unlocked} onUnlock={audio.unlock} playing={audio.playing} />} soundHint={<SoundBlockedHint blocked={audio.blocked} onUnlock={audio.unlock} />} send={send} />
+      <RoomHeader onShortcutHelp={shortcutHelp.show} me={me} roomId={roomId} roomName={roomName ?? ""} onRenamed={(n) => { setRoomName(n); notices.notify("룸 이름을 바꿨어요."); }} notify={notices.notify} onImported={onImported} role={role} status={state.sessionStatus} kpAway={kpAway} sessionNumber={state.sessionNumber} connection={connection} members={state.members} banned={state.banned} chatSettings={state.chatSettings} effects={state.effects} madnessTable={state.madnessTable} endingDefaults={endingDefaults} effectsEnabled={fx.enabled} onToggleEffects={fx.toggle} soundControl={<SoundControl prefs={sound.prefs} onChange={sound.update} unlocked={audio.unlocked} onUnlock={audio.unlock} playing={audio.playing} />} soundHint={<SoundBlockedHint blocked={audio.blocked} onUnlock={audio.unlock} />} send={send} />
 
       <Toasts toasts={notices.toasts} onDismiss={notices.dismiss} />
       <EndSummaryCard summary={state.lastEnd} />

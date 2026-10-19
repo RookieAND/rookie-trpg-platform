@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import type { ClientCommand, Member } from "@coc-vtt/shared";
+import type { BannedUser, ClientCommand, Member } from "@coc-vtt/shared";
 import { createSpectatorInvite, getRoom, regenerateInvite, revokeSpectatorInvite, type Invite } from "@/entities/room";
 import type { Identity } from "@/entities/user";
 import { Dialog, useAsk } from "@/shared/ui";
@@ -15,9 +15,9 @@ const EXPIRY: Array<{ label: string; minutes: number | null }> = [
 /**
  * GM이 초대 링크를 보고 복사한다. 창을 여는 것만으로는 링크가 바뀌지 않는다.
  * 만료·인원을 정해 "새 링크 만들기"를 누를 때만 새 코드가 발급되고, 이전 링크는 못 쓰게 된다.
- * 읽기만 하는 "관전 링크"도 따로 만들 수 있고, 들어와 있는 관전자를 여기서 내보낸다.
+ * 읽기만 하는 "관전 링크"도 따로 만들 수 있고, 들어와 있는 관전자와 PL을 여기서 내보내고 차단한다(차단은 여기서 푼다).
  */
-export function InviteButton({ me, roomId, members = [], send }: { me: Identity; roomId: string; members?: readonly Member[]; send?: (c: ClientCommand) => unknown }) {
+export function InviteButton({ me, roomId, members = [], banned = [], send }: { me: Identity; roomId: string; members?: readonly Member[]; banned?: readonly BannedUser[]; send?: (c: ClientCommand) => unknown }) {
   const ask = useAsk();
   const [invite, setInvite] = useState<Invite | null>(null);
   const [spec, setSpec] = useState<Invite | null>(null);
@@ -82,9 +82,10 @@ export function InviteButton({ me, roomId, members = [], send }: { me: Identity;
 
   const kick = async (m: Member) => {
     if (!send) return;
-    if (!(await ask.confirm({ title: `${m.name} 님을 내보낼까요?`, message: "관전에서 나가요. 관전 링크가 켜져 있으면 다시 들어올 수 있어요.", confirmLabel: "내보내기", danger: true }))) return;
-    send({ type: "member.remove", data: { userId: m.userId } });
+    if (!(await ask.confirm({ title: `${m.name} 님을 내보낼까요?`, message: "룸에서 나가요. 같은 링크로 다시 들어올 수 없어요. 아래 ‘차단한 사람’에서 풀 수 있어요.", confirmLabel: "내보내기", danger: true }))) return;
+    send({ type: "member.remove", data: { userId: m.userId, ban: true } });
   };
+  const unban = (b: BannedUser) => send?.({ type: "member.unban", data: { userId: b.userId } });
 
   const linkOf = (code: string) => `${window.location.origin}/join/${roomId}?invite=${code}`;
   const copy = async (kind: "pl" | "spectator", text: string) => {
@@ -96,6 +97,7 @@ export function InviteButton({ me, roomId, members = [], send }: { me: Identity;
     }
   };
   const spectators = members.filter((m) => m.role === "spectator");
+  const players = members.filter((m) => m.role === "pl");
   const until = (i: Invite) => (i.expiresAt ? `${new Date(i.expiresAt).toLocaleString("ko-KR")}까지` : "만료 없음");
 
   return (
@@ -178,6 +180,33 @@ export function InviteButton({ me, roomId, members = [], send }: { me: Identity;
                     </li>
                   ))}
                 </ul>
+              )}
+
+              <div className="menu-label" style={{ padding: "6px 0 0" }}>들어와 있는 PL {players.length}명</div>
+              {players.length === 0 ? (
+                <span style={{ color: "var(--muted)", fontSize: 12.5 }}>아직 없어요.</span>
+              ) : (
+                <ul className="spec-list" data-testid="player-list">
+                  {players.map((m) => (
+                    <li key={m.userId} data-testid={`player-${m.name}`}>
+                      <span>{m.name}{m.online ? "" : " (오프라인)"}</span>
+                      <button className="btn sm danger" data-testid={`player-remove-${m.name}`} aria-label={`${m.name} 내보내기·차단`} disabled={!send} onClick={() => kick(m)}>내보내기·차단</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {banned.length > 0 && (
+                <>
+                  <div className="menu-label" style={{ padding: "6px 0 0" }}>차단한 사람 {banned.length}명</div>
+                  <ul className="spec-list" data-testid="banned-list">
+                    {banned.map((b) => (
+                      <li key={b.userId} data-testid={`banned-${b.name}`}>
+                        <span>{b.name}</span>
+                        <button className="btn sm" data-testid={`unban-${b.name}`} aria-label={`${b.name} 차단 풀기`} disabled={!send} onClick={() => unban(b)}>차단 풀기</button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
             </>
           )}

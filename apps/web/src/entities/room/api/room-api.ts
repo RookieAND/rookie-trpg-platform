@@ -91,3 +91,7 @@ export const getSessionLog = (me: Caller, id: string, q: SessionLogQuery = {}) =
   const qs = p.toString();
   return http<SessionLogPage>(me, "GET", `/rooms/${encodeURIComponent(id)}/log${qs ? `?${qs}` : ""}`);
 };
+
+/** 룸 주인 전용. 대화(귓속말 포함)나 세션 기록을 비운다. 되돌릴 수 없다. */
+export const purgeRoomHistory = (me: Caller, id: string, scope: "chat" | "log" | "all") =>
+  http<{ ok: true; chat: boolean; log: boolean }>(me, "DELETE", `/rooms/${encodeURIComponent(id)}/history?scope=${scope}`);

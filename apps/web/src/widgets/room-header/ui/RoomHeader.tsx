@@ -1,7 +1,7 @@
 "use client";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import type { ClientCommand, EffectSettings, Member, Role } from "@coc-vtt/shared";
+import type { BannedUser, ChatSettings, ClientCommand, EffectSettings, Member, Role } from "@coc-vtt/shared";
 import { ROLE_LABEL, SESSION_STATUS_LABEL, type SessionStatus } from "@/entities/room";
 import type { Identity } from "@/entities/user";
 import { EffectToggle } from "@/features/effect-preference";
@@ -9,6 +9,7 @@ import { DiscordButton } from "@/features/discord-notify";
 import { InviteButton } from "@/features/invite-room";
 import { EffectSettingsButton } from "@/features/manage-effects";
 import { MadnessTableButton } from "@/features/manage-madness";
+import { RoomSafetyButton } from "@/features/room-safety";
 import type { Connection } from "@/features/room-realtime";
 import { useScenarioPrep } from "@/features/scenario-prep";
 import { SessionControls, type EndingDefaults } from "@/features/session-control";
@@ -27,6 +28,8 @@ export function RoomHeader({
   sessionNumber,
   connection,
   members,
+  banned = [],
+  chatSettings,
   effects,
   madnessTable,
   endingDefaults,
@@ -50,6 +53,10 @@ export function RoomHeader({
   sessionNumber: number;
   connection: Connection;
   members: Member[];
+  /** 차단한 사람(GM만 받는다) */
+  banned?: BannedUser[];
+  /** 룸 설정(PL 수치 직접 수정 허용 여부를 보여 준다) */
+  chatSettings?: ChatSettings;
   effects: EffectSettings;
   madnessTable: string[];
   /** 엔딩 비트에 있을 때 종료 창에 미리 채울 값 */
@@ -92,7 +99,7 @@ export function RoomHeader({
         </span>
       )}
       <span className="sep" />
-      {isKp && <InviteButton me={me} roomId={roomId} members={members} send={send} />}
+      {isKp && <InviteButton me={me} roomId={roomId} members={members} banned={banned} send={send} />}
       {isKp && prep.node}
       <Menu label="설정" title="효과·소리와 룸 설정" testId="settings-menu">
         {(close) => (
@@ -105,6 +112,7 @@ export function RoomHeader({
             {isKp && <EffectSettingsButton effects={effects} send={send} />}
             {isKp && <MadnessTableButton entries={madnessTable} send={send} />}
             {isKp && <DiscordButton me={me} roomId={roomId} />}
+            {isKp && <RoomSafetyButton me={me} roomId={roomId} settings={chatSettings} send={send} />}
             {isKp && <MenuLabel>준비 (GM)</MenuLabel>}
             {isKp && prep.items(close)}
           </>
