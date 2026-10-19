@@ -16,5 +16,15 @@
     "build:web": "pnpm --filter @coc-vtt/web build",
     "cleanup:images": "pnpm --filter @coc-vtt/api cleanup:images",
     "smoke:prod": "node scripts/smoke-prod.mjs"
+  },
+  "pnpm": {
+    "overrides": {
+      "ws@^8": "^8.21.0",
+      "qs@^6": "^6.16.1",
+      "body-parser@^1": "^1.20.6",
+      "multer@^2": "^2.3.0",
+      "file-type@^20": "^21.3.2",
+      "postcss@^8": "^8.5.23"
+    }
   }
 }
