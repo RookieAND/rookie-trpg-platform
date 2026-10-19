@@ -1253,7 +1253,7 @@ try {
   step(`판정 효과가 PL 화면에 재생됨 (${level})`);
 
   await openSettings(pl);
-  await pl.getByRole("button", { name: /^판정 효과 끄기/ }).click();
+  await pl.getByRole("button", { name: /^내 화면 효과 끄기/ }).click();
   await pl.keyboard.press("Escape");
   await pl.getByTestId("roll-effect").waitFor({ state: "detached", timeout: 4000 }).catch(() => {});
   for (let i = 0; i < 25; i++) {
