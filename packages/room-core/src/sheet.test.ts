@@ -52,11 +52,14 @@ const fixed = (...values: number[]): Rng => {
 describe("캐릭터 등록", () => {
   it("주인과 GM만 시트를 받고, 다른 PL과 관전자는 못 받는다", () => {
     const room = room0();
-    const { outs } = add(room, seo);
+    const { outs: all } = add(room, seo);
+    // 파티 상태판(party.status)은 PL과 GM 모두에게 가므로 시트 이벤트만 본다.
+    const outs = all.filter((o) => o.event.type !== "party.status");
     expect(outs.filter((o) => inAudience(o.audience, seo))).toHaveLength(1);
     expect(outs.filter((o) => inAudience(o.audience, kp))).toHaveLength(1);
     expect(outs.filter((o) => inAudience(o.audience, han))).toHaveLength(0);
     expect(outs.filter((o) => inAudience(o.audience, spec))).toHaveLength(0);
+    expect(all.filter((o) => o.event.type === "party.status" && inAudience(o.audience, han))).toHaveLength(1);
   });
 
   it("현재 HP·MP·SAN은 특성치에서 계산한 값으로 시작한다", () => {
@@ -192,9 +195,14 @@ describe("sheet.patch", () => {
   it("변경은 주인과 GM에게만 간다", () => {
     const room = room0();
     const { c } = add(room, seo);
-    const out = must(patch(room, kp, c.id, [{ path: "hp", delta: -1 }]));
+    const all = must(patch(room, kp, c.id, [{ path: "hp", delta: -1 }]));
+    const out = all.filter((o) => o.event.type === "character.updated");
     expect(out.filter((o) => inAudience(o.audience, seo))).toHaveLength(1);
     expect(out.filter((o) => inAudience(o.audience, han))).toHaveLength(0);
+    // 상태 변화는 다른 PL에게도 알린다(대화·기록·파티 상태판).
+    const chat = all.find((o) => o.event.type === "chat.posted" && inAudience(o.audience, han));
+    expect(chat && chat.event.type === "chat.posted" ? chat.event.data.text : "").toMatch(/HP \d+ → \d+ \(-1\)/);
+    expect(inAudience(all.find((o) => o.event.type === "party.status")!.audience, spec)).toBe(false);
   });
 
   it("일시정지 중에는 막히고, 초당 10회를 넘기면 제한된다", () => {

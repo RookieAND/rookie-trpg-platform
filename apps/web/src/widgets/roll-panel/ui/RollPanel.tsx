@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { formatRollLog, josa, luckBlockReason, luckNeeded, parseCommand, pushBlockReason, type Character, type RollLogEntry, type RollRuleInput } from "@coc-vtt/shared";
 import { MacroBar, useRollMacros } from "@/features/roll-macros";
+import { completeText, looksLikeDice, parseSkillQuery, resolveSkill, skillOptions, suggestSkills, type SkillDifficulty } from "@/features/skill-autocomplete";
 import type { Caller } from "@/shared/api";
 import { downloadText } from "@/shared/lib";
 import { Hint } from "@/shared/ui";
@@ -24,6 +25,8 @@ interface Props {
   error: string | null;
   /** false를 돌려주면 보내지 못한 것이라 식을 지우지 않는다. */
   onRoll: (expr: string, secret: boolean, characterId?: string) => unknown;
+  /** 시트의 기능·특성치 이름으로 굴린다(입력칸 자동완성). false를 돌려주면 보내지 못한 것이다. */
+  onSkillRoll?: (characterId: string, name: string, o: { secret: boolean; bonus: number; difficulty?: SkillDifficulty }) => unknown;
   onPush: (rollId: string) => void;
   onLuck: (rollId: string) => void;
   /** GM 전용. 판정 요청 */
@@ -39,7 +42,7 @@ interface Props {
   onApplyDamage?: (rollId: string, characterId: string, armor: number) => unknown;
 }
 
-export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disabled, readOnly = false, disabledReason, error, onRoll, onPush, onLuck, players, onAsk, onGroup, onOpposed, damageApplied = {}, onApplyDamage }: Props) {
+export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disabled, readOnly = false, disabledReason, error, onRoll, onSkillRoll, onPush, onLuck, players, onAsk, onGroup, onOpposed, damageApplied = {}, onApplyDamage }: Props) {
   const [expr, setExpr] = useState("");
   const [secret, setSecret] = useState(false);
   const [help, setHelp] = useState(false);
@@ -50,9 +53,38 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
   const usesDb = /db/i.test(expr);
   const dbTarget = characters.find((c) => c.id === dbChar) ?? characters.find((c) => c.ownerId === userId) ?? characters[0];
 
+  // 이름 자동완성: 굴릴 캐릭터는 PL이면 내 캐릭터, GM이면 고른 캐릭터.
+  const [actorId, setActorId] = useState("");
+  const [cursor, setCursor] = useState(-1);
+  const [closed, setClosed] = useState(false);
+  const actor = isKp ? (characters.find((c) => c.id === actorId) ?? characters[0]) : characters.find((c) => c.ownerId === userId);
+  const options = useMemo(() => (actor ? skillOptions(actor) : []), [actor]);
+  const query = onSkillRoll && actor ? parseSkillQuery(expr) : null;
+  const suggestions = useMemo(() => (query && !looksLikeDice(query.name) ? suggestSkills(options, query.name) : []), [options, query?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  const exact = query ? resolveSkill(options, query.name) : null;
+  // 이름을 다 적어 한 개와 정확히 같으면 목록은 접는다(Enter로 바로 굴리게)
+  const listOpen = !closed && !disabled && suggestions.length > 0 && !(suggestions.length === 1 && exact && suggestions[0] === exact);
+  const pickSuggestion = (i: number) => {
+    const o = suggestions[i];
+    if (!o) return;
+    setExpr(completeText(expr, o));
+    setCursor(-1);
+    setClosed(false);
+  };
+  const looksLikeName = Boolean(query) && !looksLikeDice(query?.name ?? "");
+
   const submit = () => {
     const text = expr.trim();
     if (!text || disabled) return;
+    if (onSkillRoll && actor && query && looksLikeName) {
+      if (!exact) return setLocalError(suggestions.length ? `'${query.name}'와 같은 이름을 목록에서 골라 주세요.` : `${actor.name}의 시트에서 '${query.name}'을(를) 찾지 못했어요.`);
+      setLocalError(null);
+      if (onSkillRoll(actor.id, exact.name, { secret: isKp && secret, bonus: query.bonus, ...(query.difficulty ? { difficulty: query.difficulty } : {}) }) !== false) {
+        setExpr("");
+        setSecret(false);
+      }
+      return;
+    }
     // 서버가 같은 규칙으로 다시 검사한다. 먼저 이 자리에서 알려 주면 보내기 전에 고칠 수 있다.
     const parsed = parseCommand(text);
     if (!parsed.ok) return setLocalError(parsed.error);
@@ -147,19 +179,54 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
         {isKp && onAsk && <AskForm players={players ?? []} disabled={disabled} onAsk={onAsk} {...(onGroup ? { onGroup } : {})} />}
         {onOpposed && <OpposedForm isKp={isKp} disabled={disabled} userId={userId} characters={characters} players={players ?? []} onOpposed={onOpposed} />}
         <div className="row">
-          <input
-            className="input mono"
-            aria-label="굴림 식"
-            aria-describedby={disabled && disabledReason ? "roll-why" : undefined}
-            placeholder="CC<=60, 1d100, (2d6+6)*5, 1d10+db"
-            value={expr}
-            disabled={disabled}
-            onChange={(e) => { setExpr(e.target.value); if (localError) setLocalError(null); }}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-          />
+          <div className="skill-ac">
+            <input
+              className="input mono"
+              role="combobox"
+              aria-label="굴림 식"
+              aria-autocomplete="list"
+              aria-expanded={listOpen}
+              aria-controls="skill-ac-list"
+              aria-activedescendant={listOpen && cursor >= 0 ? `skill-ac-${cursor}` : undefined}
+              aria-describedby={disabled && disabledReason ? "roll-why" : undefined}
+              placeholder="CC<=60, 1d100, 관찰력, 관찰력 어려움 +1"
+              value={expr}
+              disabled={disabled}
+              autoComplete="off"
+              onChange={(e) => { setExpr(e.target.value); setCursor(-1); setClosed(false); if (localError) setLocalError(null); }}
+              onBlur={() => setClosed(true)}
+              onFocus={() => setClosed(false)}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return; // 한글 조합 중 Enter는 글자를 끝맺는 키다
+                if (listOpen && e.key === "ArrowDown") { e.preventDefault(); setCursor((c) => (c + 1) % suggestions.length); return; }
+                if (listOpen && e.key === "ArrowUp") { e.preventDefault(); setCursor((c) => (c <= 0 ? suggestions.length - 1 : c - 1)); return; }
+                if (listOpen && e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setClosed(true); return; }
+                if (listOpen && e.key === "Tab" && !e.shiftKey) { e.preventDefault(); pickSuggestion(cursor >= 0 ? cursor : 0); return; }
+                if (e.key === "Enter") {
+                  if (listOpen && cursor >= 0) { e.preventDefault(); pickSuggestion(cursor); return; }
+                  submit();
+                }
+              }}
+            />
+            {listOpen && (
+              <ul className="skill-ac-list" id="skill-ac-list" role="listbox" aria-label="기능 이름 후보" data-testid="skill-ac-list">
+                {suggestions.map((o, i) => (
+                  <li key={o.name} id={`skill-ac-${i}`} role="option" aria-selected={i === cursor} className={i === cursor ? "on" : ""} data-testid="skill-ac-option" onMouseDown={(e) => { e.preventDefault(); pickSuggestion(i); }}>
+                    <span>{o.name}</span>
+                    <span className="mono muted">{o.value}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <button className="btn primary" onClick={submit} disabled={disabled || !expr.trim()} aria-describedby={disabled && disabledReason ? "roll-why" : undefined}>굴리기</button>
         </div>
         {disabled && disabledReason && <div className="why" id="roll-why" data-testid="roll-why">{disabledReason}</div>}
+        {isKp && onSkillRoll && characters.length > 1 && looksLikeName && (
+          <select className="input" aria-label="이름으로 굴릴 캐릭터" data-testid="skill-actor" value={actor?.id ?? ""} onChange={(e) => setActorId(e.target.value)}>
+            {characters.map((c) => <option key={c.id} value={c.id}>{c.name}(으)로 굴리기</option>)}
+          </select>
+        )}
         {usesDb && characters.length > 1 && (
           <select className="input" aria-label="db를 쓸 캐릭터" value={dbTarget?.id ?? ""} onChange={(e) => setDbChar(e.target.value)}>
             {characters.map((c) => <option key={c.id} value={c.id}>{c.name}의 피해 보너스</option>)}

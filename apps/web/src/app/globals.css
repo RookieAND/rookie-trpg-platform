@@ -890,3 +890,26 @@ input[type="checkbox"] { accent-color: var(--accent); }
   .zoom-ctl .btn, .tabs-more { min-width: 44px; opacity: .85; }
   .mk-switch { min-height: 44px; }
 }
+
+/* 굴림 식 입력칸의 기능 이름 자동완성 */
+.skill-ac { position: relative; flex: 1; min-width: 0; display: flex; }
+.skill-ac > .input { flex: 1; min-width: 0; }
+.skill-ac-list { position: absolute; left: 0; right: 0; bottom: calc(100% + 4px); z-index: 30; margin: 0; padding: 4px; list-style: none; max-height: 240px; overflow-y: auto; background: var(--panel, #121316); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+.skill-ac-list li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.skill-ac-list li.on, .skill-ac-list li:hover { background: rgba(124,134,247,.22); }
+
+/* 보드 왼쪽 위 파티 상태판 */
+.party { position: absolute; top: 10px; left: 10px; z-index: 12; display: flex; flex-direction: column; gap: 6px; max-height: calc(100% - 120px); overflow-y: auto; pointer-events: none; }
+.party-card { pointer-events: auto; width: 168px; padding: 6px 8px; border-radius: 8px; background: rgba(12,13,16,.82); border: 1px solid var(--line); backdrop-filter: blur(4px); font-size: 12px; display: grid; gap: 3px; }
+.party-card.mine { border-color: rgba(124,134,247,.6); }
+.party-name { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.party-stat { display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 6px; }
+.party-lab { color: var(--muted); font-size: 11px; }
+.party-bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,.1); overflow: hidden; }
+.party-bar i { display: block; height: 100%; background: currentColor; transition: width .25s; }
+.party-stat.hp { color: #e5646b; } .party-stat.mp { color: #5aa9f5; } .party-stat.san { color: #b58cf0; }
+.party-stat b { color: var(--text, #e8e9ec); font-weight: 600; } .party-stat small { color: var(--muted); font-weight: 400; }
+.party-luck { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; } .party-luck b { color: #e5c86b; }
+.chat-msg.status { align-self: center; text-align: center; max-width: 100%; }
+.chat-msg.status .chat-text { color: var(--muted); font-size: 12px; }
+@media (max-width: 720px) { .party { top: 6px; left: 6px; flex-direction: row; flex-wrap: wrap; max-height: none; } .party-card { width: 138px; padding: 4px 6px; } }

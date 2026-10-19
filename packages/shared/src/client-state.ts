@@ -1,4 +1,4 @@
-import { CHAT_KEEP, DEFAULT_CHAT_SETTINGS, DEFAULT_EFFECTS, DEFAULT_SCENE_ID, type BannedUser, type ChatMessage, type ChatSettings, type EffectSettings } from "./protocol";
+import { CHAT_KEEP, DEFAULT_CHAT_SETTINGS, DEFAULT_EFFECTS, DEFAULT_SCENE_ID, type BannedUser, type ChatMessage, type ChatSettings, type EffectSettings, type PartyStatus } from "./protocol";
 import { mergeChat } from "./chat";
 import type { Character } from "./sheet";
 import type {
@@ -63,6 +63,8 @@ export interface RoomState {
   /** 접속 직후의 최근 대화를 다 받았는가(옛 서버에는 없는 이벤트라 snapshot에서 false로 시작한다) */
   chatLoaded: boolean;
   chatSettings: ChatSettings;
+  /** PL 캐릭터들의 현재 상태(GM과 PL만 받는다) */
+  party: PartyStatus[];
   /** 차단한 사용자(GM만 채워진다) */
   banned: BannedUser[];
   /** 기록 비우기를 받은 횟수. 열려 있는 세션 기록 보기가 이 값이 바뀌면 다시 불러온다. */
@@ -117,6 +119,7 @@ export const initialRoomState = (roomId = ""): RoomState => ({
   chat: [],
   chatLoaded: false,
   chatSettings: DEFAULT_CHAT_SETTINGS,
+  party: [],
   banned: [],
   historyPurges: 0,
   rollAsks: [],
@@ -169,6 +172,7 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       // 대화는 이어서 둔다(다시 접속하면 같은 대화가 또 오지만 id로 걸러진다).
       chatLoaded: false,
       chatSettings: { ...DEFAULT_CHAT_SETTINGS, ...d.chatSettings },
+      party: d.party ?? [],
       banned: d.banned ?? [],
       rollAsks: [],
       characters: Object.fromEntries(d.characters.map((c) => [c.id, c])),
@@ -293,6 +297,8 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       return { ...next, chat: mergeChat(state.chat, [ev.data], CHAT_KEEP) };
     case "chat.history":
       return { ...next, chat: mergeChat(state.chat, ev.data.messages, CHAT_KEEP), chatLoaded: state.chatLoaded || ev.data.last };
+    case "party.status":
+      return { ...next, party: ev.data };
     case "settings.chat":
       return { ...next, chatSettings: ev.data };
     case "presence":

@@ -55,7 +55,7 @@ describe("SAN 체크", () => {
     // 실패(89) → 1d6 0.5 → 4
     const { room, id } = setup(seq(0.9, 0.8, 0.5));
     const outs = must(room.handle(seo, cmd("san.check", { characterId: id, loss: "0/1d6" })));
-    expect(types(outs)).toEqual(["roll.result", "character.updated"]);
+    expect(types(outs)).toEqual(["roll.result", "character.updated", "chat.posted", "party.status"]);
     const log = outs[0]!.event;
     if (log.type !== "roll.result") throw new Error();
     expect(log.data.label).toBe("윤서하 · SAN 체크");

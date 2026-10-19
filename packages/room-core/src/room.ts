@@ -75,6 +75,7 @@ import {
   queryLog,
   rollRow,
   type ChatMessage,
+  type PartyStatus,
   type ChatSettings,
   type ChatTarget,
   type LogEntry,
@@ -323,6 +324,9 @@ export class Room {
   private damageApplied = new Map<string, Set<string>>();
   /** 시트에 이어진 토큰마다 마지막으로 알린 HP 요약. 바뀌면 보이는 사람에게 토큰 갱신을 보낸다(저장하지 않는다). */
   private vitalsSig = new Map<string, string>();
+  /** 명령 직전의 PL 캐릭터 상태(변화를 알릴 때 비교한다) */
+  private partyPrev: Map<string, PartyStatus> | null = null;
+  private partySig = "";
   /** 방금 가져온 시나리오가 만든 것들(되돌리기용). 메모리에만 둔다. */
   private lastImport: ImportRecord | null = null;
   private chat: ChatMessage[] = [];
@@ -509,6 +513,7 @@ export class Room {
       members: this.memberListFor(viewer),
       rolls: this.rolls.filter((r) => !r.secret || viewer.role === "kp").map((r) => ({ ...r })),
       characters: [...this.characters.values()].filter((c) => canSeeCharacter(c, viewer)).map(cloneCharacter),
+      party: viewer.role === "spectator" ? [] : this.partyList(),
       handouts: [...this.handouts.values()].filter((h) => canSeeHandout(h, viewer)).map((h) => cloneHandout(h)),
       damageApplied: viewer.role === "kp" ? Object.fromEntries([...this.damageApplied].map(([k, v]) => [k, [...v]])) : {},
       chatSettings: { ...this.chatSettings },
@@ -541,6 +546,8 @@ export class Room {
     this.fanned = new Set();
     this.exploredChanged = false;
     this.primeVitals();
+    if (this.partySig === "") this.partySig = JSON.stringify(this.partyList());
+    this.partyPrev = this.partyMap();
     const pending = this.members.get(actor.userId)?.role === "kp" ? this.undoLog.capture(command, this.undoMaps()) : null;
     const first = this.dispatch(actor, command);
     if (first.ok && sceneBefore === this.activeSceneId) this.recordExplored();
@@ -550,7 +557,8 @@ export class Room {
     // 시트가 바뀌어 HP·상태가 달라졌으면 이어진 토큰을 새로 알린다.
     if (r.ok) {
       const vit = this.vitalsUpdates();
-      if (vit.length) r = ok(...r.out, ...vit);
+      const party = this.partyUpdates(actor);
+      if (vit.length || party.length) r = ok(...r.out, ...vit, ...party);
     }
     if (!r.ok || this.flow.current === null) return r;
     const extra = this.flowSuggest(r.out);
@@ -1591,6 +1599,59 @@ export class Room {
       if (prev === undefined || prev === sig || this.fanned.has(o.id)) continue;
       out.push(...this.fanOutObject(o, o));
     }
+    return out;
+  }
+
+  // ── 파티 상태 ───────────────────────────────────────────
+
+  /** PL이 주인인 캐릭터들의 현재 상태(NPC는 넣지 않는다) */
+  private partyList(): PartyStatus[] {
+    const out: PartyStatus[] = [];
+    for (const c of this.characters.values()) {
+      if (this.members.get(c.ownerId)?.role !== "pl") continue;
+      const lim = deriveCharacter(c).limits;
+      out.push({ characterId: c.id, ownerId: c.ownerId, name: c.name, hp: c.hp, maxHp: lim.hp, mp: c.mp, maxMp: lim.mp, san: c.san, luck: c.luck });
+    }
+    return out;
+  }
+
+  private partyMap(): Map<string, PartyStatus> {
+    return new Map(this.partyList().map((p) => [p.characterId, p]));
+  }
+
+  /** 명령 뒤에 파티 상태가 달라졌으면 목록을 다시 보내고, 바뀐 수치를 대화와 기록에 남긴다. */
+  private partyUpdates(actor: Actor): Out[] {
+    const list = this.partyList();
+    const sig = JSON.stringify(list);
+    const prev = this.partyPrev;
+    this.partyPrev = null;
+    if (sig === this.partySig) return [];
+    this.partySig = sig;
+    const out: Out[] = [];
+    const aud: Audience = { roles: ["kp", "pl"] };
+    if (prev) {
+      for (const now of list) {
+        const before = prev.get(now.characterId);
+        if (!before) continue;
+        const parts: string[] = [];
+        const diff = (label: string, a: number, b: number) => {
+          if (a !== b) parts.push(`${label} ${a} → ${b} (${b > a ? "+" : ""}${b - a})`);
+        };
+        diff("HP", before.hp, now.hp);
+        diff("MP", before.mp, now.mp);
+        diff("SAN", before.san, now.san);
+        diff("행운", before.luck, now.luck);
+        if (!parts.length) continue;
+        const text = `${now.name}: ${parts.join(", ")}`;
+        const seq = this.seq + 1;
+        const m: ChatMessage = { id: `m${seq}`, seq, session: this.sessionNumber, at: this.now(), kind: "status", userId: actor.userId, name: actor.name, role: actor.role, text };
+        out.push(this.emit({ type: "chat.posted", data: m }, aud));
+        this.chat.push(cloneChat(m));
+        if (this.chat.length > CHAT_KEEP) this.chat.splice(0, this.chat.length - CHAT_KEEP);
+        this.record("status", "stat", text);
+      }
+    }
+    out.push(this.emit({ type: "party.status", data: list.map((p) => ({ ...p })) }, aud));
     return out;
   }
 

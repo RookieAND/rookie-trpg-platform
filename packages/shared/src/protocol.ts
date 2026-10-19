@@ -198,7 +198,20 @@ export const CHAT_CHUNK_BYTES = 12_000;
  * say: 모두에게 보이는 말. roll: 대화창에서 굴린 공개 굴림. whisper: 보낸 사람과 받는 사람만 보는 귓속말.
  * secret: 대화창에서 굴린 비밀 굴림(GM과 굴린 사람만 본다).
  */
-export type ChatKind = "say" | "roll" | "whisper" | "secret";
+export type ChatKind = "say" | "roll" | "whisper" | "secret" | "status";
+
+/** 파티 상태 한 줄: PL 캐릭터의 HP·MP·SAN·행운. PL과 GM 모두에게 보인다. */
+export interface PartyStatus {
+  characterId: string;
+  ownerId: string;
+  name: string;
+  hp: number;
+  maxHp: number;
+  mp: number;
+  maxMp: number;
+  san: number;
+  luck: number;
+}
 
 export interface ChatMessage {
   id: string;
@@ -246,7 +259,7 @@ export interface BannedUser {
 /** 룸 하나에 둘 수 있는 차단 목록의 최대 길이 */
 export const MAX_BANNED = 100;
 
-export const LOG_KINDS = ["session", "scene", "handout", "beat", "combat", "roll", "damage", "sanity", "chat"] as const;
+export const LOG_KINDS = ["session", "scene", "handout", "beat", "combat", "roll", "damage", "sanity", "status", "chat"] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
 export const LOG_KIND_LABEL_KO: Record<LogKind, string> = {
   session: "세션",
@@ -257,6 +270,7 @@ export const LOG_KIND_LABEL_KO: Record<LogKind, string> = {
   roll: "굴림",
   damage: "피해",
   sanity: "SAN",
+  status: "상태",
   chat: "대화",
 };
 
@@ -437,6 +451,8 @@ export interface Snapshot {
   damageApplied?: Record<string, string[]>;
   /** 대화 설정. 옛 서버가 보낸 snapshot에는 없을 수 있다. */
   chatSettings?: ChatSettings;
+  /** PL 캐릭터들의 현재 상태(GM과 PL에게만, 관전자는 빈 배열). 옛 서버에는 없을 수 있다. */
+  party?: PartyStatus[];
   /** 차단한 사용자. GM에게만 담아 보낸다(다른 사람은 빈 배열). 옛 서버에는 없을 수 있다. */
   banned?: BannedUser[];
   /** 서버의 현재 시각(ms). 클라이언트가 시계 차이를 맞추는 데 쓴다. */
@@ -962,6 +978,8 @@ export type ServerEvent =
   | { type: "character.added"; data: Character }
   | { type: "character.updated"; data: Character }
   | { type: "character.removed"; data: { id: string } }
+  /** PL 캐릭터들의 상태가 달라졌다. 전체 목록을 보낸다(GM과 PL에게). */
+  | { type: "party.status"; data: PartyStatus[] }
   | { type: "roll.result"; data: RollLogEntry }
   /** GM이 피해를 적용했다. 시트 주인과 GM에게만 간다. */
   | { type: "damage.applied"; data: DamageApplied }

@@ -38,6 +38,7 @@ import { RollEffect } from "@/widgets/roll-effect";
 import { AskBanner, ConBanner, RollPanel } from "@/widgets/roll-panel";
 import { SceneTransition, useSceneFade } from "@/widgets/scene-transition";
 import { SanEffect } from "@/widgets/san-effect";
+import { PartyStatus } from "@/widgets/party-status";
 import { RoomHeader } from "@/widgets/room-header";
 import { StartGuide } from "./StartGuide";
 import { PlayerGuide } from "./PlayerGuide";
@@ -467,6 +468,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
           {isKp && <SceneBar me={me} scenes={scenes} tracks={state.audioLibrary} activeId={state.activeSceneId} viewId={shownSceneId} onView={setViewSceneId} enabled canActivate={!paused} send={send} notify={notices.notify} />}
           <Board grid={board.grid} viewKey={board.sceneId ? viewKey(me.userId, roomId, board.sceneId) : undefined} snapKey={board.sceneId ? snapKey(me.userId, roomId, board.sceneId) : undefined} onOpenSheet={(o) => o.characterId && (isKp || o.ownerId === me.userId) && state.characters[o.characterId] && openSheet(o.characterId)} objects={board.objects} background={board.background} me={{ userId: me.userId, role }} canInteract={canEditBoard} onMove={move} selectedId={selectedId} onSelect={setSelectedId} fog={board.fog} onPing={canPing ? ping : undefined} pings={state.pings} sceneId={board.sceneId} turnTokenIds={turnTokenIds} onDragStart={onDragStart} animate={fx.enabled} onPick={isKp && fogPicking ? (x, y) => send({ type: "fog.reveal", data: { sceneId: shownSceneId, x, y, r: fogRadius } }) : undefined} {...interactions.boardProps} {...(isKp && !board.background ? { hint: "이미지를 끌어다 놓아 배경을 정해요" } : {})} />
           {interactions.ui}
+          {role === "pl" && <PartyStatus party={state.party} meId={me.userId} />}
           {isKp && !phone && (
             <StageCues roomId={roomId} enabled={state.sessionStatus !== "PAUSED"} send={send} source={cueSource} sessionActive={active} notify={notices.notify} />
           )}
@@ -614,6 +616,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               disabledReason={rollBlockReason(role, state.sessionStatus)}
               error={null}
               onRoll={(expr, secret, characterId) => send({ type: "roll.request", data: { expr, secret, ...(characterId ? { characterId } : {}) } })}
+              onSkillRoll={(characterId, name, o) => send({ type: "roll.request", data: { secret: o.secret, skill: { characterId, name, bonus: o.bonus, ...(o.difficulty ? { difficulty: o.difficulty } : {}) } } })}
               onPush={(rollId) => send({ type: "roll.push", data: { rollId } })}
               onLuck={(rollId) => send({ type: "luck.spend", data: { rollId } })}
               players={state.members.filter((m) => m.role === "pl").map((m) => ({ userId: m.userId, name: m.name }))}

@@ -239,6 +239,15 @@ export function ChatPanel(p: ChatPanelProps) {
 function ChatLine({ m, meId }: { m: ChatMessage; meId: string }) {
   const mine = m.userId === meId;
   const gm = m.role === "kp";
+  if (m.kind === "status") {
+    return (
+      <div className="chat-msg status" data-testid="chat-msg" data-kind="status" data-mine={mine ? "1" : "0"}>
+        <div className="chat-text">
+          {m.text} <time className="muted chat-time" dateTime={new Date(m.at).toISOString()}>{chatTime(m.at)}</time>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={`chat-msg ${m.kind}${mine ? " mine" : ""}`} data-testid="chat-msg" data-kind={m.kind} data-mine={mine ? "1" : "0"}>
       <div className="chat-head">

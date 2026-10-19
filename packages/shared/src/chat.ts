@@ -126,6 +126,8 @@ export function canSeeChat(m: Pick<ChatMessage, "kind" | "userId" | "to">, viewe
     case "say":
     case "roll":
       return true;
+    case "status":
+      return viewer.role !== "spectator"; // PL 상태 변화는 GM과 PL만 본다
     case "whisper":
       // GM도 보낸 사람이나 받는 사람일 때만 본다(PL끼리의 귓속말은 보지 못한다).
       return viewer.userId === m.userId || viewer.userId === m.to?.userId;
