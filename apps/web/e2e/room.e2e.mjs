@@ -2429,6 +2429,21 @@ try {
     names = await waitNames((n) => n.indexOf("현관 복사") < n.indexOf("현관"));
     await kp2.getByTestId("scene-move-down").click();
     names = await waitNames((n) => n.indexOf("현관 복사") > n.indexOf("현관"));
+    // 순서: 탭을 끌어서 바꾸기(복사본을 원본의 왼쪽 절반에 놓으면 원본 앞, 오른쪽 절반에 놓으면 뒤)
+    {
+      const wraps = kp2.getByTestId("scene-tab-wrap");
+      const copyTab = () => wraps.filter({ hasText: "현관 복사" });
+      const origTab = () => wraps.filter({ hasText: /현관(?! 복사)/ });
+      await copyTab().dragTo(origTab(), { targetPosition: { x: 4, y: 10 } });
+      await waitNames((n) => n.indexOf("현관 복사") < n.indexOf("현관"));
+      const ob = await origTab().boundingBox();
+      await copyTab().dragTo(origTab(), { targetPosition: { x: Math.max(ob.width - 4, 6), y: 10 } });
+      await waitNames((n) => n.indexOf("현관 복사") > n.indexOf("현관"));
+      // 자기 자신 위에 놓으면 아무 일도 없음
+      const before = await sceneNames();
+      await copyTab().dragTo(copyTab(), { targetPosition: { x: 4, y: 10 } });
+      assert.deepEqual(await sceneNames(), before, "제자리에 놓으면 순서가 그대로");
+    }
     // 이름 바꾸기(화면 안 대화상자)
     const NEW = "현관홀 " + run;
     await openSceneMenu(kp2);
@@ -2443,7 +2458,7 @@ try {
     await confirmAsk(kp2);
     await waitNames((n) => !n.includes(NEW));
     assert.deepEqual(await sceneNames(), orig);
-    step("장면 복제(오브젝트까지)·앞으로/뒤로 순서·이름 변경·삭제가 화면 안 대화상자로 동작함");
+    step("장면 복제(오브젝트까지)·앞으로/뒤로·탭 끌어서 순서·이름 변경·삭제가 화면 안 대화상자로 동작함");
   }
 
   // 준비 도구 5: 룸 내보내기(백업) → 로비에서 백업으로 새 룸 만들기

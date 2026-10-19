@@ -4,6 +4,7 @@ import { josa, BGM_STOP, DEFAULT_GRID_SIZE, GRID_MAX, GRID_MIN, LIMITS, MAX_SCEN
 import type { Caller } from "@/shared/api";
 import { useMediaQuery } from "@/shared/lib";
 import { Hint, ImageUploadButton, LimitNote, Menu, MenuLabel, onTabListKeyDown, useAsk, useRoving } from "@/shared/ui";
+import { dropIndicator, dropSide, reorderTarget, type DropSide } from "../model/drag-order";
 
 /** 이 폭 이하(태블릿 세로·휴대폰)에서는 장면 막대를 한 줄로 접는다 */
 export const COMPACT_QUERY = "(max-width: 1024px)";
@@ -37,6 +38,15 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
     if (send({ type: "scene.duplicate", data: { id } }) === false) copyFrom.current = null;
   };
   const move = (to: number) => viewing && send({ type: "scene.reorder", data: { id: viewing.id, index: to } });
+
+  // 탭 끌어서 순서 바꾸기(넓은 화면). 좁은 화면은 목록 선택이라 메뉴의 "앞으로·뒤로 옮기기"를 쓴다.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overTab, setOverTab] = useState<{ index: number; side: DropSide } | null>(null);
+  const canReorder = enabled && scenes.length > 1;
+  const endDrag = () => {
+    setDragId(null);
+    setOverTab(null);
+  };
 
   const create = () => {
     if (!name.trim()) return;
@@ -134,13 +144,47 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
       {ask.node}
       <div className="scene-row">
         <div className="scene-tabs" role="tablist" aria-label="장면" ref={tabStops.ref} onFocus={tabStops.onFocus} onKeyDown={onTabListKeyDown}>
-          {scenes.map((s) => (
-            <button key={s.id} role="tab" aria-selected={s.id === viewId} className="scene-tab" onClick={() => onView(s.id)}>
-              {s.id === activeId && <span aria-label="진행 중" title="지금 PL에게 보이는 장면" style={{ color: "var(--ok)" }}>● </span>}
-              {s.start && <span aria-label="시작 장면" title="세션을 시작하면 이 장면이 열려요">▶ </span>}
-              {s.name}
-            </button>
-          ))}
+          {scenes.map((s, i) => {
+            const ind = dragId ? dropIndicator(scenes.findIndex((x) => x.id === dragId), overTab?.index ?? -1, overTab?.side ?? "before", scenes.length) : null;
+            const mark = ind && ind.index === i ? ` drop-${ind.side}` : "";
+            return (
+              // 버튼은 드래그가 안 되는 브라우저가 있어서(파이어폭스) 바깥 칸이 끌려 간다. 키보드는 ◀ ▶ 단추로 같은 일을 한다.
+              <span
+                key={s.id}
+                className={`scene-tab-wrap${dragId === s.id ? " dragging" : ""}${mark}`}
+                data-testid="scene-tab-wrap"
+                draggable={canReorder}
+                title={canReorder ? "끌어서 순서를 바꿔요" : undefined}
+                onDragStart={(e) => {
+                  if (!canReorder) return;
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", s.id); // 파이어폭스는 데이터가 있어야 끌기가 시작된다
+                  setDragId(s.id);
+                }}
+                onDragOver={(e) => {
+                  if (!dragId) return;
+                  e.preventDefault(); // 여기에 놓을 수 있다는 표시
+                  e.dataTransfer.dropEffect = "move";
+                  const side = dropSide(e.clientX, e.currentTarget.getBoundingClientRect());
+                  setOverTab((o) => (o && o.index === i && o.side === side ? o : { index: i, side }));
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const from = scenes.findIndex((x) => x.id === dragId);
+                  const to = reorderTarget(from, i, dropSide(e.clientX, e.currentTarget.getBoundingClientRect()), scenes.length);
+                  if (dragId && to !== null) send({ type: "scene.reorder", data: { id: dragId, index: to } });
+                  endDrag();
+                }}
+                onDragEnd={endDrag}
+              >
+                <button role="tab" aria-selected={s.id === viewId} className="scene-tab" onClick={() => onView(s.id)}>
+                  {s.id === activeId && <span aria-label="진행 중" title="지금 PL에게 보이는 장면" style={{ color: "var(--ok)" }}>● </span>}
+                  {s.start && <span aria-label="시작 장면" title="세션을 시작하면 이 장면이 열려요">▶ </span>}
+                  {s.name}
+                </button>
+              </span>
+            );
+          })}
         </div>
         {legend}
         <span className="scene-new">

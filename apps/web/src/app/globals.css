@@ -110,6 +110,13 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .scene-tabs::-webkit-scrollbar { display: none; }
 .scene-tab { height: 26px; flex: none; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; padding: 0 9px; border-radius: 5px; border: 0; background: none; color: var(--muted); font-size: 12.5px; font-weight: 500; }
 .scene-tab:hover { background: var(--hover); color: var(--text); }
+/* 탭을 끌어 순서 바꾸기: 끌리는 탭은 흐리게, 놓을 자리는 세로 줄로 보여 준다 */
+.scene-tab-wrap { position: relative; display: flex; flex: none; max-width: 220px; }
+.scene-tab-wrap[draggable="true"] { cursor: grab; }
+.scene-tab-wrap.dragging { opacity: 0.45; }
+.scene-tab-wrap.drop-before::before, .scene-tab-wrap.drop-after::after { content: ""; position: absolute; top: 2px; bottom: 2px; width: 3px; border-radius: 2px; background: var(--accent, #6b7bff); pointer-events: none; }
+.scene-tab-wrap.drop-before::before { left: -2px; }
+.scene-tab-wrap.drop-after::after { right: -2px; }
 .scene-tab[aria-selected="true"] { background: var(--active); color: var(--text); }
 .scene-fade { position: absolute; inset: 0; z-index: 4; background: #000; pointer-events: none; opacity: 0; animation: scene-fade-out var(--fade-out, .4s) ease-in forwards, scene-fade-in var(--fade-in, .7s) ease-out var(--fade-out, .4s) both; }
 @keyframes scene-fade-out { from { opacity: 0; } to { opacity: 1; } }
