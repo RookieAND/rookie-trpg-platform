@@ -4,7 +4,7 @@ import type { Role } from "@coc-vtt/shared";
 import { errFields, log } from "../../platform/log";
 import { decideJoin, type JoinDecision } from "../domain/join-policy";
 import type { DiscordEvents } from "../domain/discord";
-import type { InviteConfig, RoomMeta, RoomRepository } from "../domain/room.repository";
+import { DEFAULT_MAX_SPECTATORS, type InviteConfig, type InviteKind, type RoomMeta, type RoomRepository } from "../domain/room.repository";
 
 export interface LoadedRoom {
   meta: RoomMeta;
@@ -165,7 +165,7 @@ export class RoomRegistry {
     for (const p of this.loaded.values()) {
       const live = await p;
       if (!live || ids.has(live.meta.id)) continue;
-      const members = live.room.snapshot({ userId: "", role: "spectator" }).members;
+      const members = live.room.listMembers();
       if (live.meta.ownerId === userId || members.some((m) => m.userId === userId)) ids.add(live.meta.id);
     }
     const out: Array<{ meta: RoomMeta; status: string; sessionNumber: number; online: number; role: Role | null }> = [];
@@ -179,28 +179,40 @@ export class RoomRegistry {
   }
 
   describe(entry: LoadedRoom, userId: string) {
-    const snap = entry.room.snapshot({ userId: "", role: "spectator" });
-    const me = snap.members.find((m) => m.userId === userId);
+    const snap = entry.room.snapshot({ userId: "", role: "pl" });
+    const all = entry.room.listMembers();
+    const me = all.find((m) => m.userId === userId);
     return {
       status: snap.sessionStatus,
       sessionNumber: snap.sessionNumber,
-      online: snap.members.filter((m) => m.online).length,
+      // 관전자 수는 GM만 안다. 접속자 수에는 넣지 않는다.
+      online: all.filter((m) => m.online && m.role !== "spectator").length,
       role: entry.meta.ownerId === userId ? ("kp" as Role) : (me?.role ?? null),
     };
   }
 
   /** 이 사용자가 이 룸에 어떤 역할로 들어올 수 있는지 정한다. */
   decideJoin(entry: LoadedRoom, userId: string, requested: Role, inviteCode: string | null): JoinDecision {
-    const members = entry.room.snapshot({ userId: "", role: "spectator" }).members;
+    const members = entry.room.listMembers();
     return decideJoin(entry.meta, members, userId, requested, inviteCode, this.now());
   }
 
-  async regenerateInvite(id: string, requesterId: string, opts: { expiresInMinutes?: number | null; maxMembers?: number }) {
+  async regenerateInvite(id: string, requesterId: string, opts: { kind?: InviteKind; revoke?: boolean; expiresInMinutes?: number | null; maxMembers?: number }) {
     const entry = await this.get(id);
     if (!entry) return { ok: false as const, reason: "not_found" as const };
     if (entry.meta.ownerId !== requesterId) return { ok: false as const, reason: "forbidden" as const };
     const expires =
       opts.expiresInMinutes === undefined || opts.expiresInMinutes === null ? null : opts.expiresInMinutes * 60_000;
+    if (opts.kind === "spectator") {
+      if (opts.revoke) {
+        delete entry.meta.spectatorInvite;
+        await this.save(entry);
+        return { ok: true as const, invite: null };
+      }
+      entry.meta.spectatorInvite = this.newInvite(expires, opts.maxMembers ?? entry.meta.spectatorInvite?.maxMembers ?? DEFAULT_MAX_SPECTATORS);
+      await this.save(entry);
+      return { ok: true as const, invite: entry.meta.spectatorInvite };
+    }
     entry.meta.invite = this.newInvite(expires, opts.maxMembers ?? entry.meta.invite.maxMembers);
     await this.save(entry);
     return { ok: true as const, invite: entry.meta.invite };

@@ -36,6 +36,8 @@ export const CLOSE = {
   notFound: 4404,
   joinTimeout: 4408,
   full: 4409,
+  /** GM이 관전자를 내보냈다. 다시 붙으려 하지 않는다. */
+  removed: 4410,
   /** 속도 제한을 계속 넘겨 끊긴 경우. 1008(정책 위반)을 쓰므로 클라이언트가 천천히 다시 붙을 수 있다. */
   rateLimited: 1008,
   /** 서버가 내려가는 중(배포·재시작). 1012는 "service restart"라 클라이언트가 곧 다시 붙는다. */
@@ -340,6 +342,7 @@ export class RoomHub {
     const sessionChange = parsed.data.command.type.startsWith("session.");
     if (result.ok) {
       this.deliver(roomId, result.out);
+      this.closeRemoved(roomId, result.out);
       this.notifier?.publish(entry.meta, result.out);
       // 세션이 바뀌는 순간은 바로 저장한다. 나머지는 잠깐 모아서 저장한다.
       this.registry.markChanged(entry, sessionChange);
@@ -356,6 +359,16 @@ export class RoomHub {
   /** 지금 붙어 있는 ws 연결 수(/health용) */
   connectionCount() {
     return this.alive.size;
+  }
+
+  /** member.removed를 받은 사람의 연결을 모두 닫는다(알림이 먼저 나간 뒤에 닫힌다). */
+  private closeRemoved(roomId: string, outs: Out[]) {
+    for (const out of outs) {
+      if (out.event.type !== "member.removed") continue;
+      for (const uid of out.audience.users ?? []) {
+        for (const c of [...(this.conns.get(roomId) ?? [])]) if (c.actor.userId === uid) c.ws.close(CLOSE.removed, "removed");
+      }
+    }
   }
 
   /**

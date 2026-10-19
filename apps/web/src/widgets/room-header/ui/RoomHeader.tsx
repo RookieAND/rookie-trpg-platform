@@ -76,6 +76,7 @@ export function RoomHeader({
       <Link href="/" className="brand" aria-label="로비로 가기">{SERVICE_NAME}</Link>
       <Link href="/" className="crumb">← 로비</Link>
       <span className={`badge ${isKp ? "kp" : ""}`}>{ROLE_LABEL[role]}</span>
+      {role === "spectator" && <span className="badge paused" data-testid="spectator-badge" title="보기만 할 수 있어요. 굴림·이동·편집은 막혀 있어요">관전 중</span>}
       {kpAway && <span className="badge paused" role="status" data-testid="kp-away-badge">GM 끊김</span>}
       <span className={`badge status ${status === "ACTIVE" ? "live" : ""} ${status === "PAUSED" ? "paused" : ""}`} data-testid="session-status">
         {sessionNumber > 0 ? `세션 ${sessionNumber} · ` : "세션 시작 전 · "}
@@ -84,9 +85,14 @@ export function RoomHeader({
       <span className="badge plain conn" data-testid="connection" data-state={connection}>{CONNECTION_LABEL[connection]}</span>
       {soundHint}
       <div className="spacer" />
-      <span className="presence" title={members.filter((m) => m.online).map((m) => m.name).join(", ")}>접속 {members.filter((m) => m.online).map((m) => m.name).join(", ")}</span>
+      <span className="presence" title={members.filter((m) => m.online && m.role !== "spectator").map((m) => m.name).join(", ")}>접속 {members.filter((m) => m.online && m.role !== "spectator").map((m) => m.name).join(", ")}</span>
+      {isKp && (
+        <span className="badge plain" data-testid="spectator-count" title={members.filter((m) => m.role === "spectator" && m.online).map((m) => m.name).join(", ") || "관전자가 없어요"}>
+          관전 {members.filter((m) => m.role === "spectator" && m.online).length}
+        </span>
+      )}
       <span className="sep" />
-      {isKp && <InviteButton me={me} roomId={roomId} />}
+      {isKp && <InviteButton me={me} roomId={roomId} members={members} send={send} />}
       {isKp && prep.node}
       <Menu label="설정" title="효과·소리와 룸 설정" testId="settings-menu">
         {(close) => (

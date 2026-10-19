@@ -257,3 +257,95 @@ describe("세션 흐름: 분기 제안", () => {
     for (const o of flowOuts) expect(o.audience.roles).toEqual(["kp"]);
   });
 });
+
+describe("세션 흐름: 분기 지우기 (flow.branch.remove)", () => {
+  const spec: Actor = { userId: "sp1", name: "관전", role: "spectator" };
+  const twoBranches = (rng: Rng = () => 0.5) => {
+    const ctx = setup(rng);
+    const a = beat(ctx.room, { name: "A", kind: "start" });
+    const b = beat(ctx.room, { name: "B" });
+    const c = beat(ctx.room, { name: "C" });
+    const ab = branch(ctx.room, a.id, b.id, { type: "manual" });
+    const ac = branch(ctx.room, a.id, c.id, { type: "handout", handoutId: ctx.letter });
+    return { ...ctx, a, b, c, ab, ac };
+  };
+
+  it("지정한 분기만 지우고 비트와 다른 분기는 그대로 둔다", () => {
+    const { room, ab, ac } = twoBranches();
+    const f = flowOf(must(room.handle(kp, cmd("flow.branch.remove", { id: ab.id }))));
+    expect(f.branches.map((x) => x.id)).toEqual([ac.id]);
+    expect(f.beats.map((x) => x.name)).toEqual(["A", "B", "C"]);
+    expect(room.snapshot(kp).flow!.branches.map((x) => x.id)).toEqual([ac.id]);
+  });
+
+  it("없는 분기나 이미 지운 분기는 not_found이고 흐름이 바뀌지 않는다", () => {
+    const { room, ab } = twoBranches();
+    const before = JSON.stringify(room.snapshot(kp).flow);
+    expect(room.handle(kp, cmd("flow.branch.remove", { id: "nope" }))).toMatchObject({ ok: false, code: "not_found" });
+    must(room.handle(kp, cmd("flow.branch.remove", { id: ab.id })));
+    expect(room.handle(kp, cmd("flow.branch.remove", { id: ab.id }))).toMatchObject({ ok: false, code: "not_found" });
+    expect(JSON.stringify(room.snapshot(kp).flow)).not.toBe(before);
+    expect(room.snapshot(kp).flow!.branches).toHaveLength(1);
+  });
+
+  it("GM만 지울 수 있다. PL과 관전자는 거절되고 분기가 남는다", () => {
+    const { room, ab } = twoBranches();
+    room.join(spec);
+    // 세션 전에는 PL의 명령 자체가 막힌다
+    for (const who of [seo, spec]) expect(room.handle(who, cmd("flow.branch.remove", { id: ab.id })).ok).toBe(false);
+    must(room.handle(kp, cmd("session.start", {})));
+    for (const who of [seo, spec]) expect(room.handle(who, cmd("flow.branch.remove", { id: ab.id }))).toMatchObject({ ok: false, code: "forbidden" });
+    expect(room.snapshot(kp).flow!.branches).toHaveLength(2);
+  });
+
+  it("지운 결과는 GM에게만 알리고 PL·관전자 화면에는 아무것도 가지 않는다", () => {
+    const { room, ab } = twoBranches();
+    room.join(spec);
+    const out = must(room.handle(kp, cmd("flow.branch.remove", { id: ab.id })));
+    expect(types(out)).toEqual(["flow.updated"]);
+    expect(out[0]!.audience).toEqual({ roles: ["kp"] });
+    expect(room.snapshot(seo).flow).toBeNull();
+    expect(room.snapshot(spec).flow).toBeNull();
+  });
+
+  it("그 분기가 만든 제안은 함께 사라지고, 다른 분기의 제안은 남는다", () => {
+    const { room, ab, ac, letter } = twoBranches();
+    must(room.handle(kp, cmd("session.start", {})));
+    const shown = flowOf(must(room.handle(kp, cmd("handout.show", { id: letter }))));
+    expect(shown.suggestions.map((s) => s.branchId)).toEqual([ac.id]);
+    const afterOther = flowOf(must(room.handle(kp, cmd("flow.branch.remove", { id: ab.id }))));
+    expect(afterOther.suggestions.map((s) => s.branchId)).toEqual([ac.id]);
+    const afterOwn = flowOf(must(room.handle(kp, cmd("flow.branch.remove", { id: ac.id }))));
+    expect(afterOwn.suggestions).toEqual([]);
+    expect(afterOwn.branches).toEqual([]);
+    // 제안이 사라졌으니 넘길 수도 없다
+    expect(room.handle(kp, cmd("flow.dismiss", { branchId: ac.id })).ok).toBe(false);
+  });
+
+  it("현재 비트와 세션 진행은 그대로이고, 같은 조건으로 다시 만들면 새 id가 붙는다", () => {
+    const { room, a, b, ab } = twoBranches();
+    must(room.handle(kp, cmd("session.start", {})));
+    expect(room.snapshot(kp).flow!.current).toBe(a.id);
+    must(room.handle(kp, cmd("flow.branch.remove", { id: ab.id })));
+    expect(room.snapshot(kp).flow!.current).toBe(a.id);
+    expect(room.sessionStatus).toBe("ACTIVE");
+    const again = branch(room, a.id, b.id, { type: "manual" });
+    expect(again.id).not.toBe(ab.id);
+    // 비트로 옮기는 것은 분기 없이도 된다
+    must(room.handle(kp, cmd("flow.goto", { beatId: b.id })));
+  });
+
+  it("일시정지 중에도 GM은 분기를 지울 수 있다(준비성 편집)", () => {
+    const { room, ab } = twoBranches();
+    must(room.handle(kp, cmd("session.start", {})));
+    must(room.handle(kp, cmd("session.pause", {})));
+    expect(room.handle(kp, cmd("flow.branch.remove", { id: ab.id })).ok).toBe(true);
+  });
+
+  it("저장했다 복원해도 지운 분기는 돌아오지 않는다", () => {
+    const { room, ab, ac } = twoBranches();
+    must(room.handle(kp, cmd("flow.branch.remove", { id: ab.id })));
+    const back = Room.fromData(JSON.parse(JSON.stringify(room.toData())), { newId: () => `id-${++n}`, rng: () => 0.5 });
+    expect(back.snapshot(kp).flow!.branches.map((x) => x.id)).toEqual([ac.id]);
+  });
+});

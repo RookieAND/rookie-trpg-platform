@@ -2,6 +2,7 @@ import { z } from "zod";
 import { MAX_SUM_EXPR_LENGTH, type Difficulty, type RollOutcome } from "./dice";
 import { MAX_EXPR_LENGTH, parseDiceExpression } from "./expr";
 import type { DamageKind, StatusKey } from "./wounds";
+import { MARKER_KEYS, MARKER_TEXT_MAX, type Marker } from "./markers";
 import { CHARACTERISTIC_KEYS, CONDITIONS, MADNESS_KINDS, MAX_WEAPONS, STAT_PATHS, type Character } from "./sheet";
 
 export type Role = "kp" | "pl" | "spectator";
@@ -115,6 +116,11 @@ export interface GameObject {
   characterId?: string;
   /** GM이 켜면 PL에게도 이 토큰의 HP 막대를 보여 준다(NPC용). PL에게는 보내지 않는다. */
   hpPublic?: boolean;
+  /**
+   * 토큰에 붙인 상태 표식(기절·중독 등). secret인 표식은 GM에게만 보낸다. 옛 저장 데이터에는 없을 수 있다.
+   * 시트의 부상 상태 칩(vitals.status)과는 따로이고, 목록은 서버만 바꾼다(object.marker).
+   */
+  markers?: Marker[];
   /** 이어진 시트의 HP·상태 요약. 저장하지 않고 서버가 보내는 사람마다 만들어 붙인다. PL은 PC 토큰과 HP 공개한 토큰에서만 받는다. */
   vitals?: TokenVitals;
   locked: boolean;
@@ -216,9 +222,11 @@ export interface ChatMessage {
 export interface ChatSettings {
   /** PL끼리 귓속말을 할 수 있게 한다. 이 귓속말은 GM도 볼 수 없다. */
   plWhisper: boolean;
+  /** 관전자가 모두에게 보이는 말을 할 수 있게 한다. 꺼 두면 관전자는 읽기만 한다. 옛 저장 데이터에는 없을 수 있다(없으면 꺼짐). */
+  spectatorChat?: boolean;
 }
 
-export const DEFAULT_CHAT_SETTINGS: ChatSettings = { plWhisper: false };
+export const DEFAULT_CHAT_SETTINGS: ChatSettings = { plWhisper: false, spectatorChat: false };
 
 export const LOG_KINDS = ["session", "scene", "handout", "beat", "combat", "roll", "damage", "sanity", "chat"] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
@@ -543,6 +551,22 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
       hpPublic: z.boolean().optional(),
     }),
   }),
+  /**
+   * 토큰의 상태 표식 하나를 켜거나 끈다. GM은 모든 토큰·모든 표식(secret은 GM만 보임), 토큰의 주인 PL은 자기 토큰의 비밀이 아닌 표식만 바꾼다.
+   * text는 사용자 지정(custom) 표식에만 쓰고 8자까지다.
+   */
+  z.object({
+    type: z.literal("object.marker"),
+    data: z.object({
+      id,
+      key: z.enum(MARKER_KEYS),
+      on: z.boolean(),
+      secret: z.boolean().optional(),
+      text: z.string().trim().min(1).max(MARKER_TEXT_MAX).optional(),
+    }),
+  }),
+  /** GM이 관전자 한 명을 내보낸다(그 사람의 연결이 닫힌다). 다시 들어오려면 관전 초대 링크가 있어야 한다. */
+  z.object({ type: z.literal("member.remove"), data: z.object({ userId: id }) }),
   /** 보드의 한 곳을 모두에게 가리킨다(저장하지 않는 일회성 신호). sceneId는 보고 있는 장면이고 활성 장면과 같아야 한다. */
   z.object({ type: z.literal("board.ping"), data: z.object({ sceneId: id, x: coord, y: coord }) }),
   z.object({ type: z.literal("scene.fog"), data: z.object({ id, enabled: z.boolean() }) }),
@@ -779,7 +803,7 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
     }),
   }),
   /** 대화 설정(GM 전용) */
-  z.object({ type: z.literal("settings.chat"), data: z.object({ plWhisper: z.boolean() }) }),
+  z.object({ type: z.literal("settings.chat"), data: z.object({ plWhisper: z.boolean(), spectatorChat: z.boolean().optional() }) }),
   z.object({ type: z.literal("session.start"), data: z.object({}).default({}) }),
   z.object({ type: z.literal("session.pause"), data: z.object({}).default({}) }),
   z.object({ type: z.literal("session.resume"), data: z.object({}).default({}) }),
@@ -928,6 +952,8 @@ export type ServerEvent =
   /** 접속 직후 받는 최근 대화. 프레임 크기를 지키려고 나눠서 보내고, 마지막 조각은 last가 true다. 저장·버퍼에 남기지 않는다. */
   | { type: "chat.history"; data: { messages: ChatMessage[]; last: boolean } }
   | { type: "settings.chat"; data: ChatSettings }
+  /** GM이 나를 내보냈다. 받은 사람에게만 가고, 이어서 연결이 닫힌다. */
+  | { type: "member.removed"; data: Record<string, never> }
   | { type: "session.started"; data: { number: number } }
   | { type: "session.paused"; data: { reason: PauseReason } }
   /** GM의 마지막 연결이 닫혀 유예가 시작됨. 아직 정지는 아니다. */

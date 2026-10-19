@@ -160,6 +160,7 @@ export function useBoardInteractions({ me, isKp, sceneId, objects, selectedId, o
         <ObjectContextMenu
           obj={menuObj}
           at={menu}
+          send={send}
           onClose={() => setMenu(null)}
           actions={{
             onRename: (name) => send({ type: "object.update", data: { id: menuObj.id, name } }),

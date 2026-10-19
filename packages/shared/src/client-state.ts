@@ -290,6 +290,9 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       return { ...next, chatSettings: ev.data };
     case "presence":
       return { ...next, members: ev.data.members };
+    case "member.removed":
+      // 연결이 곧 4410으로 닫힌다. 화면은 닫힘 코드로 안내한다.
+      return next;
     case "session.started":
       return { ...next, sessionStatus: "ACTIVE", pauseReason: null, kpAwaySince: null, sessionNumber: ev.data.number, lastEnd: null };
     case "session.paused":

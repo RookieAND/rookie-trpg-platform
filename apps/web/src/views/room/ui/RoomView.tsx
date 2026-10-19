@@ -8,7 +8,7 @@ import { beginDiscordLogin, refreshStoredSession, useIdentity, type Identity } f
 import { getChatPage, getRoom, type ScenarioImportResult } from "@/entities/room";
 import { SERVICE_NAME, SUPABASE_URL } from "@/shared/config";
 import { roomTitle, useDocumentTitle, usePhone } from "@/shared/lib";
-import { ObjectToolbar, PlaceControls, QuickTokenButton, SelectedControls, uniqueName, useBoardInteractions, usePlacement } from "@/features/board-objects";
+import { MarkerButton, ObjectToolbar, PlaceControls, QuickTokenButton, SelectedControls, canEditMarkers, uniqueName, useBoardInteractions, usePlacement } from "@/features/board-objects";
 import { ShortcutHelp, useShortcutHelp } from "@/features/shortcut-help";
 import { FogToolbar } from "@/features/manage-fog";
 import { Hint, ImageLibraryProvider, onTabListKeyDown, roomImageIds, useImageLibraryStore } from "@/shared/ui";
@@ -56,6 +56,7 @@ const REJECTED: Record<number, string> = {
   4403: "이 룸에 들어갈 수 없어요. 초대 링크가 없거나 만료됐어요. GM에게 새 링크를 받아 주세요.",
   4404: "룸을 찾을 수 없어요. 룸을 만든 사람이 지웠을 수 있어요.",
   4409: "룸 인원이 가득 찼어요.",
+  4410: "GM이 관전에서 내보냈어요. 다시 들어오려면 GM에게 관전 링크를 받아 주세요.",
 };
 
 export function RoomView({ roomId, invite }: { roomId: string; invite?: string }) {
@@ -356,6 +357,12 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
           {isKp && !phone && (
             <StageCues roomId={roomId} enabled={state.sessionStatus !== "PAUSED"} send={send} source={cueSource} sessionActive={active} notify={notices.notify} />
           )}
+          {role === "pl" && selected && canEditMarkers(role, me.userId, selected) && (
+            <div className="dock dock-hint pl-marker-dock" data-testid="pl-marker-dock">
+              <span className="dock-note">{selected.name}</span>
+              <MarkerButton obj={selected} canSecret={false} enabled={active} send={send} />
+            </div>
+          )}
           {role === "pl" && state.ready && !hasToken && state.sessionStatus !== "PAUSED" && (
             <div className="dock dock-hint" role="status" data-testid="no-token-hint">아직 내 토큰이 없어요. GM에게 요청하거나 기다려요</div>
           )}
@@ -466,11 +473,13 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
             speakable={speakable}
             characters={characters}
             plWhisper={state.chatSettings.plWhisper}
+            spectatorChat={state.chatSettings.spectatorChat === true}
             rollWhy={rollBlockReason(role, state.sessionStatus)}
             visible={tab === "chat"}
             ready={state.ready && state.chatLoaded}
             send={send}
-            onSetPlWhisper={(on) => send({ type: "settings.chat", data: { plWhisper: on } })}
+            onSetPlWhisper={(on) => send({ type: "settings.chat", data: { plWhisper: on, spectatorChat: state.chatSettings.spectatorChat === true } })}
+            onSetSpectatorChat={(on) => send({ type: "settings.chat", data: { plWhisper: state.chatSettings.plWhisper, spectatorChat: on } })}
             onLoadOlder={loadOlderChat}
           />
           <LogPanel me={me} roomId={roomId} roomTitle={roomName ?? "세션 기록"} isKp={isKp} sessionCount={state.sessionNumber} visible={tab === "log"} version={logVersion} />

@@ -74,6 +74,7 @@ export function buildExport(data: RoomData, opts: ExportOptions): ScenarioDoc {
         ...opt("character", o.characterId ? charKey.get(o.characterId) : undefined),
         ...(o.hpPublic && o.characterId && charKey.has(o.characterId) ? { hpPublic: true } : {}),
         ...(o.locked ? { locked: true } : {}),
+        ...(o.kind === "token" && o.markers?.length ? { markers: o.markers.map((m) => ({ key: m.key, ...(m.secret ? { secret: true } : {}), ...(m.text ? { text: m.text } : {}) })) } : {}),
       })),
     characters: characters.map((c) => ({
       key: charKey.get(c.id)!,

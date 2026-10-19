@@ -14,6 +14,8 @@ export interface ChatPanelProps {
   /** 이름으로 귓속말 상대를 찾을 때 쓸 캐릭터(GM 화면에서만 PL의 캐릭터 이름을 부를 수 있다) */
   characters: ReadonlyArray<{ name: string; ownerId: string }>;
   plWhisper: boolean;
+  /** GM이 관전자 대화를 켜 두었는가(꺼져 있으면 관전자는 읽기만 한다) */
+  spectatorChat?: boolean;
   /** 굴림을 굴릴 수 없는 이유(굴릴 수 있으면 null) */
   rollWhy: string | null;
   /** 이 탭을 보고 있는가(숨겨 둘 뿐 지우지 않아서 쓰던 글과 스크롤이 남는다) */
@@ -21,6 +23,7 @@ export interface ChatPanelProps {
   ready: boolean;
   send: (c: ClientCommand) => unknown;
   onSetPlWhisper?: (on: boolean) => void;
+  onSetSpectatorChat?: (on: boolean) => void;
   /** 이 번호(seq)보다 앞의 대화를 불러온다. 더 있으면 true */
   onLoadOlder: (before: number) => Promise<boolean>;
 }
@@ -28,6 +31,8 @@ export interface ChatPanelProps {
 export function ChatPanel(p: ChatPanelProps) {
   const { messages, members, meId, role } = p;
   const spectator = role === "spectator";
+  // 관전자는 GM이 '관전자 대화'를 켜야 말할 수 있다.
+  const readOnly = spectator && !p.spectatorChat;
   const [text, setText] = useState("");
   const [speaker, setSpeaker] = useState<SpeakerChoice>({ kind: "self" });
   const [to, setTo] = useState("");
@@ -190,7 +195,8 @@ export function ChatPanel(p: ChatPanelProps) {
             rows={2}
             value={text}
             maxLength={CHAT_MAX_LENGTH + 200}
-            placeholder={spectator ? "관전자는 모두에게 보이는 말만 할 수 있어요" : "말하기 (/r 1d100 으로 굴리기)"}
+            disabled={readOnly}
+            placeholder={readOnly ? "지금은 읽기만 할 수 있어요. GM이 관전자 대화를 켜면 말할 수 있어요" : spectator ? "관전자는 모두에게 보이는 말만 할 수 있어요" : "말하기 (/r 1d100 으로 굴리기)"}
             onChange={(e) => {
               setText(e.target.value);
               if (error) setError(null);
@@ -205,7 +211,7 @@ export function ChatPanel(p: ChatPanelProps) {
             }}
           />
           <div className="chat-btns">
-            <button type="button" className="btn primary" data-testid="chat-send" disabled={!text.trim() || left < 0} onClick={submit}>보내기</button>
+            <button type="button" className="btn primary" data-testid="chat-send" disabled={readOnly || !text.trim() || left < 0} onClick={submit}>보내기</button>
             <button type="button" className="btn" data-testid="chat-help-btn" aria-label="명령어 도움말" aria-expanded={help} title="명령어 도움말" onClick={() => setHelp((h) => !h)}>?</button>
           </div>
         </div>
@@ -214,6 +220,11 @@ export function ChatPanel(p: ChatPanelProps) {
           {role === "kp" && p.onSetPlWhisper && (
             <label className="chat-plw">
               <input type="checkbox" data-testid="chat-plwhisper" checked={p.plWhisper} onChange={(e) => p.onSetPlWhisper?.(e.target.checked)} /> PL끼리 귓속말
+            </label>
+          )}
+          {role === "kp" && p.onSetSpectatorChat && (
+            <label className="chat-plw">
+              <input type="checkbox" data-testid="chat-spectatorchat" checked={Boolean(p.spectatorChat)} onChange={(e) => p.onSetSpectatorChat?.(e.target.checked)} /> 관전자 대화
             </label>
           )}
         </div>

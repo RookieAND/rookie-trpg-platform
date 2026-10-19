@@ -12,7 +12,7 @@ import { roomTitle, useDocumentTitle } from "@/shared/lib";
 export function JoinView({ roomId, invite }: { roomId: string; invite: string }) {
   const router = useRouter();
   const { identity, login } = useIdentity();
-  const [info, setInfo] = useState<{ name: string; online: number } | null>(null);
+  const [info, setInfo] = useState<{ name: string; online: number; spectator: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useDocumentTitle(info ? roomTitle(info.name, SERVICE_NAME) : null);
@@ -20,7 +20,7 @@ export function JoinView({ roomId, invite }: { roomId: string; invite: string })
   useEffect(() => {
     if (!identity) return;
     getRoom(identity, roomId, invite)
-      .then((r) => setInfo({ name: r.name, online: r.online }))
+      .then((r) => setInfo({ name: r.name, online: r.online, spectator: r.joinAs === "spectator" }))
       .catch((e) =>
         setError(
           e instanceof ApiError && e.status === 404
@@ -42,7 +42,8 @@ export function JoinView({ roomId, invite }: { roomId: string; invite: string })
         <>
           <h1 style={{ margin: 0, fontSize: 22 }}>{info.name}</h1>
           <p style={{ margin: 0, color: "var(--muted)" }}>지금 {info.online}명이 접속해 있어요.</p>
-          <button className="btn primary" onClick={() => router.push(`/room/${roomId}?invite=${encodeURIComponent(invite)}`)}>PL로 입장</button>
+          {info.spectator && <p style={{ margin: 0 }} data-testid="join-spectator-note">관전 링크예요. 보드와 공개된 굴림·핸드아웃을 보기만 하고, 아무것도 바꿀 수 없어요.</p>}
+          <button className="btn primary" data-testid="join-enter" onClick={() => router.push(`/room/${roomId}?invite=${encodeURIComponent(invite)}`)}>{info.spectator ? "관전으로 입장" : "PL로 입장"}</button>
         </>
       ) : (
         <p style={{ color: "var(--muted)" }}>확인하는 중이에요…</p>

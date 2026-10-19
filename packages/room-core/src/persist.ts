@@ -1,13 +1,14 @@
-import { CHAT_KEEP, DEFAULT_CHAT_SETTINGS, LOG_KEEP, LOG_KINDS, type ChatMessage, type LogEntry } from "@coc-vtt/shared";
+import { CHAT_KEEP, DEFAULT_CHAT_SETTINGS, LOG_KEEP, LOG_KINDS, sanitizeMarkers, type ChatMessage, type GameObject, type LogEntry } from "@coc-vtt/shared";
 import type { RoomData } from "./room";
 
 /**
  * 저장하는 룸 데이터의 모양 번호.
  *  1: 번호가 없던 옛 모양(대화·세션 기록이 없다)
  *  2: 대화(chat, chatSettings)와 세션 기록(log)이 생겼다
+ *  3: 토큰 상태 표식(objects[].markers)과 관전자 대화 설정(chatSettings.spectatorChat)이 생겼다
  * 새 필드는 늘 "없으면 기본값"으로 읽는다. 그래서 옛 데이터는 그대로 열리고, 더 새로운 번호의 데이터도 아는 필드만 읽어 열린다.
  */
-export const ROOM_SCHEMA_VERSION = 2;
+export const ROOM_SCHEMA_VERSION = 3;
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown): v is string => typeof v === "string";
@@ -33,6 +34,14 @@ const validLog = (e: unknown): e is LogEntry =>
   (LOG_KINDS as readonly string[]).includes(e.kind as string) &&
   (e.audience === "all" || e.audience === "gm" || (Array.isArray(e.audience) && e.audience.every(str)));
 
+/** 오브젝트의 표식에서 모양이 깨진 것을 버린다(모르는 key는 새 버전이 쓴 것이라 남긴다). */
+const cleanMarkers = (o: GameObject): GameObject => {
+  if (!isObj(o) || o.markers === undefined) return o;
+  const { markers: raw, ...rest } = o;
+  const markers = sanitizeMarkers(raw);
+  return markers.length ? { ...rest, markers } : rest;
+};
+
 /**
  * 저장된 룸 데이터를 지금 모양으로 맞춘다. 모르는 필드는 그대로 두고, 없는 필드는 기본값으로 채우며,
  * 모양이 깨진 대화·기록 한 줄은 버린다(룸 전체를 못 여는 일이 없게). 룸의 기본 정보(roomId)가 없으면 오류다.
@@ -46,11 +55,11 @@ export function migrateRoomData(raw: unknown): RoomData {
   return {
     ...d,
     schemaVersion: ROOM_SCHEMA_VERSION,
-    objects: Array.isArray(d.objects) ? d.objects : [],
+    objects: Array.isArray(d.objects) ? d.objects.map(cleanMarkers) : [],
     members: Array.isArray(d.members) ? d.members : [],
     rolls: Array.isArray(d.rolls) ? d.rolls : [],
     chat,
-    chatSettings: { ...DEFAULT_CHAT_SETTINGS, plWhisper: cs.plWhisper === true },
+    chatSettings: { ...DEFAULT_CHAT_SETTINGS, plWhisper: cs.plWhisper === true, spectatorChat: cs.spectatorChat === true },
     log,
   };
 }

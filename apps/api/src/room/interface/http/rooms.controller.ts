@@ -30,10 +30,16 @@ import { RoomHub } from "../ws/room.hub";
 import { isValidWebhookUrl } from "../../domain/discord";
 
 const createSchema = z.object({ name: z.string().trim().min(1).max(60) });
-const inviteSchema = z.object({
-  expiresInMinutes: z.number().int().min(1).max(60 * 24 * 30).nullable().optional(),
-  maxMembers: z.number().int().min(2).max(12).optional(),
-});
+const inviteSchema = z
+  .object({
+    /** pl(기본)은 PL 초대 링크, spectator는 읽기 전용 관전 링크 */
+    kind: z.enum(["pl", "spectator"]).default("pl"),
+    /** 관전 링크를 없앤다(관전 링크에만 쓴다) */
+    revoke: z.boolean().optional(),
+    expiresInMinutes: z.number().int().min(1).max(60 * 24 * 30).nullable().optional(),
+    maxMembers: z.number().int().min(1).max(30).optional(),
+  })
+  .refine((d) => d.kind === "spectator" || (d.revoke !== true && (d.maxMembers === undefined || d.maxMembers >= 2)), { message: "invalid" });
 
 const renameSchema = z.object({ name: z.string().trim().min(1).max(60) });
 
@@ -114,10 +120,13 @@ export class RoomsController {
       id: entry.meta.id,
       name: entry.meta.name,
       ...this.registry.describe(entry, me.userId),
+      // 이 링크로 들어가면 어떤 역할이 되는지(관전 링크면 spectator)
+      joinAs: decision.role,
       // 주인에게만 초대 정보를 보여 준다.
       ...(entry.meta.ownerId === me.userId
         ? {
             invite: entry.meta.invite,
+            spectatorInvite: entry.meta.spectatorInvite ?? null,
             // 웹훅 주소는 비밀이라 돌려주지 않고, 연결 여부와 알림 종류만 알려 준다.
             discord: { connected: Boolean(entry.meta.discord), events: entry.meta.discord?.events ?? { session: true, rolls: true } },
           }
@@ -196,7 +205,7 @@ export class RoomsController {
       if (r.reason === "not_found") throw new NotFoundException("룸을 찾을 수 없어요.");
       throw new ForbiddenException("룸 주인만 초대 링크를 바꿀 수 있어요.");
     }
-    return r.invite;
+    return r.invite ?? { revoked: true };
   }
 
   /** 디스코드 알림 설정(룸 주인만). webhookUrl이 null이면 해제한다. */
@@ -276,7 +285,7 @@ export class RoomsController {
     const dry = dryRun === "1" || dryRun === "true";
     if (!dry && this.scenarios.tooMany(me.userId)) throw new HttpException("시나리오를 너무 많이 가져왔어요. 잠시 뒤에 다시 해 주세요.", 429);
     const doc = await this.readDoc(req);
-    const live = entry.room.snapshot({ userId: "", role: "spectator" }).members.some((m) => m.userId === me.userId && m.role === "kp");
+    const live = entry.room.listMembers().some((m) => m.userId === me.userId && m.role === "kp");
     if (!live) throw new HttpException("룸 화면에 들어온 뒤에 가져올 수 있어요.", 409);
     const resolved = await this.scenarios.resolve(doc, { roomMedia: this.scenarios.mediaOf(entry), store: !dry });
     const r = entry.room.importScenario(me.userId, resolved.doc, { dryRun: dry });

@@ -32,7 +32,7 @@ pnpm import:scenario ./my-scenario/scenario.json [--user 이름 | --token 로그
 | 필드 | 필수 | 설명 |
 | --- | --- | --- |
 | `format` | 예 | `"roll-and-call-scenario"` 또는 `"roll-and-call-backup"` |
-| `version` | 예 | 시나리오는 `1` 또는 `2`, 백업은 `1`. 더 큰 번호는 읽지 않아요 |
+| `version` | 예 | 시나리오는 `1`~`3`, 백업은 `1`·`2`. 더 큰 번호는 읽지 않아요. 토큰 표식(`markers`)을 담은 파일은 시나리오 3, 백업 2예요 |
 | `roomName` | 예 | 룸 이름(60자까지). 새 룸을 만들 때 쓰고, 웹의 가져오기·`--room`으로 바꿀 수 있어요 |
 | `scenes` | 예 | 장면 목록(1~30개) |
 | `tokens` | 아니요 | 소품·토큰 목록(합쳐서 500개까지) |
@@ -89,6 +89,7 @@ pnpm import:scenario ./my-scenario/scenario.json [--user 이름 | --token 로그
 | `character` | 이어 둘 시트의 `key`(`characters`). 토큰 아래에 HP 막대가 붙어요 |
 | `hpPublic` | `true`면 PL에게도 이 토큰의 HP 막대를 보여 줘요(NPC용) |
 | `locked` | `true`면 소유자도 못 움직여요 |
+| `markers` | 토큰에 붙인 상태 표식 목록. 한 개는 `{ "key": "stun", "secret": true, "text": "…" }`예요. `key`는 `stun`(기절) `poison`(중독) `bleed`(출혈) `fear`(공포) `madness`(광기) `hidden`(은신) `focus`(집중) `help`(도움 필요) `dead`(사망) `custom`(사용자 지정, `text` 8자까지 필수). `secret: true`면 GM에게만 보여요. 토큰(`kind: "token"`)에만 쓰고, 한 토큰에 10개까지예요. 모르는 `key`는 그대로 두고 일반 표식으로 그려요 |
 
 ## characters
 
@@ -183,7 +184,7 @@ GM 몫의 시트(NPC)로 만들어져요. 필수는 `name`, `age`(15~90), `chara
 ```json
 {
   "format": "roll-and-call-scenario",
-  "version": 2,
+  "version": 3,
   "roomName": "예시 시나리오",
   "scenes": [
     {

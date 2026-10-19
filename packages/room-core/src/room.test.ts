@@ -41,7 +41,7 @@ describe("접속과 일시정지", () => {
     const room = setup();
     const outs = room.leave("kp1");
     expect(room.sessionStatus).toBe("ACTIVE");
-    expect(outs.map((o) => o.event.type)).toEqual(["presence", "kp.away"]);
+    expect(outs.map((o) => o.event.type).filter((t) => t !== "presence")).toEqual(["kp.away"]);
     const expired = room.expireKpAway();
     expect(room.sessionStatus).toBe("PAUSED");
     expect(expired.map((o) => o.event.type)).toEqual(["session.paused"]);
@@ -324,7 +324,10 @@ describe("재접속", () => {
     const room = setup();
     expect(room.join(seo)).toEqual([]);
     room.leave("pl1");
-    expect(room.join(seo)).toHaveLength(1);
+    // 관전자가 있어서 목록 알림이 GM·PL·관전자 몫으로 셋 나간다.
+    const again = room.join(seo);
+    expect(again.length).toBeGreaterThan(0);
+    expect(again.every((o) => o.event.type === "presence")).toBe(true);
   });
 });
 

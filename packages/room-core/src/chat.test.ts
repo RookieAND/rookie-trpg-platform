@@ -81,9 +81,16 @@ describe("대화 보내기", () => {
     expect(say(room, kp, "/r 1d100")).toMatchObject({ ok: false, code: "paused" });
   });
 
-  it("관전자는 공개로 말할 수 있지만 굴리거나 귓속말을 보낼 수 없다", () => {
+  it("관전자는 기본으로 읽기만 하고, GM이 '관전자 대화'를 켜면 공개로 말할 수 있지만 굴리거나 귓속말은 못 한다", () => {
     const room = setup();
+    expect(say(room, spec, "구경 중이에요")).toMatchObject({ ok: false, code: "forbidden" });
+    expect(room.chatHistory(pl1)).toHaveLength(0);
+    expect(room.handle(pl1, cmd("settings.chat", { plWhisper: false, spectatorChat: true }))).toMatchObject({ ok: false, code: "forbidden" });
+    must(room.handle(kp, cmd("settings.chat", { plWhisper: false, spectatorChat: true })));
     expect(say(room, spec, "구경 중이에요").ok).toBe(true);
+    must(room.handle(kp, cmd("settings.chat", { plWhisper: false, spectatorChat: false })));
+    expect(say(room, spec, "또 말해요")).toMatchObject({ ok: false, code: "forbidden" });
+    must(room.handle(kp, cmd("settings.chat", { plWhisper: false, spectatorChat: true })));
     expect(say(room, spec, "/r 1d6")).toMatchObject({ ok: false, code: "forbidden" });
     expect(say(room, spec, "비밀이에요", { to: "kp1" })).toMatchObject({ ok: false, code: "forbidden" });
     expect(say(room, spec, "나도 캐릭터", { speaker: { gm: true } })).toMatchObject({ ok: false, code: "forbidden" });
@@ -254,7 +261,7 @@ describe("귓속말", () => {
   it("GM이 켜면 PL끼리 보낼 수 있고, 그 귓속말은 GM도 받지 못한다", () => {
     const room = setup();
     must(room.handle(kp, cmd("settings.chat", { plWhisper: true })));
-    expect(room.snapshot(pl1).chatSettings).toEqual({ plWhisper: true });
+    expect(room.snapshot(pl1).chatSettings).toMatchObject({ plWhisper: true });
     const o = out(room, pl1, "/w 도윤 GM 몰래 하자");
     expect(chatOf(o, pl2)).toHaveLength(1);
     expect(chatOf(o, pl1)).toHaveLength(1);
