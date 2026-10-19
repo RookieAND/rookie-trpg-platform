@@ -14,8 +14,7 @@ if (process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_SUPABASE_UR
 /**
  * 보안 헤더.
  *  - frame-ancestors 'none' / X-Frame-Options: 다른 사이트가 이 서비스를 iframe에 넣지 못하게 한다(클릭재킹 방지). 임베드할 곳이 없다.
- *  - 전체 CSP(script-src 등)는 걸지 않았다. Next가 넣는 인라인 스크립트에 nonce를 달아야 하고, 지금은 그 이득보다 깨질 위험이 커서
- *    base-uri·form-action·object-src처럼 스크립트 실행에 영향 없는 지시어만 둔다.
+ *  - script-src CSP는 src/middleware.ts가 nonce와 함께 Report-Only로 건다(CSP_ENFORCE=1이면 차단). 여기에는 스크립트와 무관한 지시어만 둔다.
  *  - HSTS: https로만 접속하게 한다. Vercel 기본 도메인은 이미 붙여 주지만 커스텀 도메인에서도 같게 한다.
  */
 const securityHeaders = [

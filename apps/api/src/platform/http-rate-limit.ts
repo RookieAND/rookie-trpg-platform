@@ -80,7 +80,7 @@ const tokenKey = (req: IncomingMessage): string | null => {
   let secret = raw;
   if (!secret) {
     try {
-      secret = new URL(req.url ?? "/", "http://localhost").searchParams.get("token") ?? "";
+      secret = new URL((req as { originalUrl?: string }).originalUrl ?? req.url ?? "/", "http://localhost").searchParams.get("token") ?? "";
     } catch {
       secret = "";
     }
@@ -99,7 +99,7 @@ export function createHttpRateLimiter(opts: HttpRateOptions, ips: ClientIpResolv
   let warnedProxy = false;
   return (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
     if (!opts.enabled) return next();
-    const path = (req.url ?? "").split("?")[0] ?? "";
+    const path = ((req as { originalUrl?: string }).originalUrl ?? req.url ?? "").split("?")[0] ?? "";
     if (EXEMPT.has(path)) return next();
     if (!warnedProxy && trustProxyHops === 0 && req.headers["x-forwarded-for"]) {
       warnedProxy = true;
