@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { countsLine, type GameObject, type Role } from "@coc-vtt/shared";
+import { countsLine, josa, type GameObject, type Role } from "@coc-vtt/shared";
 import { SheetCsvImport } from "@/entities/character";
 import { beginDiscordLogin, refreshStoredSession, useIdentity, type Identity } from "@/entities/user";
 import { getChatPage, getRoom, type ScenarioImportResult } from "@/entities/room";
@@ -11,7 +11,7 @@ import { roomTitle, useDocumentTitle, usePhone } from "@/shared/lib";
 import { MarkerButton, ObjectToolbar, PlaceControls, QuickTokenButton, SelectedControls, canEditMarkers, uniqueName, useBoardInteractions, usePlacement } from "@/features/board-objects";
 import { ShortcutHelp, useShortcutHelp } from "@/features/shortcut-help";
 import { FogToolbar } from "@/features/manage-fog";
-import { Hint, ImageLibraryProvider, onTabListKeyDown, roomImageIds, useImageLibraryStore } from "@/shared/ui";
+import { Hint, ImageLibraryProvider, ScrollTabs, roomImageIds, useImageLibraryStore } from "@/shared/ui";
 import { SceneBar } from "@/features/manage-scenes";
 import { importedText } from "@/features/scenario-prep";
 import { StageCues } from "@/features/stage-cues";
@@ -50,6 +50,8 @@ import { SheetPanel, SheetEmpty, type RollOptions } from "@/widgets/sheet-panel"
 import { RoomCharacterCreate } from "@/widgets/character-creator";
 import { PanelDock, ToolSheet } from "@/widgets/phone-bars";
 import { INITIAL_PANELS, panelsReducer, selectLabel, type SheetTab } from "../model/phone-panels";
+import { TOKEN_REQUEST_TEXT, canRequestToken, newTokenRequests, tokenRequestToast } from "../model/token-request";
+import { toastLane } from "../model/lanes";
 
 const REJECTED: Record<number, string> = {
   4401: "로그인 정보가 올바르지 않아요.",
@@ -73,9 +75,9 @@ export function RoomView({ roomId, invite }: { roomId: string; invite?: string }
 }
 
 function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: string }) {
-  const { state, connection, closeCode, send, retry, reconnected, sendFailed, authExpired, addChatHistory } = useRoom({ roomId, user: me.userId, name: me.name, token: me.token, invite, refresh: me.token && SUPABASE_URL ? refreshStoredSession : undefined });
+  const { state, connection, closeCode, send, commandOf, retry, reconnected, sendFailed, authExpired, addChatHistory } = useRoom({ roomId, user: me.userId, name: me.name, token: me.token, invite, refresh: me.token && SUPABASE_URL ? refreshStoredSession : undefined });
   const sheetRollAt = useRef(0); // 시트에서 굴린 시각. 그 결과를 토스트로 보여 준다.
-  const notices = useRoomNotices({ lastError: state.lastError, sendFailed, reconnected, lastUndo: state.lastUndo });
+  const notices = useRoomNotices({ lastError: state.lastError, commandOf, sendFailed, reconnected, lastUndo: state.lastUndo });
   const { undo, sendWithHint } = useUndo({ enabled: (state.members.find((m) => m.userId === me.userId)?.role ?? "pl") === "kp", send, notify: notices.notify });
   const [guideClosed, setGuideClosed] = useState(false);
   const [plGuideClosed, setPlGuideClosed] = useState(false);
@@ -137,9 +139,22 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   }, [isKp, characters, state.members]);
   const hasToken = Object.values(state.objects).some((o) => o.kind === "token" && o.ownerId === me.userId);
   const hasOwn = characters.some((c) => c.ownerId === me.userId);
+  const gmMember = state.members.find((m) => m.role === "kp");
+  const [npcOpen, setNpcOpen] = useState(false); // 시트 탭의 ‘NPC 만들기’ 창(명령어 검색에서도 연다)
+  const [tokenAsked, setTokenAsked] = useState(false); // PL이 토큰을 요청했는가(토큰이 놓이면 다시 풀린다)
   const spot = state.spotlight && state.spotlight.n > dismissedN ? state.handouts[state.spotlight.id] : undefined;
   const handoutList = useMemo(() => Object.values(state.handouts), [state.handouts]);
-  const cueSource = useMemo(() => ({ scenes, activeSceneId: state.activeSceneId, handouts: handoutList, objects }), [scenes, state.activeSceneId, handoutList, objects]);
+  // 명령어 검색(Ctrl+K)에도 시트 탭의 큰 동작을 올린다. 동작은 매번 새로 만들어지므로 ref로 최신 것을 부른다.
+  const sheetActs = useRef({ placeSheetToken: (_c: { id: string; name: string; ownerId: string }) => {}, sheet: undefined as (typeof characters)[number] | undefined, showTab: (_t: typeof tab) => {} });
+  const sheetName = sheet?.name;
+  const cueActions = useMemo(
+    () => [
+      ...(sheetName ? [{ id: "action:token-place", label: `토큰으로 놓기 · ${sheetName}`, keywords: "토큰 놓기 시트 캐릭터 token place", run: () => sheetActs.current.sheet && sheetActs.current.placeSheetToken(sheetActs.current.sheet) }] : []),
+      { id: "action:npc-new", label: "NPC 만들기", keywords: "npc 엔피씨 시트 만들기 새 npc", run: () => { sheetActs.current.showTab("sheet"); setNpcOpen(true); } },
+    ],
+    [sheetName],
+  );
+  const cueSource = useMemo(() => ({ scenes, activeSceneId: state.activeSceneId, handouts: handoutList, objects, actions: cueActions }), [scenes, state.activeSceneId, handoutList, objects, cueActions]);
   const endBeat = state.flow?.beats.find((b) => b.id === state.flow?.current && b.kind === "ending");
   const endingDefaults = endBeat ? { name: endBeat.name, ...(endBeat.sanReward ? { sanReward: endBeat.sanReward } : {}) } : undefined;
   const selected = selectedId ? state.objects[selectedId] : undefined;
@@ -169,6 +184,33 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     if (lastDamage) notices.notify(damageToastText(lastDamage.result));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastDamage?.n]);
+  // PL이 보낸 토큰 요청 귓속말을 GM 화면에서 알아보고, 알림에 ‘토큰 놓기’ 버튼을 붙인다(접속하며 받은 지난 대화는 건너뛴다).
+  const requestSeen = useRef<number | null>(null);
+  useEffect(() => {
+    if (!state.ready || !state.chatLoaded) return;
+    const last = state.chat.reduce((m, c) => Math.max(m, c.seq), 0);
+    if (requestSeen.current === null) {
+      requestSeen.current = last;
+      return;
+    }
+    if (isKp) {
+      for (const r of newTokenRequests(state.chat, requestSeen.current)) {
+        notices.notify(tokenRequestToast(r.name), { label: "토큰 놓기", run: () => placeTokenFor(r.userId) });
+      }
+    }
+    requestSeen.current = Math.max(requestSeen.current, last);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.chat, state.ready, state.chatLoaded]);
+  useEffect(() => {
+    if (hasToken) setTokenAsked(false);
+  }, [hasToken]);
+  const requestToken = () => {
+    if (!gmMember) return;
+    if (send({ type: "chat.send", data: { text: TOKEN_REQUEST_TEXT, to: gmMember.userId } }) !== false) {
+      setTokenAsked(true);
+      notices.notify("GM에게 토큰을 요청했어요.");
+    }
+  };
   const audio = useAudioEngine({ bgm: state.bgm, stopFadeMs: state.stopFadeMs, lastSe: state.lastSe, clockOffset: state.clockOffset, lastRollId: state.rolls.at(-1)?.id ?? null, lastRollAt: state.rolls.at(-1)?.at ?? null, ready: state.ready, prefs: sound.prefs });
 
   const handoutIds = useMemo(() => handoutList.map((h) => h.id), [handoutList]);
@@ -211,6 +253,18 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     if (p.place) send({ type: "object.add", data: { kind: "token", name: uniqueName(added.name, objects.map((o) => o.name)), x: 500, y: 400, layer: "object", visibleTo: "all", sceneId: shownSceneId, autoPlace: true, characterId: added.id } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characters]);
+  /** 시트에 이어진 토큰을 지금 보는 장면에 놓는다. 시트 주인이 PL이면 그 PL의 토큰이 된다. */
+  const placeSheetToken = (c: { id: string; name: string; ownerId: string }) => {
+    const owner = state.members.find((m) => m.userId === c.ownerId && m.role === "pl");
+    send({ type: "object.add", data: { kind: "token", name: uniqueName(c.name, objects.map((o) => o.name)), x: 500, y: 400, layer: "object", visibleTo: "all", sceneId: shownSceneId, autoPlace: true, characterId: c.id, ...(owner ? { ownerId: owner.userId } : {}) } });
+  };
+  /** PL의 토큰 요청에 답한다: 그 PL의 시트(없으면 이름만)로 토큰을 놓는다. */
+  const placeTokenFor = (userId: string) => {
+    const c = Object.values(state.characters).find((x) => x.ownerId === userId);
+    if (c) return placeSheetToken(c);
+    const m = state.members.find((x) => x.userId === userId);
+    if (m) send({ type: "object.add", data: { kind: "token", name: uniqueName(m.name, objects.map((o) => o.name)), x: 500, y: 400, layer: "object", visibleTo: "all", sceneId: shownSceneId, autoPlace: true, ownerId: userId } });
+  };
   /** 패널을 그 탭으로 연다. 휴대폰에서는 서랍이 열린다. */
   const showTab = (t: typeof tab) => {
     setTab(t);
@@ -220,6 +274,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
       dispatchPanels({ type: "drawer.open" });
     }
   };
+  sheetActs.current = { placeSheetToken, sheet, showTab };
   const openSheet = (characterId: string) => {
     setSheetId(characterId);
     showTab("sheet");
@@ -266,6 +321,44 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
     return () => ro.disconnect();
   }, [phone, isKp, role]);
 
+  // 알림(토스트)은 보드 아래 가운데에 뜨되, 보드 아래 구석의 것(되돌리기·선택 줄·표식 막대·힌트)과 도구 묶음 위로 올린다.
+  // 보드 위 구석에 놓인 것에는 data-lane="bottom"을 달아 두고, 여기서 그 높이를 재서 CSS 변수로 알린다.
+  useEffect(() => {
+    const el = roomRef.current;
+    if (!el) return;
+    let raf = 0;
+    const set = () => {
+      raf = 0;
+      const svg = el.querySelector<SVGSVGElement>(".board > svg");
+      if (!svg) return;
+      const rect = (n: Element) => n.getBoundingClientRect();
+      const corner = [...el.querySelectorAll<HTMLElement>('.board [data-lane="bottom"]')].map(rect);
+      const sheet = el.querySelector<HTMLElement>(".sheet-body:not([hidden])");
+      const lane = toastLane({ viewportH: window.innerHeight, board: rect(svg), corner, sheetTop: sheet ? rect(sheet).top : null });
+      el.style.setProperty("--toast-b", `${lane.bottom}px`);
+      el.style.setProperty("--toast-cx", `${lane.centerX}px`);
+      el.style.setProperty("--toast-w", `${lane.width}px`);
+    };
+    const queue = () => {
+      if (!raf) raf = requestAnimationFrame(set);
+    };
+    queue();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(queue);
+    const board = el.querySelector(".board");
+    if (board) ro?.observe(board);
+    const mo = new MutationObserver(queue);
+    if (board) mo.observe(board, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "hidden", "style"] });
+    const sheetEl = el.querySelector(".toolsheet");
+    if (sheetEl) mo.observe(sheetEl, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+    window.addEventListener("resize", queue);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      ro?.disconnect();
+      mo.disconnect();
+      window.removeEventListener("resize", queue);
+    };
+  }, [phone, isKp, role]);
+
   if (authExpired) {
     return (
       <main className="login">
@@ -307,17 +400,32 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
   return (
     <ImageLibraryProvider value={library}>
     <div className={`room${phone ? " phone" : ""}`} ref={roomRef}>
-      <a
-        href="#game-board"
-        className="skip-link"
-        data-testid="skip-to-board"
-        onClick={(e) => {
-          e.preventDefault();
-          document.getElementById("game-board")?.focus();
-        }}
-      >
-        보드로 건너뛰기
-      </a>
+      <nav className="skip-links" aria-label="건너뛰기">
+        <a
+          href="#game-board"
+          className="skip-link"
+          data-testid="skip-to-board"
+          onClick={(e) => {
+            e.preventDefault();
+            document.getElementById("game-board")?.focus();
+          }}
+        >
+          보드로 건너뛰기
+        </a>
+        <a
+          href="#side-panel"
+          className="skip-link"
+          data-testid="skip-to-panel"
+          onClick={(e) => {
+            e.preventDefault();
+            // 지금 보고 있는 패널의 탭으로 간다(탭 줄은 Tab 한 번에 지나가고, 다음 Tab이 패널 안으로 들어간다)
+            if (phone && !panels.drawerOpen) return void showTab(tab);
+            document.querySelector<HTMLElement>('[data-testid="side-panel"] [role="tab"][aria-selected="true"]')?.focus();
+          }}
+        >
+          패널로 건너뛰기
+        </a>
+      </nav>
       <RoomHeader onShortcutHelp={shortcutHelp.show} me={me} roomId={roomId} roomName={roomName ?? ""} onRenamed={(n) => { setRoomName(n); notices.notify("룸 이름을 바꿨어요."); }} notify={notices.notify} onImported={onImported} role={role} status={state.sessionStatus} kpAway={kpAway} sessionNumber={state.sessionNumber} connection={connection} members={state.members} banned={state.banned} chatSettings={state.chatSettings} effects={state.effects} madnessTable={state.madnessTable} endingDefaults={endingDefaults} effectsEnabled={fx.enabled} onToggleEffects={fx.toggle} soundControl={<SoundControl prefs={sound.prefs} onChange={sound.update} unlocked={audio.unlocked} onUnlock={audio.unlock} playing={audio.playing} />} soundHint={<SoundBlockedHint blocked={audio.blocked} onUnlock={audio.unlock} />} send={send} />
 
       <Toasts toasts={notices.toasts} onDismiss={notices.dismiss} />
@@ -332,14 +440,16 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
 
       <div className="body">
         <main className="board">
+          <div className="banner-stack">
           {kpAway && <div className="banner" role="status" data-testid="kp-away-banner">GM 연결이 끊겼어요. 잠시 기다려요.</div>}
           {paused && <div className="banner" role="status" data-testid="pause-banner">{pauseNotice(role, state.pauseReason)}</div>}
           {role === "pl" && <AskBanner asks={state.rollAsks} userId={me.userId} canRoll={active} hasCharacter={characters.some((c) => c.ownerId === me.userId)} onRoll={(name, difficulty) => { const mine = characters.find((c) => c.ownerId === me.userId); if (!mine) return; send({ type: "roll.request", data: { secret: false, skill: { characterId: mine.id, name, bonus: 0, ...(difficulty ? { difficulty } : {}) } } }); setTab("roll"); }} />}
           {role !== "spectator" && <ConBanner last={state.lastDamage} characters={characters} canRoll={active} onRoll={(characterId) => { if (send({ type: "roll.request", data: { secret: false, skill: { characterId, name: "CON", bonus: 0 } } }) !== false) sheetRollAt.current = Date.now(); }} />}
-          {myTurn && state.initiative && <MyTurnBadge round={state.initiative.round} lowered={isKp} onOpen={() => showTab("combat")} />}
           {state.sessionStatus === "IDLE" && !isKp && (
             <div className="banner" role="status">GM이 세션을 시작하기를 기다리고 있어요.</div>
           )}
+          </div>
+          {myTurn && state.initiative && <MyTurnBadge round={state.initiative.round} lowered={isKp} onOpen={() => showTab("combat")} />}
           {showPlayerGuide({ role, ready: state.ready, sessionStatus: state.sessionStatus, closed: plGuideClosed }) && (
             <PlayerGuide spectator={role === "spectator"} steps={playerGuideSteps({ role, userId: me.userId, characters, rolls: state.rolls, handouts: handoutList, hasToken })} onClose={() => { setPlGuideClosed(true); writeGuideClosed(roomId); }} />
           )}
@@ -354,25 +464,30 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               onClose={() => setGuideClosed(true)}
             />
           )}
-          {isKp && <SceneBar me={me} scenes={scenes} tracks={state.audioLibrary} activeId={state.activeSceneId} viewId={shownSceneId} onView={setViewSceneId} enabled canActivate={!paused} send={send} />}
+          {isKp && <SceneBar me={me} scenes={scenes} tracks={state.audioLibrary} activeId={state.activeSceneId} viewId={shownSceneId} onView={setViewSceneId} enabled canActivate={!paused} send={send} notify={notices.notify} />}
           <Board grid={board.grid} viewKey={board.sceneId ? viewKey(me.userId, roomId, board.sceneId) : undefined} snapKey={board.sceneId ? snapKey(me.userId, roomId, board.sceneId) : undefined} onOpenSheet={(o) => o.characterId && (isKp || o.ownerId === me.userId) && state.characters[o.characterId] && openSheet(o.characterId)} objects={board.objects} background={board.background} me={{ userId: me.userId, role }} canInteract={canEditBoard} onMove={move} selectedId={selectedId} onSelect={setSelectedId} fog={board.fog} onPing={canPing ? ping : undefined} pings={state.pings} sceneId={board.sceneId} turnTokenIds={turnTokenIds} onDragStart={onDragStart} animate={fx.enabled} onPick={isKp && fogPicking ? (x, y) => send({ type: "fog.reveal", data: { sceneId: shownSceneId, x, y, r: fogRadius } }) : undefined} {...interactions.boardProps} {...(isKp && !board.background ? { hint: "이미지를 끌어다 놓아 배경을 정해요" } : {})} />
           {interactions.ui}
           {isKp && !phone && (
             <StageCues roomId={roomId} enabled={state.sessionStatus !== "PAUSED"} send={send} source={cueSource} sessionActive={active} notify={notices.notify} />
           )}
           {role === "pl" && selected && canEditMarkers(role, me.userId, selected) && (
-            <div className="dock dock-hint pl-marker-dock" data-testid="pl-marker-dock">
+            <div className="dock dock-hint pl-marker-dock" data-testid="pl-marker-dock" data-lane="bottom">
               <span className="dock-note">{selected.name}</span>
               <MarkerButton obj={selected} canSecret={false} enabled={active} send={send} />
             </div>
           )}
           {role === "pl" && state.ready && !hasToken && state.sessionStatus !== "PAUSED" && (
-            <div className="dock dock-hint" role="status" data-testid="no-token-hint">아직 내 토큰이 없어요. GM에게 요청하거나 기다려요</div>
+            <div className="dock dock-hint no-token-dock" role="status" data-testid="no-token-hint" data-lane="bottom">
+              <span>{hasOwn ? "아직 내 토큰이 없어요. GM이 놓아 주길 기다리거나 요청해요" : "아직 내 토큰이 없어요. 시트 탭에서 캐릭터를 먼저 만들어요"}</span>
+              {canRequestToken({ role, hasCharacter: hasOwn, hasToken, gm: gmMember }) && (
+                <button type="button" className="btn sm primary" data-testid="request-token" disabled={tokenAsked} onClick={requestToken}>{tokenAsked ? "요청했어요" : "GM에게 토큰 요청"}</button>
+              )}
+            </div>
           )}
           <SceneTransition fade={fade} />
-          {!isKp && board.name && <div className="scene-name" data-testid="scene-name">{board.name}</div>}
+          {!isKp && board.name && <div className="scene-name" data-testid="scene-name" data-lane="bottom">{board.name}</div>}
           {!isKp && fogView && (
-            <div className="fog-note" data-testid="fog-note">
+            <div className="fog-note" data-testid="fog-note" data-lane="bottom">
               <Hint term="fog" label="안개와 시야 설명">안개 켜짐</Hint> · 시야 밖은 어둡게 보여요
             </div>
           )}
@@ -453,7 +568,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
         {phone && panels.drawerOpen && <div className="drawer-backdrop" data-testid="drawer-backdrop" aria-hidden onClick={closeDrawer} />}
         <aside className={`side${phone ? (panels.drawerOpen ? " drawer-open" : "") : panelOpen ? "" : " collapsed"}`} data-testid="side-panel" {...(phone && !panels.drawerOpen ? { inert: true, "aria-hidden": true } : {})} {...(phone ? { role: "region", "aria-label": "패널 서랍" } : {})}>
           <button type="button" className="side-toggle" data-testid="drawer-close" aria-expanded={panelVisible} onClick={() => (phone ? closeDrawer() : setPanelOpen((o) => !o))}>{phone ? "닫기" : panelOpen ? "패널 접기" : "패널 펴기"}{!panelVisible && chatUnread > 0 && <span className="tab-dot" data-testid="chat-unread-toggle" aria-label={`안 읽은 대화 ${chatUnread}개`}>{chatUnread > 99 ? "99+" : chatUnread}</span>}</button>
-          <div className="tabs" role="tablist" aria-label="패널" onKeyDown={onTabListKeyDown}>
+          <ScrollTabs label="패널">
             <button role="tab" aria-selected={tab === "roll"} onClick={() => setTab("roll")}>굴림</button>
             <button role="tab" aria-selected={tab === "sheet"} onClick={() => setTab("sheet")}>시트</button>
             <button role="tab" aria-selected={tab === "handout"} onClick={() => setTab("handout")}>핸드아웃{newHandouts.length > 0 && <span className="tab-dot" data-testid="handout-new" aria-label={`새 핸드아웃 ${newHandouts.length}개`}>{newHandouts.length}</span>}</button>
@@ -466,7 +581,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
             )}
             <button role="tab" aria-selected={tab === "combat"} onClick={() => setTab("combat")}>전투{myTurn ? <span className="tab-dot turn" data-testid="combat-my-turn" aria-label="내 차례">▶</span> : state.initiative ? " ●" : ""}</button>
             <button role="tab" aria-selected={tab === "log"} data-testid="tab-log" onClick={() => setTab("log")}>기록</button>
-          </div>
+          </ScrollTabs>
           <ChatPanel
             messages={state.chat}
             members={state.members}
@@ -495,6 +610,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
               hidden={state.hiddenRolls}
               isKp={isKp}
               disabled={!active || role === "spectator"}
+              readOnly={role === "spectator"}
               disabledReason={rollBlockReason(role, state.sessionStatus)}
               error={null}
               onRoll={(expr, secret, characterId) => send({ type: "roll.request", data: { expr, secret, ...(characterId ? { characterId } : {}) } })}
@@ -517,6 +633,29 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
             <HandoutPanel me={me} handouts={handoutList} isKp={isKp} canEdit={isKp || !paused} canShow={!paused} players={state.members} send={send} />
           ) : (
             <div className="sheet-wrap">
+              {(isKp || role === "spectator" || !hasOwn) && (
+                <div className="sheet-top" data-testid="sheet-top">
+                  {isKp && sheet && (
+                    <button className="btn" data-testid="sheet-place-token" disabled={!canEditBoard} title="이 시트에 이어진 토큰을 지금 보는 장면에 놓아요" onClick={() => placeSheetToken(sheet)}>
+                      토큰으로 놓기
+                    </button>
+                  )}
+                  {isKp && (
+                    <NpcSheetButton
+                      count={characters.length}
+                      disabled={!canEditBoard}
+                      open={npcOpen}
+                      onOpenChange={setNpcOpen}
+                      onCreate={(data, place) => {
+                        npcPending.current = { before: new Set(characters.map((c) => c.id)), place };
+                        if (send({ type: "character.add", data }) === false) npcPending.current = null;
+                      }}
+                    />
+                  )}
+                  {role === "pl" && !hasOwn && <RoomCharacterCreate me={me} send={send} disabled={paused} onDone={notices.notify} />}
+                  {characters.length === 0 && <SheetEmpty role={role} canLoad={!hasOwn} />}
+                </div>
+              )}
               {characters.length > 0 && (
                 <SheetPanel
                   characters={characters}
@@ -547,35 +686,10 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                 />
               )}
               <div className="sheet-foot">
-                {isKp && sheet && (
-                  <button
-                    className="btn"
-                    disabled={!canEditBoard}
-                    title="이 시트에 이어진 토큰을 지금 보는 장면에 놓아요"
-                    onClick={() => {
-                      const owner = state.members.find((m) => m.userId === sheet.ownerId && m.role === "pl");
-                      send({ type: "object.add", data: { kind: "token", name: uniqueName(sheet.name, objects.map((o) => o.name)), x: 500, y: 400, layer: "object", visibleTo: "all", sceneId: shownSceneId, autoPlace: true, characterId: sheet.id, ...(owner ? { ownerId: owner.userId } : {}) } });
-                    }}
-                  >
-                    토큰으로 놓기
-                  </button>
-                )}
-                {isKp && (
-                  <NpcSheetButton
-                    count={characters.length}
-                    disabled={!canEditBoard}
-                    onCreate={(data, place) => {
-                      npcPending.current = { before: new Set(characters.map((c) => c.id)), place };
-                      if (send({ type: "character.add", data }) === false) npcPending.current = null;
-                    }}
-                  />
-                )}
-                {role === "pl" && !hasOwn && <RoomCharacterCreate me={me} send={send} disabled={paused} onDone={notices.notify} />}
                 {role !== "spectator" && (isKp || !hasOwn) && <LoadCharacter me={me} send={send} disabled={paused && !isKp} {...(isKp ? { title: "보관함에서 NPC·캐릭터 불러오기" } : {})} />}
                 {role !== "spectator" && (isKp || !hasOwn) && (
                   <SheetCsvImport me={me} applyLabel="룸에 등록" disabled={paused && !isKp} onApply={(data) => send({ type: "character.add", data })} />
                 )}
-                {characters.length === 0 && <SheetEmpty role={role} canLoad={!hasOwn} />}
                 {state.sessionStatus === "IDLE" && state.sessionNumber > 0 && sheet && sheet.ownerId === me.userId && <SaveToVaultButton key={`${sheet.id}-${sheet.rev}`} me={me} character={sheet} />}
               </div>
             </div>

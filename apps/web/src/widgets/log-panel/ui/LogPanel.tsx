@@ -106,11 +106,11 @@ export function LogPanel({ me, roomId, roomTitle, isKp, sessionCount, visible, v
           </label>
           <label className="chat-sel">
             <span className="muted">부터</span>
-            <input className="input" type="datetime-local" data-testid="log-since" value={filter.since} onChange={(e) => setFilter((f) => ({ ...f, since: e.target.value }))} />
+            <input className="input" type="datetime-local" lang="ko" aria-label="시작 일시 (연·월·일, 시·분)" data-testid="log-since" value={filter.since} onChange={(e) => setFilter((f) => ({ ...f, since: e.target.value }))} />
           </label>
           <label className="chat-sel">
             <span className="muted">까지</span>
-            <input className="input" type="datetime-local" data-testid="log-until" value={filter.until} onChange={(e) => setFilter((f) => ({ ...f, until: e.target.value }))} />
+            <input className="input" type="datetime-local" lang="ko" aria-label="끝 일시 (연·월·일, 시·분)" data-testid="log-until" value={filter.until} onChange={(e) => setFilter((f) => ({ ...f, until: e.target.value }))} />
           </label>
         </div>
         <div className="logp-row logp-actions">

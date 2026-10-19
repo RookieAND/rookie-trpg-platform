@@ -87,7 +87,9 @@ try {
   // 창을 다시 열어도 링크가 그대로여야 먼저 보낸 링크가 죽지 않는다
   await kp.getByRole("button", { name: "초대", exact: true }).click();
   assert.equal(await kp.getByLabel("초대 링크 주소").inputValue(), inviteLink);
+  await kp.waitForTimeout(150);
   await kp.keyboard.press("Escape");
+  await kp.getByRole("dialog").waitFor({ state: "detached" });
   step("GM이 초대 링크를 만듦(다시 열어도 같은 링크)");
 
   // 디스코드 알림: 잘못된 주소는 거절, 올바른 형식은 저장되고 연결됨으로 보임
@@ -750,6 +752,30 @@ try {
     await kp.waitForFunction((x) => Number(document.querySelector('[data-testid="obj-서하"]')?.getAttribute("data-x")) > x, x0);
   }
   step("키보드만으로 보드로 건너뛰고, 토큰 목록에서 골라 방향키로 움직임");
+  // 건너뛰기 링크 둘: 패널로 건너뛰면 굴림 입력까지 Tab 12번 안에 닿는다
+  {
+    await pl.getByRole("tab", { name: /^굴림/ }).click();
+    await pl.reload();
+    await pl.getByTestId("board").waitFor();
+    await pl.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : null));
+    let presses = 0;
+    const active = () => pl.evaluate(() => document.activeElement?.getAttribute("data-testid") ?? document.activeElement?.getAttribute("aria-label") ?? "");
+    await pl.keyboard.press("Tab"); presses++;
+    assert.equal(await active(), "skip-to-board");
+    await pl.keyboard.press("Tab"); presses++;
+    assert.equal(await active(), "skip-to-panel");
+    assert.equal(await pl.getByRole("link", { name: "패널로 건너뛰기" }).isVisible(), true, "초점이 오면 링크가 보여요");
+    await pl.keyboard.press("Enter"); presses++;
+    assert.equal(await pl.evaluate(() => document.activeElement?.getAttribute("role")), "tab");
+    await pl.keyboard.press("Tab"); presses++;
+    assert.equal(await pl.evaluate(() => Boolean(document.activeElement?.getAttribute("role") !== "tab" && document.activeElement?.closest('[data-testid="side-panel"]'))), true, "탭 다음 Tab 이 패널 안으로 들어가야 해요");
+    assert.ok(presses <= 12, `패널까지 키 ${presses}번`);
+    // 굴림 입력 자체까지의 번호는 굴림 기록 길이에 따라 달라지므로 참고용으로만 남긴다
+    console.log(`  (패널 진입까지 키 ${presses}번)`);
+    // 9개 슬롯은 한 번의 Tab 으로 지나간다(화살표로 이동)
+    await kp.keyboard.press("Escape");
+    step(`패널로 건너뛰기: 건너뛰기 링크 포함 키 ${presses}번 안에 굴림 입력에 닿음`);
+  }
 
   // GM 전용 오브젝트는 PL에게 안 보임
   await kp.getByRole("button", { name: "+ GM 전용" }).click();
@@ -826,7 +852,7 @@ try {
   // 보드 단축키·오른쪽 클릭 메뉴: Backspace 삭제 + Ctrl+Z, Ctrl+D 복제, Esc 선택 해제, Tab 이동, 메뉴 항목
   {
     const sel = kp.getByTestId("selected-bar");
-    const selName = () => sel.getByLabel("선택한 오브젝트 이름").inputValue();
+    const selName = () => sel.getByLabel("선택한 토큰·소품 이름").inputValue();
     await undoTok.click();
     await kp.keyboard.press("Backspace");
     await undoTok.waitFor({ state: "detached" });
@@ -1158,6 +1184,8 @@ try {
     assert.equal(await spec.getByTestId("marker-서하-poison").count(), 0, "관전자에게도 GM만 보이는 표식은 없어요");
     assert.equal(await spec.getByRole("button", { name: "+ 토큰" }).count(), 0, "관전자에게 편집 도구가 보이면 안 돼요");
     assert.equal(await spec.getByTestId("spectator-count").count(), 0, "관전자 수는 GM에게만 보여요");
+    assert.equal(await spec.getByTestId("request-token").count(), 0, "관전자에게는 토큰 요청 버튼이 없어요");
+    assert.equal(await spec.getByRole("button", { name: "매크로 편집" }).count(), 0, "관전자에게는 매크로 편집이 없어요");
     assert.equal(await pl.getByTestId("spectator-count").count(), 0);
     assert.equal(await pl.getByTestId("spectator-badge").count(), 0);
     // 오른쪽 클릭 메뉴가 있어도 표식을 바꿀 수 없다
@@ -1227,7 +1255,7 @@ try {
   step(`판정 효과가 PL 화면에 재생됨 (${level})`);
 
   await openSettings(pl);
-  await pl.getByRole("button", { name: /^효과 켜짐/ }).click();
+  await pl.getByRole("button", { name: /^내 화면 효과 끄기/ }).click();
   await pl.keyboard.press("Escape");
   await pl.getByTestId("roll-effect").waitFor({ state: "detached", timeout: 4000 }).catch(() => {});
   for (let i = 0; i < 25; i++) {
@@ -1961,7 +1989,7 @@ try {
 
     // GM이 이름·소유자를 바꾼다: 도윤 토큰을 NPC로 풀고 이름 변경 → 도윤은 못 움직임
     await kpT.getByTestId(`obj-${names[1]}`).click();
-    await kpT.getByLabel("선택한 오브젝트 이름").fill("문지기 " + run);
+    await kpT.getByLabel("선택한 토큰·소품 이름").fill("문지기 " + run);
     await kpT.getByRole("button", { name: "이름 바꾸기" }).click();
     await pls[0].getByTestId(`obj-문지기 ${run}`).waitFor();
     await kpT.getByLabel("선택한 토큰 소유자").selectOption("");
@@ -2263,6 +2291,44 @@ try {
     step("시트를 룸에서 빼면 그 시트를 이은 토큰의 연결이 풀리고 토큰은 남음");
   }
 
+  // 입력 한도·탭 줄·초점 복귀(GM, 데스크톱)
+  {
+    const inp = kp2.getByLabel("새 장면 이름");
+    await inp.fill("가".repeat(40));
+    const note = kp2.getByTestId("limit-note").first();
+    await note.waitFor();
+    assert.match(await note.innerText(), /장면 이름은 40자까지예요/);
+    assert.equal((await inp.inputValue()).length, 40);
+    await inp.fill("");
+    // 오른쪽 패널의 마지막 탭도 잘리지 않고 눌러진다
+    const side = await kp2.getByTestId("side-panel").boundingBox();
+    const logTab = kp2.getByRole("tab", { name: /^기록/ });
+    await logTab.click();
+    const lb = await logTab.boundingBox();
+    assert.ok(lb.x >= side.x - 1 && lb.x + lb.width <= side.x + side.width + 1, `기록 탭이 패널 밖이에요 ${JSON.stringify([lb, side])}`);
+    // 날짜 칸은 한국어 이름표
+    await kp2.getByRole("tab", { name: /^기록/ }).click();
+    if (await kp2.getByTestId("log-since").count()) assert.match((await kp2.getByTestId("log-since").getAttribute("aria-label")) ?? "", /시작 일시/);
+    await kp2.getByRole("tab", { name: /^굴림/ }).click();
+    // 초대 창을 닫으면 초점이 초대 버튼으로 돌아온다
+    const invBtn = kp2.getByRole("button", { name: "초대", exact: true });
+    await invBtn.click();
+    await kp2.getByLabel("초대 링크 주소").waitFor();
+    await kp2.keyboard.press("Escape");
+    await kp2.waitForFunction(() => document.activeElement?.textContent?.trim() === "초대");
+    // 단축키 검색에 '토큰으로 놓기'·'NPC 만들기'가 있다
+    await kp2.keyboard.press("Control+k");
+    const cueIn = kp2.getByRole("combobox").first();
+    await cueIn.fill("NPC").catch(() => {});
+    await kp2.keyboard.press("Escape");
+    // 시트 탭 위쪽 줄에서 바로 토큰으로 놓기·NPC 만들기가 보인다
+    await kp2.getByRole("tab", { name: /^시트/ }).click();
+    await kp2.getByTestId("sheet-top").waitFor();
+    const top = await kp2.getByTestId("sheet-top").boundingBox();
+    assert.ok(top.y < side.y + 160, "시트 탭의 도구 줄이 맨 위에 있어요");
+    await kp2.getByRole("tab", { name: /^굴림/ }).click();
+  }
+  step("입력 한도 안내, 마지막 탭 도달, 날짜 칸 한국어 이름, 초대 창 초점 복귀, 시트 탭 위쪽 도구 줄");
   // 준비 도구 3: 시나리오 가져오기(문서 예시) — 미리보기, 적용, 되돌리기
   const fsx = await import("node:fs/promises");
   const doc = await fsx.readFile(new URL("../../../docs/scenario-format.md", import.meta.url), "utf8");
@@ -2287,6 +2353,25 @@ try {
     await dlg.getByTestId("import-text").fill('{"format":"roll-and-call-scenario","version":2,"roomName":"X","scenes":[{"key":"a","name":"방"}],"tokens":[{"scene":"없는장면","kind":"prop","name":"상자","x":1,"y":1}]}');
     await dlg.getByTestId("import-errors").getByText(/없는장면/).waitFor();
     assert.equal(await dlg.getByTestId("import-apply").isDisabled(), true);
+    {
+      const ta = dlg.getByTestId("import-text");
+      assert.ok(Number(await ta.getAttribute("rows")) >= 10, "붙여넣는 칸은 10줄 이상");
+      assert.ok((await ta.boundingBox()).height >= 150, "붙여넣는 칸이 너무 낮아요");
+      assert.notEqual(await ta.evaluate((e) => getComputedStyle(e).resize), "none", "크기를 조절할 수 있어요");
+      const errText = await dlg.getByTestId("import-errors").innerText();
+      assert.match(errText, /번째 토큰·소품/);
+      assert.doesNotMatch(errText, /tokens\[/, "영어 경로가 그대로 보여요");
+      // 쉼표가 빠진 JSON: 줄·칸 위치가 한국어로
+      await ta.fill('{\n  "format": "roll-and-call-scenario",\n  "version": 2\n  "roomName": "X"\n}');
+      await dlg.getByTestId("import-errors").getByText(/번째 줄/).waitFor();
+      assert.match(await dlg.getByTestId("import-errors").innerText(), /JSON 형식이 맞지 않아요/);
+      // 겹친 장면 key
+      await ta.fill('{"format":"roll-and-call-scenario","version":2,"roomName":"X","scenes":[{"key":"a","name":"방"},{"key":"a","name":"방2"}]}');
+      await dlg.getByTestId("import-errors").getByText(/겹쳐요/).waitFor();
+      assert.match(await dlg.getByTestId("import-errors").innerText(), /2번째 장면/);
+      await ta.fill('{"format":"roll-and-call-scenario","version":2,"roomName":"X","scenes":[{"key":"a","name":"방"}],"tokens":[{"scene":"없는장면","kind":"prop","name":"상자","x":1,"y":1}]}');
+      await dlg.getByTestId("import-errors").getByText(/없는장면/).waitFor();
+    }
     // 예시 받기
     const [sampleDl] = await Promise.all([kp2.waitForEvent("download"), dlg.getByTestId("import-sample").click()]);
     const sampleFile = JSON.parse((await fsx.readFile(await sampleDl.path())).toString("utf8"));
@@ -2410,7 +2495,7 @@ try {
 
   // ── 휴대폰·태블릿: 터치로 GM과 PL이 모두 쓸 수 있다 ──
   {
-    const SHOTD = process.env.B5_SHOTS ?? "/tmp/claude-0/-home-claude/67ca7b5b-0635-57ed-b16a-c1834c783582/scratchpad/b5-shots";
+    const SHOTD = process.env.B5_SHOTS ?? "/tmp/claude-0/-home-claude/67ca7b5b-0635-57ed-b16a-c1834c783582/scratchpad/b7ux-shots";
     const mctx = async (w, h) => {
       const c = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
       c.setDefaultTimeout(Number(process.env.E2E_TIMEOUT_MS ?? 30000));
@@ -2446,6 +2531,8 @@ try {
     const inside = (b, o) => b.x >= o.x - 1 && b.y >= o.y - 1 && b.x + b.width <= o.x + o.width + 1 && b.y + b.height <= o.y + o.height + 1;
     const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
     await (await import("node:fs/promises")).mkdir(SHOTD, { recursive: true });
+    // 휴대폰에서는 보기 도구(확대·맞춤·내 토큰)가 접혀 있다: 펼친 뒤에 쓴다
+    const openZoom = async (page) => { const t = page.getByTestId("zoom-toggle"); if (await t.isVisible() && (await t.getAttribute("aria-expanded")) !== "true") await t.click(); };
 
     // 방 만들기와 입장은 데스크톱 쪽으로 하고, 휴대폰 화면 둘이 같은 룸에 들어간다
     const gmC = await mctx(390, 844);
@@ -2482,6 +2569,8 @@ try {
 
     // 확대: 버튼과 두 손가락 모으기
     const z0 = await zoomOf(gm);
+    assert.equal(await gm.getByRole("button", { name: "확대", exact: true }).isVisible(), false, "휴대폰의 보기 도구는 접혀 있어요");
+    await openZoom(gm);
     await gm.getByRole("button", { name: "확대" }).click();
     assert.ok((await zoomOf(gm)) > z0);
     await gm.getByTestId("zoom-fit").click();
@@ -2494,6 +2583,7 @@ try {
     await gm.reload();
     await gm.getByTestId("board").waitFor();
     await gm.waitForFunction((z) => Math.abs(Number(document.querySelector('[data-testid="board"]').getAttribute("data-zoom")) - z) < 0.05, zKeep);
+    await openZoom(gm);
     await gm.getByTestId("zoom-fit").click();
     step("휴대폰: 확대·맞춤 버튼과 두 손가락 모으기가 되고, 장면별 확대가 새로고침 뒤에도 남음");
 
@@ -2596,14 +2686,23 @@ try {
     step("휴대폰 PL: 룸의 시트 탭에서 캐릭터 만들기 마법사를 끝내면 룸에 올라가고 보관함에도 저장됨");
 
     // 토큰을 받고 '내 토큰'으로 이동·터치 이동
-    await gm.getByTestId("sheet-handle").click();
-    await gm.getByTestId("sheet-tab-place").click();
-    await gm.getByLabel("새 토큰 소유자").selectOption({ label: "모바PL" + run });
-    await gm.getByTestId("quick-token").click();
-    await gm.getByTestId("sheet-handle").click();
-    await mpl.locator('[data-mine="true"]').first().waitFor();
+    // 토큰 요청: 캐릭터를 다 만든 PL 은 보드 아래 안내에서 GM 에게 토큰을 부탁하고, GM 은 알림의 한 번 누르기로 놓는다
     await mpl.getByTestId("drawer-close").click();
+    const reqBtn = mpl.getByTestId("request-token");
+    await reqBtn.waitFor();
+    await big(reqBtn, "토큰 요청", 40);
+    assert.match(await mpl.getByTestId("no-token-hint").innerText(), /토큰/);
+    await reqBtn.click();
+    await mpl.getByRole("button", { name: "요청했어요" }).waitFor();
+    const ask = gm.getByTestId("toast").filter({ hasText: /토큰을 요청했어요/ });
+    await ask.waitFor();
+    assert.match(await ask.innerText(), /모바PL.*가 토큰을 요청했어요|모바PL.*이 토큰을 요청했어요/);
+    await ask.getByTestId("toast-action").click();
+    await mpl.locator('[data-mine="true"]').first().waitFor();
+    assert.equal(await mpl.getByTestId("request-token").count(), 0, "토큰이 놓이면 요청 버튼은 사라져요");
+    step("휴대폰 PL: 'GM에게 토큰 요청' → GM 알림의 '토큰 놓기' 한 번으로 PL 토큰이 놓임");
     await mpl.waitForTimeout(500);
+    await openZoom(mpl);
     await mpl.getByTestId("focus-mine").click();
     const mc = await centerOf(mpl.locator('[data-mine="true"] circle').first());
     const mx0 = Number(await mpl.locator('[data-mine="true"]').first().getAttribute("data-x"));
@@ -2614,7 +2713,8 @@ try {
 
     await gm.screenshot({ path: `${SHOTD}/phone-gm.png` });
     // 코치 대신 ≥44px: 주요 조작
-    for (const loc of [gm.getByRole("button", { name: "확대" }), gm.getByTestId("sheet-handle"), gm.getByTestId("zoom-fit")]) await big(loc, "주요 조작");
+    await openZoom(gm);
+    for (const loc of [gm.getByRole("button", { name: "확대" }), gm.getByTestId("sheet-handle"), gm.getByTestId("zoom-fit"), gm.getByTestId("zoom-toggle")]) await big(loc, "주요 조작");
     step("휴대폰: 확대·맞춤·도구 묶음 손잡이가 44px 이상");
 
     // 태블릿 820x1180
@@ -2635,17 +2735,80 @@ try {
     await tb.screenshot({ path: `${SHOTD}/tablet-gm.png` });
     step("태블릿 820px: 지도가 옆 패널에 가려지지 않고 버튼이 잘리지 않으며 주요 조작이 44px 이상");
 
-    // 데스크톱 화면 크기별 스크린샷
-    for (const [w, h, nm] of [[1366, 768, "laptop"], [1440, 900, "desktop"]]) {
-      const dc = await browser.newContext({ viewport: { width: w, height: h } });
+    // 네 가지 화면 크기: 겹침·잘림 검사(알림·선택 줄·되돌리기·장면 막대·보기 도구가 서로 안 겹침)
+    for (const [w, h, nm] of [[1440, 900, "desktop"], [1366, 768, "laptop"], [820, 1180, "tablet"], [390, 844, "phone"]]) {
+      const dc = nm === "tablet" || nm === "phone" ? await mctx(w, h) : await browser.newContext({ viewport: { width: w, height: h } });
+      dc.setDefaultTimeout(Number(process.env.E2E_TIMEOUT_MS ?? 30000));
       const dp = await dc.newPage();
       await login(dp, "모바GM" + run);
       await dp.getByTestId("room-card").filter({ hasText: "모바일방 " + run }).getByRole("link").first().click();
       await dp.waitForURL(/\/room\//);
       await dp.getByTestId("board").waitFor();
+      await dp.getByTestId("scenebar").waitFor();
+      const boxes = async (extra = {}) => {
+        const sel = { scenebar: '[data-testid="scenebar"]', zoom: '[data-testid="zoom-ctl"]', selected: '[data-testid="selected-bar"]:visible', undo: ".undo-ctl", toast: ".toasts", sheet: '[data-testid="tool-sheet"]', dock: '[data-testid="panel-dock"]', sceneName: '[data-testid="scene-name"]', banner: ".banner-stack", ...extra };
+        const out = {};
+        for (const [k, q] of Object.entries(sel)) {
+          const l = dp.locator(q).first();
+          if ((await l.count()) && (await l.isVisible())) out[k] = await l.boundingBox();
+        }
+        return out;
+      };
+      const check = (b, what) => {
+        const keys = Object.keys(b);
+        for (const k of keys) assert.ok(b[k].x >= -1 && b[k].y >= -1 && b[k].x + b[k].width <= w + 1 && b[k].y + b[k].height <= h + 1, `${nm} ${what}: ${k} 가 화면 밖 ${JSON.stringify(b[k])}`);
+        for (let a = 0; a < keys.length; a++) for (let c = a + 1; c < keys.length; c++) {
+          const A = b[keys[a]], B = b[keys[c]];
+          assert.ok(!overlap(A, B), `${nm} ${what}: ${keys[a]} 와 ${keys[c]} 가 겹쳐요 ${JSON.stringify([A, B])}`);
+        }
+      };
+      // 휴대폰은 선택 줄이 접힌 도구 묶음 안에 있다: 펼쳐서 보고 다시 접는다
+      const withSel = async (fn) => {
+        if (nm !== "phone") { await dp.locator('[data-testid="selected-bar"]:visible').first().waitFor(); return fn(); }
+        await dp.getByTestId("sheet-handle").click();
+        await dp.getByTestId("sheet-tab-select").click();
+        await dp.locator('[data-testid="selected-bar"]:visible').first().waitFor();
+        await dp.waitForTimeout(400);
+        await fn();
+        await dp.getByTestId("sheet-handle").click();
+        await dp.getByTestId("tool-sheet-body").waitFor({ state: "hidden" });
+        await dp.locator('[data-testid^="pick-"]').first().focus();
+        await dp.keyboard.press("Enter");
+      };
+      await dp.waitForTimeout(400);
+      if (nm === "phone") assert.ok((await dp.getByTestId("scenebar").boundingBox()).height < 60, "휴대폰 장면 막대는 한 줄이에요");
+      if (nm === "tablet" || nm === "phone") assert.ok((await dp.getByTestId("scene-select").count()) > 0, "작은 화면의 장면 막대는 드롭다운이에요");
+      await openZoom(dp);
+      check(await boxes(), "기본");
       await dp.screenshot({ path: `${SHOTD}/${nm}-gm.png` });
+      // 토큰을 고르고 움직이면(되돌리기가 생김) 선택 줄·되돌리기가 함께 보이고 서로 안 겹친다
+      const pickBtn = dp.locator('[data-testid^="pick-"]').first();
+      await pickBtn.focus();
+      await dp.keyboard.press("Enter");
+      await dp.keyboard.press("ArrowRight");
+      await dp.getByRole("button", { name: "되돌리기" }).first().waitFor();
+      await dp.waitForTimeout(300);
+      await withSel(async () => check(await boxes(), "선택·되돌리기"));
+      await dp.screenshot({ path: `${SHOTD}/${nm}-gm-selected.png` });
+      // 지우면 알림이 뜬다: 알림은 되돌리기·선택 줄·보기 도구·장면 막대와 겹치지 않는다
+      await dp.keyboard.press("Delete");
+      await dp.getByTestId("toast").first().waitFor();
+      await dp.waitForTimeout(300);
+      check(await boxes(), "알림");
+      await dp.screenshot({ path: `${SHOTD}/${nm}-gm-toast.png` });
+      // 한 번 더: 알림이 떠 있는 채로 토큰을 다시 고르면 알림이 선택 줄 위로 올라간다
+      const undoBtn = dp.getByRole("button", { name: "되돌리기" }).first();
+      if (await undoBtn.isVisible()) await undoBtn.click();
+      await dp.locator('[data-testid^="pick-"]').first().waitFor({ state: "attached" });
+      await dp.locator('[data-testid^="pick-"]').first().focus();
+      await dp.keyboard.press("Enter");
+      await withSel(async () => {
+        check(await boxes(), "되돌린 뒤");
+        assert.ok(await dp.locator('[data-testid="selected-bar"]:visible').first().getByText("소유자", { exact: true }).isVisible(), "소유자 이름표가 보여야 해요");
+      });
       await dc.close();
     }
+    step("1440x900·1366x768·820x1180·390x844: 알림·선택 줄·되돌리기·장면 막대·보기 도구가 화면 안에서 서로 겹치지 않음");
     await gmC.close(); await plC.close(); await tbC.close();
   }
 

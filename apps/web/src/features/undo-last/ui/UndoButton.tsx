@@ -7,5 +7,5 @@ export function UndoButton({ onUndo, inline = false }: { onUndo: () => void; inl
       ↶ 되돌리기
     </button>
   );
-  return inline ? btn : <div className="undo-ctl">{btn}</div>;
+  return inline ? btn : <div className="undo-ctl" data-lane="bottom">{btn}</div>;
 }

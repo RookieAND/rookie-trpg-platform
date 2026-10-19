@@ -17,6 +17,8 @@ interface Props {
   hidden: Array<{ id: string; userName: string }>;
   isKp: boolean;
   disabled: boolean;
+  /** 관전자: 매크로 편집 같은 고치는 도구를 숨긴다 */
+  readOnly?: boolean;
   /** 굴리지 못하는 이유 한 줄(disabled일 때 버튼 옆에 보여 준다) */
   disabledReason?: string | null;
   error: string | null;
@@ -37,7 +39,7 @@ interface Props {
   onApplyDamage?: (rollId: string, characterId: string, armor: number) => unknown;
 }
 
-export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disabled, disabledReason, error, onRoll, onPush, onLuck, players, onAsk, onGroup, onOpposed, damageApplied = {}, onApplyDamage }: Props) {
+export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disabled, readOnly = false, disabledReason, error, onRoll, onPush, onLuck, players, onAsk, onGroup, onOpposed, damageApplied = {}, onApplyDamage }: Props) {
   const [expr, setExpr] = useState("");
   const [secret, setSecret] = useState(false);
   const [help, setHelp] = useState(false);
@@ -141,7 +143,7 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
         ))}
       </div>
       <div className="compose">
-        <MacroBar error={macro.error} macros={macro.macros} isKp={isKp} disabled={disabled} onRoll={macroRoll} onAdd={macro.add} onRemove={macro.remove} />
+        <MacroBar error={macro.error} macros={macro.macros} isKp={isKp} readOnly={readOnly} disabled={disabled} onRoll={macroRoll} onAdd={macro.add} onRemove={macro.remove} />
         {isKp && onAsk && <AskForm players={players ?? []} disabled={disabled} onAsk={onAsk} {...(onGroup ? { onGroup } : {})} />}
         {onOpposed && <OpposedForm isKp={isKp} disabled={disabled} userId={userId} characters={characters} players={players ?? []} onOpposed={onOpposed} />}
         <div className="row">

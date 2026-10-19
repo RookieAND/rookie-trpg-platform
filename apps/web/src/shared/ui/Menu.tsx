@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { restoreFocus } from "./focus-return";
 
 /**
  * 모아 둔 버튼을 하나의 메뉴로 접는다. 바깥을 누르거나 Esc를 누르면 닫힌다.
@@ -9,6 +10,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 export function Menu({ label, title, testId, align = "right", children }: { label: ReactNode; title?: string; testId?: string; align?: "left" | "right"; children: ReactNode | ((close: () => void) => ReactNode) }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLSpanElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
+  // 닫히면서 초점이 사라졌다면(Esc나 항목 선택) 메뉴를 연 버튼으로 돌려준다. 바깥을 눌러 닫은 경우는 누른 곳을 그대로 둔다.
+  useEffect(() => {
+    if (wasOpen.current && !open) restoreFocus(trigger.current, true);
+    wasOpen.current = open;
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -41,7 +49,7 @@ export function Menu({ label, title, testId, align = "right", children }: { labe
 
   return (
     <span className="menu" ref={root}>
-      <button className="btn ghost" aria-haspopup="menu" aria-expanded={open} title={title} data-testid={testId} onClick={() => setOpen((o) => !o)}>
+      <button ref={trigger} className="btn ghost" aria-haspopup="menu" aria-expanded={open} title={title} data-testid={testId} onClick={() => setOpen((o) => !o)}>
         {label} <span aria-hidden style={{ fontSize: 9, opacity: 0.7 }}>▾</span>
       </button>
       {open && (

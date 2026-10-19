@@ -1,3 +1,4 @@
+import { issueLine, jsonSyntaxMessage } from "./issues";
 import { countScenario, countsLine, parseScenarioText, type ScenarioCounts } from "@coc-vtt/shared";
 
 /** 파일 글을 브라우저에서 먼저 검사한 결과. 서버로 보내기 전에 형식 문제를 위치별로 알려 준다. */
@@ -7,8 +8,13 @@ export type LocalPreview =
 
 export function previewLocal(text: string): LocalPreview {
   if (!text.trim()) return { ok: false, errors: ["파일이 비어 있어요."] };
+  try {
+    JSON.parse(text.replace(/^\uFEFF/, ""));
+  } catch (e) {
+    return { ok: false, errors: [jsonSyntaxMessage(text, e)] };
+  }
   const r = parseScenarioText(text);
-  if (!r.ok) return { ok: false, errors: r.errors.map((e) => `${e.where}: ${e.message}`) };
+  if (!r.ok) return { ok: false, errors: r.errors.map((e) => issueLine(e.where, e.message)) };
   const counts = countScenario(r.doc);
   return { ok: true, counts, line: countsLine(counts), warnings: r.warnings, roomName: r.doc.roomName, kind: r.doc.format === "roll-and-call-backup" ? "backup" : "scenario" };
 }

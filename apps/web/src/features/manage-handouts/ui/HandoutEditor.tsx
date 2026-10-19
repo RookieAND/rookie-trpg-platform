@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
-import type { Member, Visibility } from "@coc-vtt/shared";
+import { LIMITS, type Member, type Visibility } from "@coc-vtt/shared";
 import { firstImageFile, imageUrl, type Caller } from "@/shared/api";
-import { ImageUploadButton, useFileDrop, useImageUpload } from "@/shared/ui";
+import { ImageUploadButton, LimitNote, useFileDrop, useImageUpload } from "@/shared/ui";
 
 export interface HandoutDraft {
   title: string;
@@ -34,8 +34,16 @@ export function HandoutEditor({ me, initial, players, onSave, onCancel }: { me: 
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      <input className="input" aria-label="핸드아웃 제목" placeholder="제목" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <textarea className="input" style={{ height: 120 }} aria-label="핸드아웃 내용" placeholder="내용" value={body} onChange={(e) => setBody(e.target.value)} />
+      <label className="field" style={{ gap: 4 }}>
+        제목
+        <input className="input" aria-label="핸드아웃 제목" placeholder="제목" value={title} maxLength={LIMITS.handoutTitle} aria-describedby="handout-title-limit" onChange={(e) => setTitle(e.target.value)} />
+        <LimitNote id="handout-title-limit" label="핸드아웃 제목" max={LIMITS.handoutTitle} value={title} />
+      </label>
+      <label className="field" style={{ gap: 4 }}>
+        내용
+        <textarea className="input" style={{ height: 120 }} aria-label="핸드아웃 내용" placeholder="내용" value={body} maxLength={LIMITS.handoutBody} aria-describedby="handout-body-limit" onChange={(e) => setBody(e.target.value)} />
+        <LimitNote id="handout-body-limit" label="핸드아웃 내용" max={LIMITS.handoutBody} value={body} />
+      </label>
       <div className={`img-drop${zone.over ? " over" : ""}`} data-testid="handout-image-drop" {...zone.props}>
         {image && <img src={imageUrl(image)} alt="핸드아웃 이미지 미리보기" style={{ height: 56, borderRadius: 6, border: "1px solid var(--line-2)" }} />}
         <ImageUploadButton me={me} label={image ? "이미지 바꾸기" : "이미지 넣기"} current={image} onUploaded={setImage} />

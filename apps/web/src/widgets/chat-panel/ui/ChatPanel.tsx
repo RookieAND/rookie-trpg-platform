@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CHAT_HELP_LINES, CHAT_HISTORY_ON_JOIN, CHAT_MAX_LENGTH, type ChatMessage, type ClientCommand, type Member, type Role } from "@coc-vtt/shared";
+import { limitMessage } from "@/shared/lib";
 import { chatTargets, chatTime, checkDraft, nearBottom, shouldSendOnEnter, speakerField, speakerFromValue, speakerValue, whisperLabel, whisperRecipients, type SpeakerChoice } from "../model/chat-view";
 
 export interface ChatPanelProps {
@@ -196,7 +197,7 @@ export function ChatPanel(p: ChatPanelProps) {
             value={text}
             maxLength={CHAT_MAX_LENGTH + 200}
             disabled={readOnly}
-            placeholder={readOnly ? "지금은 읽기만 할 수 있어요. GM이 관전자 대화를 켜면 말할 수 있어요" : spectator ? "관전자는 모두에게 보이는 말만 할 수 있어요" : "말하기 (/r 1d100 으로 굴리기)"}
+            placeholder={readOnly ? "지금은 읽기만 할 수 있어요. GM이 관전자 대화를 켜면 말할 수 있어요" : spectator ? "관전자는 모두에게 보이는 말만 할 수 있어요" : "말하기 · /r 굴림 · /hr 비밀 굴림 · /w 이름 귓속말"}
             onChange={(e) => {
               setText(e.target.value);
               if (error) setError(null);
@@ -228,6 +229,7 @@ export function ChatPanel(p: ChatPanelProps) {
             </label>
           )}
         </div>
+        {left < 0 && <div className="err" role="alert" data-testid="chat-over">{limitMessage("대화", CHAT_MAX_LENGTH)} {-left}자를 줄여 주세요.</div>}
         {error && <div className="err" role="alert" data-testid="chat-error">{error}</div>}
       </div>
     </div>

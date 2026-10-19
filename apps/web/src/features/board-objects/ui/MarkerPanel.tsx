@@ -45,7 +45,7 @@ export function MarkerPanel({ obj, canSecret, enabled, send, inMenu = false }: P
       {canSecret && (
         <label className="mk-secret">
           <input type="checkbox" data-testid="marker-secret-switch" checked={secret} onChange={(e) => setSecret(e.target.checked)} disabled={!enabled} />
-          GM만 보이게 켜기
+          <span>GM만 보이게 켜기<span className="mk-secret-sub">새로 켜는 표식이 PL에게 안 보여요</span></span>
         </label>
       )}
       <div className="mk-list">
@@ -63,22 +63,24 @@ export function MarkerPanel({ obj, canSecret, enabled, send, inMenu = false }: P
             >
               <Swatch k={r.key} />
               <span className="mk-label">{r.key === "custom" && r.on ? r.text : r.label}</span>
-              {r.on && r.secret && <span className="mk-tag">GM만</span>}
             </button>
             {canSecret && r.on && (
               <button
                 type="button"
-                className="btn sm ghost mk-secret-btn"
+                role="switch"
+                className="mk-switch"
                 data-testid={`marker-secret-${r.key}`}
-                aria-pressed={r.secret}
-                aria-label={`${r.key === "custom" ? r.text : r.label} GM만 보임`}
+                aria-checked={r.secret}
+                aria-label={`${r.key === "custom" ? r.text : r.label} 표식을 GM만 보기`}
+                title={r.secret ? "지금 GM에게만 보여요. 누르면 모두에게 보여요" : "지금 모두에게 보여요. 누르면 GM에게만 보여요"}
                 disabled={!enabled}
                 onClick={() => {
                   const c = markerCommand(obj, r.key, true, { secret: !r.secret, text: r.text });
                   if (c) send(c);
                 }}
               >
-                GM만
+                <span className="mk-switch-track" aria-hidden><span className="mk-switch-knob" /></span>
+                <span className="mk-switch-text">GM만</span>
               </button>
             )}
           </div>

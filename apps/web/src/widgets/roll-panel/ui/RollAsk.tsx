@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { josa, type Character, type DamageApplied, type RollAsk } from "@coc-vtt/shared";
+import { LIMITS, josa, type Character, type DamageApplied, type RollAsk } from "@coc-vtt/shared";
 
 const LEVEL: Record<string, string> = { regular: "보통", hard: "어려움", extreme: "극단적" };
 
@@ -37,7 +37,7 @@ export function AskForm({
       </button>
       {open && (
         <div className="ask-fields">
-          <input className="input" style={{ flex: "1 1 100%" }} aria-label="요청할 기능" placeholder="기능 이름 (예: 관찰력)" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} />
+          <input className="input" style={{ flex: "1 1 100%" }} aria-label="요청할 기능" placeholder="기능 이름 (예: 관찰력)" maxLength={LIMITS.rollName} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} />
           <select className="input" style={{ flex: "1 1 0", minWidth: 0 }} aria-label="요청 받을 사람" value={target} onChange={(e) => setTarget(e.target.value)}>
             <option value="">PL 전원</option>
             {players.map((p) => <option key={p.userId} value={p.userId}>{p.name}</option>)}

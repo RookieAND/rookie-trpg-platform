@@ -6,6 +6,7 @@ import { importScenario, type ScenarioImportResult } from "@/entities/room";
 import { ApiError, type Caller } from "@/shared/api";
 import { downloadText } from "@/shared/lib";
 import { Dialog } from "@/shared/ui";
+import { issueLine } from "../model/issues";
 import { previewLocal, type LocalPreview } from "../model/preview";
 
 type Server =
@@ -14,11 +15,17 @@ type Server =
   | { state: "ok"; result: ScenarioImportResult }
   | { state: "error"; errors: string[] };
 
+/** 서버가 "위치: 문장"으로 준 줄도 같은 한국어 위치로 바꾼다. */
+function serverLine(line: string): string {
+  const i = line.indexOf(": ");
+  return i > 0 && /^[A-Za-z]+(\[\d+\]|\.|\s|$)/.test(line) ? issueLine(line.slice(0, i), line.slice(i + 2)) : line;
+}
+
 /** 서버 오류에서 위치별 문제 목록을 꺼낸다. */
 function errorList(e: unknown): string[] {
   if (e instanceof ApiError) {
     const list = (e.body as { errors?: string[] } | null | undefined)?.errors;
-    return list?.length ? list : [e.message];
+    return list?.length ? list.map(serverLine) : [e.message];
   }
   return ["서버에 연결하지 못했어요. 잠시 뒤에 다시 해 주세요."];
 }
@@ -101,13 +108,13 @@ export function ScenarioImportDialog({ me, roomId, onClose, onImported }: { me: 
           <button type="button" className="btn" data-testid="import-sample" onClick={() => downloadText("예시-시나리오.json", JSON.stringify(SAMPLE_SCENARIO, null, 2), "application/json;charset=utf-8")}>예시 받기</button>
           {fileName && <span className="import-sub" data-testid="import-filename">{fileName}</span>}
         </div>
-        <textarea className="input import-text" data-testid="import-text" aria-label="시나리오 글" placeholder="또는 여기에 시나리오 글을 붙여 넣어요" value={text} onChange={(e) => (setFileName(""), setText(e.target.value))} spellCheck={false} />
+        <textarea className="input import-text" rows={12} data-testid="import-text" aria-label="시나리오 글" placeholder="또는 여기에 시나리오 글을 붙여 넣어요" value={text} onChange={(e) => (setFileName(""), setText(e.target.value))} spellCheck={false} />
 
         <div role="status" aria-live="polite" data-testid="import-preview" className="import-preview">
           {server.state === "checking" && <span className="import-sub">확인하는 중…</span>}
           {local?.ok && server.state === "ok" && (
             <>
-              <div data-testid="import-counts"><strong>{local.kind === "backup" ? "룸 백업" : "시나리오"}</strong> · {countsText(server.result)}</div>
+              <div data-testid="import-counts"><strong>{local.kind === "backup" ? "룸 백업이에요" : "시나리오예요"}</strong> · 더해질 것: {countsText(server.result)}</div>
               {server.result.reusedScene && <div className="import-sub">비어 있는 첫 장면을 첫 장면으로 써요.</div>}
             </>
           )}
