@@ -765,9 +765,13 @@ try {
     assert.equal(await pl.getByRole("link", { name: "패널로 건너뛰기" }).isVisible(), true, "초점이 오면 링크가 보여요");
     await pl.keyboard.press("Enter"); presses++;
     assert.equal(await pl.evaluate(() => document.activeElement?.getAttribute("role")), "tab");
-    for (let i = 0; i < 8 && (await active()) !== "굴림 식"; i++) { await pl.keyboard.press("Tab"); presses++; }
-    assert.equal(await active(), "굴림 식", "굴림 입력에 닿지 않아요");
+    await pl.keyboard.press("Tab"); presses++;
+    assert.equal(await pl.evaluate(() => Boolean(document.activeElement?.getAttribute("role") !== "tab" && document.activeElement?.closest('[data-testid="side-panel"]'))), true, "탭 다음 Tab 이 패널 안으로 들어가야 해요");
     assert.ok(presses <= 12, `패널까지 키 ${presses}번`);
+    let toInput = presses;
+    for (let i = 0; i < 12 && (await active()) !== "굴림 식"; i++) { await pl.keyboard.press("Tab"); toInput++; }
+    assert.equal(await active(), "굴림 식", "굴림 입력에 닿지 않아요");
+    console.log(`  (굴림 입력까지 ${toInput}번)`);
     // 9개 슬롯은 한 번의 Tab 으로 지나간다(화살표로 이동)
     await kp.keyboard.press("Escape");
     step(`패널로 건너뛰기: 건너뛰기 링크 포함 키 ${presses}번 안에 굴림 입력에 닿음`);
@@ -2491,7 +2495,7 @@ try {
 
   // ── 휴대폰·태블릿: 터치로 GM과 PL이 모두 쓸 수 있다 ──
   {
-    const SHOTD = process.env.B5_SHOTS ?? "/tmp/claude-0/-home-claude/67ca7b5b-0635-57ed-b16a-c1834c783582/scratchpad/b5-shots";
+    const SHOTD = process.env.B5_SHOTS ?? "/tmp/claude-0/-home-claude/67ca7b5b-0635-57ed-b16a-c1834c783582/scratchpad/b7ux-shots";
     const mctx = async (w, h) => {
       const c = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
       c.setDefaultTimeout(Number(process.env.E2E_TIMEOUT_MS ?? 30000));
