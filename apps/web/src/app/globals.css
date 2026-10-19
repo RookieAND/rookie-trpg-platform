@@ -69,7 +69,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .room { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
 .topbar { height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--bg); }
 .brand { font-weight: 650; letter-spacing: -.01em; font-size: 13.5px; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
-.brand::before { content: ""; width: 14px; height: 14px; border-radius: 4px; background: linear-gradient(135deg, var(--accent), var(--primary)); }
+.brand::before { content: ""; flex: none; width: 1.55em; height: 1.2em; background: url(/logo-128.png) center / contain no-repeat; }
 .crumb { color: var(--muted); text-decoration: none; font-size: 13px; }
 .crumb:hover { color: var(--text); }
 .presence { color: var(--muted); font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -333,7 +333,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .room.phone .topbar { flex: none; gap: 4px; padding: 4px 6px; row-gap: 2px; }
 .room.phone .topbar .crumb, .room.phone .topbar .presence, .room.phone .topbar .sep { display: none; }
 .room.phone .topbar .brand { font-size: 0; gap: 0; min-width: 36px; min-height: 36px; justify-content: center; }
-.room.phone .topbar .brand::before { width: 16px; height: 16px; }
+.room.phone .topbar .brand::before { width: 24px; height: 19px; }
 .room.phone .topbar .badge { height: 24px; }
 .room.phone .topbar [data-testid="session-status"] { min-width: 0; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; display: inline-block; line-height: 22px; padding: 0 7px; flex: 1 1 44px; }
 .room.phone .topbar [data-testid="session-status"]::before { display: inline-block; margin-right: 5px; vertical-align: 1px; }

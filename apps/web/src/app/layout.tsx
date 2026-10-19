@@ -10,6 +10,9 @@ import { SERVICE_NAME } from "../shared/config";
 
 export const metadata = { title: SERVICE_NAME };
 
+/** 주소창·상태 막대 색을 화면 바탕과 맞춘다 */
+export const viewport = { themeColor: "#08090a" };
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ko">

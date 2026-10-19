@@ -59,7 +59,10 @@ const login = async (page, name) => {
     assert.equal(await startBtn.getAttribute("aria-describedby"), "login-why");
     assert.match(await page.getByTestId("login-why").innerText(), /이름/);
     assert.match(await page.title(), /^밤의 탁자$/);
-    assert.equal((await fetch(`${WEB}/icon.svg`)).status, 200, "파비콘이 있어야 해요");
+    assert.equal((await fetch(`${WEB}/icon.png`)).status, 200, "탭 아이콘이 있어야 해요");
+    assert.equal((await fetch(`${WEB}/logo-128.png`)).status, 200, "화면 안 로고가 있어야 해요");
+    const manifest = await (await fetch(`${WEB}/manifest.webmanifest`)).json();
+    assert.ok(manifest.icons.length >= 2 && manifest.name, "홈 화면 추가용 manifest가 있어야 해요");
   }
   await page.getByLabel("이름").fill(name);
   await page.getByRole("button", { name: "시작하기" }).click();
