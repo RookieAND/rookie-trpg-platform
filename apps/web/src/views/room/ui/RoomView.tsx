@@ -478,6 +478,7 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
           <Board grid={board.grid} viewKey={board.sceneId ? viewKey(me.userId, roomId, board.sceneId) : undefined} snapKey={board.sceneId ? snapKey(me.userId, roomId, board.sceneId) : undefined} onOpenSheet={(o) => o.characterId && (isKp || o.ownerId === me.userId) && state.characters[o.characterId] && openSheet(o.characterId)} objects={board.objects} background={board.background} me={{ userId: me.userId, role }} canInteract={canEditBoard} onMove={move} selectedId={selectedId} onSelect={setSelectedId} fog={board.fog} onPing={canPing ? ping : undefined} pings={state.pings} sceneId={board.sceneId} turnTokenIds={turnTokenIds} onDragStart={onDragStart} animate={fx.enabled} onPick={isKp && fogPicking ? (x, y) => send({ type: "fog.reveal", data: { sceneId: shownSceneId, x, y, r: fogRadius } }) : undefined} {...interactions.boardProps} {...(isKp && !board.background ? { hint: "이미지를 끌어다 놓아 배경을 정해요" } : {})} />
           {interactions.ui}
           {role === "pl" && <PartyStatus party={state.party} meId={me.userId} />}
+          {isKp && <PartyStatus party={state.party} meId={me.userId} onOpenSheet={openSheet} />}
           {role === "pl" && selected && canEditMarkers(role, me.userId, selected) && (
             <div className="dock dock-hint pl-marker-dock" data-testid="pl-marker-dock" data-lane="bottom">
               <span className="dock-note">{selected.name}</span>

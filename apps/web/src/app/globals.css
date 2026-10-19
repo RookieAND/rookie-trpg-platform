@@ -1021,3 +1021,15 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 .sheet-dlg { position: relative; z-index: 1; }
 .sheet-dlg-body .sheet { align-items: start; align-content: start; }
+
+/* 휴대폰: 알림 배너가 떠 있으면 시작 안내는 잠시 숨기고(겹침 방지), 체크 표시는 찌그러지지 않게 */
+.room.phone .board:has(.banner-stack > .banner) .guide { display: none; }
+.guide .check { flex: none; min-width: 0; min-height: 0; width: 16px; height: 16px; }
+.room.phone .guide li { align-items: center; }
+
+/* GM: 가로 배열 파티 현황, 카드를 눌러 시트 열기 */
+.party.gm { flex-direction: row; flex-wrap: wrap; align-items: flex-start; max-width: calc(100% - 20px); max-height: none; overflow: visible; }
+.party.gm .party-card { width: 148px; padding: 5px 7px; gap: 2px; }
+.party-card.clickable { cursor: pointer; }
+.party-card.clickable:hover, .party-card.clickable:focus-visible { border-color: rgba(124,134,247,.8); outline: none; }
+@media (max-width: 1100px) { .party.gm .party-card { width: 128px; } }
