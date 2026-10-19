@@ -9,6 +9,7 @@ import { IMAGE_ID, MAX_AUDIO_BYTES, MAX_IMAGE_BYTES } from "../../domain/image-s
 const MESSAGE = {
   too_large: "파일이 너무 커요. 이미지는 3MB, 오디오는 10MB까지 올릴 수 있어요.",
   bad_type: "지원하지 않는 파일이에요. 이미지는 PNG, JPG, GIF, WEBP, 오디오는 MP3, OGG, WAV, M4A만 올릴 수 있어요.",
+  bad_size: "이미지 크기가 너무 커요. 한 변 8000px, 전체 4천만 화소(40MP)까지 올릴 수 있어요.",
   rate_limited: "파일을 너무 많이 올렸어요. 잠시 뒤에 다시 해 주세요.",
   empty: "빈 파일이에요.",
 } as const;
@@ -28,7 +29,7 @@ export class ImagesController {
     if (!me) throw new UnauthorizedException("로그인이 필요해요.");
     const body = await readBody(req, MAX_IMAGE_BYTES);
     const r = body === "too_large" ? ({ ok: false, code: "too_large" } as const) : await this.images.upload(me.userId, body, this.ips.of(req));
-    if (!r.ok) throw new HttpException(MESSAGE[r.code], r.code === "too_large" ? 413 : r.code === "rate_limited" ? 429 : 400);
+    if (!r.ok) throw new HttpException(MESSAGE[r.code], r.code === "too_large" || r.code === "bad_size" ? 413 : r.code === "rate_limited" ? 429 : 400);
     return { id: r.id };
   }
 
@@ -66,7 +67,7 @@ export class AudioController {
     if (!me) throw new UnauthorizedException("로그인이 필요해요.");
     const body = await readBody(req, MAX_AUDIO_BYTES);
     const r = body === "too_large" ? ({ ok: false, code: "too_large" } as const) : await this.images.uploadAudio(me.userId, body, this.ips.of(req));
-    if (!r.ok) throw new HttpException(MESSAGE[r.code], r.code === "too_large" ? 413 : r.code === "rate_limited" ? 429 : 400);
+    if (!r.ok) throw new HttpException(MESSAGE[r.code], r.code === "too_large" || r.code === "bad_size" ? 413 : r.code === "rate_limited" ? 429 : 400);
     return { id: r.id };
   }
 

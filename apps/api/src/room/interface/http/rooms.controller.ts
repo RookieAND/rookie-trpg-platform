@@ -22,12 +22,15 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 import { CHAT_PAGE_MAX, LOG_KINDS, LOG_PAGE_MAX, isLogKind, parseScenarioText, type LogKind, type LogQuery, type Role, type ScenarioDoc } from "@coc-vtt/shared";
 import { AuthService } from "../../../identity/application/auth.service";
+import { ClientIpResolver } from "../../../identity/application/client-ip";
+import { guardJson } from "../../../platform/json-guard";
 import { readBody } from "../../../platform/read-body";
 import { DiscordNotifier } from "../../application/discord-notifier";
-import { RoomLimitError, RoomRegistry } from "../../application/room-registry";
+import { RoomLimitError, RoomRegistry, type LoadedRoom } from "../../application/room-registry";
 import { MAX_SCENARIO_BODY, ScenarioService } from "../../application/scenario.service";
 import { RoomHub } from "../ws/room.hub";
-import { isValidWebhookUrl } from "../../domain/discord";
+import { isValidWebhookUrl, maskWebhook } from "../../domain/discord";
+import { SlidingLimiter } from "../../../platform/sliding-limiter";
 
 const createSchema = z.object({ name: z.string().trim().min(1).max(60) });
 const inviteSchema = z
@@ -57,7 +60,12 @@ export class RoomsController {
     @Inject(DiscordNotifier) private readonly notifier: DiscordNotifier,
     @Inject(ScenarioService) private readonly scenarios: ScenarioService,
     @Inject(RoomHub) private readonly hub: RoomHub,
+    @Inject(ClientIpResolver) private readonly ips: ClientIpResolver,
   ) {}
+
+  /** 디스코드 설정·시험 메시지 남용 방지: 룸마다 시험은 1분에 3번, 설정 변경은 1분에 10번 */
+  private readonly discordTests = new SlidingLimiter(3, 60_000);
+  private readonly discordSets = new SlidingLimiter(10, 60_000);
 
   private async who(req: IncomingMessage) {
     const id = await this.auth.fromRequest(req);
@@ -115,7 +123,7 @@ export class RoomsController {
     const entry = await this.registry.get(roomId);
     if (!entry) throw new NotFoundException("룸을 찾을 수 없어요.");
     const decision = this.registry.decideJoin(entry, me.userId, "pl", invite ?? null);
-    if (!decision.ok) throw new ForbiddenException(decision.reason);
+    if (!decision.ok) throw new ForbiddenException(decision.reason === "banned" ? "이 룸에서 차단됐어요." : decision.reason);
     return {
       id: entry.meta.id,
       name: entry.meta.name,
@@ -128,7 +136,12 @@ export class RoomsController {
             invite: entry.meta.invite,
             spectatorInvite: entry.meta.spectatorInvite ?? null,
             // 웹훅 주소는 비밀이라 돌려주지 않고, 연결 여부와 알림 종류만 알려 준다.
-            discord: { connected: Boolean(entry.meta.discord), events: entry.meta.discord?.events ?? { session: true, rolls: true } },
+            discord: {
+              connected: Boolean(entry.meta.discord),
+              events: entry.meta.discord?.events ?? { session: true, rolls: true },
+              // 주소는 돌려주지 않고, 어느 웹훅인지 알아볼 만큼만 가려서 보여 준다.
+              ...(entry.meta.discord ? { hint: maskWebhook(entry.meta.discord.webhookUrl) } : {}),
+            },
           }
         : {}),
     };
@@ -214,6 +227,7 @@ export class RoomsController {
     const me = await this.who(req);
     const parsed = discordSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException("디스코드 설정이 올바르지 않아요.");
+    if (!this.discordSets.take(roomId)) throw new HttpException("디스코드 설정을 너무 자주 바꿨어요. 잠시 뒤에 다시 해 주세요.", 429);
     const { webhookUrl, events } = parsed.data;
     if (typeof webhookUrl === "string" && !isValidWebhookUrl(webhookUrl)) {
       throw new BadRequestException("디스코드 웹훅 주소 형식이 아니에요. 채널 설정의 연동에서 웹훅 URL을 복사해 주세요.");
@@ -236,12 +250,35 @@ export class RoomsController {
     if (!entry) throw new NotFoundException("룸을 찾을 수 없어요.");
     if (entry.meta.ownerId !== me.userId) throw new ForbiddenException("룸 주인만 시험 메시지를 보낼 수 있어요.");
     if (!entry.meta.discord) throw new BadRequestException("먼저 웹훅 주소를 저장해 주세요.");
+    if (!this.discordTests.take(roomId)) throw new HttpException("시험 메시지를 너무 자주 보냈어요. 1분 뒤에 다시 해 주세요.", 429);
     try {
       await this.notifier.test(entry.meta.discord.webhookUrl, entry.meta.name);
     } catch {
       throw new BadRequestException("디스코드에 보내지 못했어요. 웹훅 주소가 맞는지, 삭제되지 않았는지 확인해 주세요.");
     }
     return { ok: true };
+  }
+
+  /**
+   * 룸 주인이 대화(귓속말 포함)와 세션 기록을 비운다("기록 비우기"). 되돌릴 수 없다.
+   * scope=chat | log | all(기본). 룸 안의 모든 화면에서 해당 목록이 지워지고, 저장된 데이터에서도 바로 사라진다.
+   * 굴림 기록·시트·핸드아웃은 그대로 둔다(룸을 통째로 지우려면 DELETE /rooms/:id).
+   */
+  @Delete("rooms/:roomId/history")
+  @HttpCode(200)
+  async purgeHistory(@Req() req: IncomingMessage, @Param("roomId") roomId: string, @Query("scope") scope?: string) {
+    const me = await this.who(req);
+    const entry = await this.registry.get(roomId);
+    if (!entry) throw new NotFoundException("룸을 찾을 수 없어요.");
+    if (entry.meta.ownerId !== me.userId) throw new ForbiddenException("룸 주인만 기록을 비울 수 있어요.");
+    const s = scope ?? "all";
+    if (s !== "chat" && s !== "log" && s !== "all") throw new BadRequestException("범위는 chat, log, all 중에서 골라 주세요.");
+    const what = { chat: s !== "log", log: s !== "chat" };
+    const outs = entry.room.purgeHistory(what);
+    this.hub.publish(entry, outs);
+    // 지운 내용이 저장소에 남지 않게 기다렸다 저장한다.
+    await this.registry.save(entry);
+    return { ok: true, ...what };
   }
 
   /** 룸 주인이 룸 이름을 바꾼다. */
@@ -261,7 +298,12 @@ export class RoomsController {
   /** 본문(JSON 글)을 읽어 시나리오·백업 문서로 검사한다. 오류는 위치와 이유 목록으로 돌려준다(422). */
   private async readDoc(req: IncomingMessage): Promise<ScenarioDoc> {
     const body = await readBody(req, MAX_SCENARIO_BODY);
-    if (body === "too_large") throw new HttpException("파일이 너무 커요. 64MB까지 가져올 수 있어요.", 413);
+    if (body === "too_large") throw new HttpException(`파일이 너무 커요. ${MAX_SCENARIO_BODY / 1024 / 1024}MB까지 가져올 수 있어요.`, 413);
+    // 파싱 전에 모양만 훑는다: 맨 바깥이 { }가 아니거나, 너무 깊거나 항목이 어마어마한 글은 여기서 돌려보낸다.
+    const shape = guardJson(body);
+    if (!shape.ok) {
+      throw new HttpException(shape.reason === "not_object" ? "시나리오 파일이 아니에요. 맨 바깥이 { } 항목이어야 해요." : "파일 구조가 너무 복잡해서 읽을 수 없어요.", shape.reason === "not_object" ? 422 : 413);
+    }
     const parsed = parseScenarioText(body.toString("utf8"));
     if (!parsed.ok) {
       const errors = parsed.errors.map((e) => `${e.where}: ${e.message}`);
@@ -283,11 +325,29 @@ export class RoomsController {
     if (!entry) throw new NotFoundException("룸을 찾을 수 없어요.");
     if (entry.meta.ownerId !== me.userId) throw new ForbiddenException("룸 주인(GM)만 시나리오를 가져올 수 있어요.");
     const dry = dryRun === "1" || dryRun === "true";
-    if (!dry && this.scenarios.tooMany(me.userId)) throw new HttpException("시나리오를 너무 많이 가져왔어요. 잠시 뒤에 다시 해 주세요.", 429);
+    // 미리보기도 한 번으로 센다(큰 파일을 반복해서 보내 서버를 붙잡는 것을 막는다).
+    if (this.scenarios.tooMany(me.userId)) throw new HttpException("시나리오를 너무 많이 가져왔어요. 잠시 뒤에 다시 해 주세요.", 429);
+    const slot = this.slot(me.userId);
+    try {
+      return await this.importIntoRoom(req, entry, me.userId, dry);
+    } finally {
+      slot.release();
+    }
+  }
+
+  /** 가져오기 자리를 잡는다. 한 사람이 동시에 하나만, 서버 전체로도 몇 개까지만. */
+  private slot(userId: string) {
+    const s = this.scenarios.begin(userId);
+    if (!s.ok) throw new HttpException(s.reason === "user" ? "이미 가져오는 중이에요. 끝나면 다시 해 주세요." : "지금 가져오는 사람이 많아요. 잠시 뒤에 다시 해 주세요.", 429);
+    return s;
+  }
+
+  private async importIntoRoom(req: IncomingMessage, entry: LoadedRoom, userId: string, dry: boolean) {
+    const me = { userId };
     const doc = await this.readDoc(req);
     const live = entry.room.listMembers().some((m) => m.userId === me.userId && m.role === "kp");
     if (!live) throw new HttpException("룸 화면에 들어온 뒤에 가져올 수 있어요.", 409);
-    const resolved = await this.scenarios.resolve(doc, { roomMedia: this.scenarios.mediaOf(entry), store: !dry });
+    const resolved = await this.scenarios.resolve(doc, { roomMedia: this.scenarios.mediaOf(entry), store: !dry, who: { userId: me.userId, ip: this.ips.of(req) } });
     const r = entry.room.importScenario(me.userId, resolved.doc, { dryRun: dry });
     if (!r.ok) {
       await this.scenarios.discard(resolved.created);
@@ -303,6 +363,16 @@ export class RoomsController {
   async importNew(@Req() req: IncomingMessage, @Query("name") name?: string) {
     const me = await this.who(req);
     if (this.scenarios.tooMany(me.userId)) throw new HttpException("시나리오를 너무 많이 가져왔어요. 잠시 뒤에 다시 해 주세요.", 429);
+    const slot = this.slot(me.userId);
+    try {
+      return await this.importNewRoom(req, me.userId, name);
+    } finally {
+      slot.release();
+    }
+  }
+
+  private async importNewRoom(req: IncomingMessage, userId: string, name?: string) {
+    const me = { userId };
     const doc = await this.readDoc(req);
     const title = (name ?? "").trim().slice(0, 60) || doc.roomName;
     const entry = await this.registry.create(me.userId, title).catch((e) => {
@@ -312,7 +382,7 @@ export class RoomsController {
       }
       throw e;
     });
-    const resolved = await this.scenarios.resolve(doc, { roomMedia: new Set(), store: true });
+    const resolved = await this.scenarios.resolve(doc, { roomMedia: new Set(), store: true, who: { userId: me.userId, ip: this.ips.of(req) } });
     const r = entry.room.importScenario(null, resolved.doc, { newRoom: true, ownerId: me.userId });
     if (!r.ok) {
       await this.registry.remove(entry.meta.id, me.userId);

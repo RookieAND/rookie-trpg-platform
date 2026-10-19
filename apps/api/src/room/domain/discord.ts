@@ -21,13 +21,20 @@ export const isValidWebhookUrl = (url: string) => WEBHOOK.test(url);
 export const redactWebhooks = (text: string) =>
   text.replace(/https?:\/\/(?:[\w-]+\.)?discord(?:app)?\.com\/api\/webhooks\/[^\s"'<>)]*/gi, "[웹훅 주소]");
 
+/** 화면에 "연결됨"을 보여 줄 때 쓰는 가린 표시. 토큰은 한 글자도 싣지 않고, 채널 id의 끝 4자리만 남긴다. */
+export const maskWebhook = (url: string): string => {
+  const m = /\/api\/webhooks\/(\d{5,25})\//.exec(url);
+  return m ? `웹훅 …${m[1]!.slice(-4)}` : "웹훅 연결됨";
+};
+
 /** 알림을 실제로 보내는 쪽(포트). 구현은 infrastructure에 둔다. */
 export interface DiscordGateway {
   send(webhookUrl: string, content: string): Promise<void>;
 }
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-const plain = (s: string) => clip(s.replace(/[`\r\n]+/g, " ").trim(), 60);
+/** 한 줄 글로 만들고, 디스코드 마크다운(굵게·링크·인용 등)이 먹지 않게 기호를 이스케이프한다. */
+export const plain = (s: string) => clip(s.replace(/[`\r\n]+/g, " ").trim(), 60).replace(/([\\*_~|>[\]()<])/g, "\\$1");
 
 /** 룸 이벤트를 디스코드 메시지로. 보내지 않을 이벤트는 null. */
 export function formatNotification(event: ServerEvent, ctx: { roomName: string }, events: DiscordEvents): string | null {

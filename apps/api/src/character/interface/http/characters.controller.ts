@@ -15,7 +15,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import type { IncomingMessage } from "node:http";
-import { characterInputSchema } from "@coc-vtt/shared";
+import { UNSAFE_KEY_MESSAGE, characterInputSchema } from "@coc-vtt/shared";
 import { AuthService } from "../../../identity/application/auth.service";
 import { VaultService } from "../../application/vault.service";
 
@@ -37,6 +37,7 @@ export class CharactersController {
     const parsed = characterInputSchema.safeParse(body);
     if (!parsed.success) {
       const first = parsed.error.issues[0];
+      if (first?.message === UNSAFE_KEY_MESSAGE) throw new BadRequestException(UNSAFE_KEY_MESSAGE);
       throw new BadRequestException(`캐릭터 정보가 올바르지 않아요${first ? ` (${first.path.join(".") || "형식"})` : ""}.`);
     }
     return parsed.data;

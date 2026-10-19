@@ -26,10 +26,10 @@ describe("옛 저장 데이터(schemaVersion 없음) 열기", () => {
     expect(data.schemaVersion).toBe(ROOM_SCHEMA_VERSION);
     expect(data.chat).toEqual([]);
     expect(data.log).toEqual([]);
-    expect(data.chatSettings).toEqual({ plWhisper: false, spectatorChat: false });
+    expect(data.chatSettings).toEqual({ plWhisper: false, spectatorChat: false, plSelfEdit: true });
     expect(room.chatHistory(kp)).toEqual([]);
     expect(room.logFor(kp)).toEqual({ entries: [], total: 0, hasMore: false });
-    expect(room.snapshot(kp).chatSettings).toEqual({ plWhisper: false, spectatorChat: false });
+    expect(room.snapshot(kp).chatSettings).toEqual({ plWhisper: false, spectatorChat: false, plSelfEdit: true });
   });
 
   it("옛 데이터의 내용(핸드아웃·굴림·장면·시트)은 그대로이고, 비밀 굴림은 PL에게 가지 않는다", () => {
@@ -69,7 +69,7 @@ describe("migrateRoomData", () => {
     const m = migrateRoomData(d);
     expect(m.chat?.map((c) => c.id)).toEqual(["m1"]);
     expect(m.log?.map((e) => e.n)).toEqual([1]);
-    expect(m.chatSettings).toEqual({ plWhisper: false, spectatorChat: false });
+    expect(m.chatSettings).toEqual({ plWhisper: false, spectatorChat: false, plSelfEdit: true });
   });
 
   it("더 새로운 번호와 모르는 필드가 있어도 열린다(아는 것만 읽는다)", () => {

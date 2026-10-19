@@ -49,6 +49,8 @@ export class RoomRegistry {
   private removed = new Set<string>();
   private removeListeners: Array<(roomId: string) => void> = [];
   private createdAt = new Map<string, number[]>();
+  /** 연결이 없다는 걸 처음 본 시각. 쓰이는 순간(접속·조회) 지운다. 이 시간이 길어진 룸을 메모리에서 내린다. */
+  private idleSince = new Map<string, number>();
 
   constructor(private readonly opts: RegistryOptions) {
     this.now = opts.now ?? Date.now;
@@ -142,6 +144,7 @@ export class RoomRegistry {
   /** 메모리에 없으면 저장소에서 불러온다. 없는 룸이면 null. */
   get(id: string): Promise<LoadedRoom | null> {
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return Promise.resolve(null);
+    this.idleSince.delete(id);
     let p = this.loaded.get(id);
     if (!p) {
       p = this.opts.store.load(id).then((stored) => {
@@ -156,6 +159,50 @@ export class RoomRegistry {
       }).catch(() => this.loaded.delete(id));
     }
     return p;
+  }
+
+  /**
+   * 한동안 아무도 쓰지 않은 룸을 메모리에서 내린다(저장소에는 그대로 있고, 다음에 누가 들어오면 다시 불러온다).
+   * inUse(roomId)가 true(접속자가 있거나 GM 유예 타이머가 도는 중)이면 건드리지 않는다.
+   * 연결이 없다는 걸 처음 본 때부터 idleMs가 지나야 내리고, 내리기 전에 바뀐 내용을 저장한다.
+   * 저장이 안 되면 내리지 않는다. 내린 룸 id 목록을 돌려준다.
+   */
+  async evictIdle(idleMs: number, inUse: (roomId: string) => boolean): Promise<string[]> {
+    if (idleMs <= 0) return [];
+    const t = this.now();
+    const evicted: string[] = [];
+    for (const [id, p] of [...this.loaded]) {
+      if (this.removed.has(id)) continue;
+      const entry = await p.catch(() => null);
+      if (!entry || this.loaded.get(id) !== p) continue;
+      if (inUse(id)) {
+        this.idleSince.delete(id);
+        continue;
+      }
+      const since = this.idleSince.get(id);
+      if (since === undefined) {
+        this.idleSince.set(id, t);
+        continue;
+      }
+      if (t - since < idleMs) continue;
+      try {
+        // 대기 중인 저장 예약을 끝내고, 바뀐 것이 있으면 지금 저장한다.
+        const timer = this.timers.get(id);
+        if (timer) clearTimeout(timer);
+        this.timers.delete(id);
+        if (entry.room.currentSeq !== entry.savedSeq) await this.save(entry);
+        await (this.saving.get(id) ?? Promise.resolve());
+        // 기다리는 사이에 누가 들어왔거나 바뀌었으면 내리지 않는다.
+        if (inUse(id) || this.idleSince.get(id) === undefined || this.loaded.get(id) !== p || entry.room.currentSeq !== entry.savedSeq) continue;
+        this.loaded.delete(id);
+        this.idleSince.delete(id);
+        evicted.push(id);
+      } catch (e) {
+        log.warn("쉬는 룸을 내리지 못했어요(저장 실패)", { roomId: id, ...errFields(e) });
+      }
+    }
+    for (const id of [...this.idleSince.keys()]) if (!this.loaded.has(id)) this.idleSince.delete(id);
+    return evicted;
   }
 
   async listFor(userId: string) {
@@ -194,7 +241,7 @@ export class RoomRegistry {
   /** 이 사용자가 이 룸에 어떤 역할로 들어올 수 있는지 정한다. */
   decideJoin(entry: LoadedRoom, userId: string, requested: Role, inviteCode: string | null): JoinDecision {
     const members = entry.room.listMembers();
-    return decideJoin(entry.meta, members, userId, requested, inviteCode, this.now());
+    return decideJoin(entry.meta, members, userId, requested, inviteCode, this.now(), entry.room.isBanned(userId));
   }
 
   async regenerateInvite(id: string, requesterId: string, opts: { kind?: InviteKind; revoke?: boolean; expiresInMinutes?: number | null; maxMembers?: number }) {

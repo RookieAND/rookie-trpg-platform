@@ -2,6 +2,7 @@ import { z } from "zod";
 import { checkOccupation, OCCUPATION_POINT_FORMULAS, type Occupation, type OccupationFormulaId } from "./creation";
 import { parseCommand } from "./dice";
 import { MAX_EXPR_LENGTH } from "./expr";
+import { safeKey } from "./safe-key";
 
 /** 사용자 한 명의 개인 서재: 굴림 매크로와 직업 정의. 서버에 저장해 기기를 옮겨도 따라온다. */
 
@@ -39,7 +40,7 @@ const occupationSchema = z
     formula: z.enum(FORMULA_IDS),
     creditMin: z.number().int().min(0).max(99),
     creditMax: z.number().int().min(0).max(99),
-    skills: z.array(z.string().max(30)).max(40),
+    skills: z.array(safeKey(z.string().max(30))).max(40),
   })
   .superRefine((o, ctx) => {
     const problem = checkOccupation(o);

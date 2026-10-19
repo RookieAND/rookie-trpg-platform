@@ -251,7 +251,7 @@ describe("세션 기록: 저장하고 다시 열기", () => {
     clock += 2000;
     must(room.handle(kp, cmd("chat.send", { text: "귓말", to: "pl1" })));
     const data = JSON.parse(JSON.stringify(room.toData()));
-    expect(data.schemaVersion).toBe(3);
+    expect(data.schemaVersion).toBe(4);
     const back = Room.fromData(data, { now: () => (clock += 1000), newId: () => `x-${++n}` });
     expect(back.chatHistory(pl1).map((m) => m.text)).toEqual(["안녕", "귓말"]);
     expect(back.chatHistory(pl2).map((m) => m.text)).toEqual(["안녕"]);

@@ -677,7 +677,7 @@ describe("대화·기록 저장", () => {
       await app.close();
 
       const raw = JSON.parse(readFileSync(join(dir, `${room.id}.json`), "utf8"));
-      expect(raw.data.schemaVersion).toBe(3);
+      expect(raw.data.schemaVersion).toBe(4);
       expect(raw.data.chat.map((m: { text: string }) => m.text)).toEqual(["저장될 말", "저장될 귓속말"]);
       expect(raw.data.chatSettings).toMatchObject({ plWhisper: true });
       expect(raw.data.log.map((e: { type: string }) => e.type)).toEqual(expect.arrayContaining(["start", "say"]));
@@ -813,22 +813,48 @@ describe("관전 링크", () => {
     expect(await asSpectator(room, inv.code, "sp1").closed).toBe(4403);
   });
 
-  it("GM이 내보내면 알림을 받고 4410으로 닫히며, 링크 없이는 다시 못 들어온다", async () => {
+  it("GM이 내보내고 차단하면 4411로 닫히고, 같은 링크로 다시 못 들어오며, 차단을 풀면 들어온다", async () => {
     const room = await makeRoom();
     const inv = await spectatorInvite(room.id);
     const kp = await connect(room, GM);
     await connect(room, SEO);
     const sp = await enter(room, inv.code);
-    kp.cmd("member.remove", { userId: "pl1" }, "bad");
-    const err = await kp.waitFor((m) => m.event.type === "error" && m.event.data.requestId === "bad");
-    expect(err.event.type === "error" && err.event.data.code).toBe("forbidden");
     kp.cmd("member.remove", { userId: "sp1" });
     await sp.waitFor(isType("member.removed"));
-    expect(await sp.closed).toBe(4410);
-    await kp.waitFor((m) => m.event.type === "presence" && !m.event.data.members.some((x) => x.userId === "sp1"));
-    // 멤버에서 지워졌으니 코드 없이는 못 들어온다(저장 데이터에서도 사라진다)
-    expect(await new Client(port, { room: room.id, user: "sp1", name: "구경꾼", role: "pl" }).closed).toBe(4403);
+    expect(await sp.closed).toBe(4411);
+    await kp.waitFor((m) => m.event.type === "bans.updated" && m.event.data.banned.some((b) => b.userId === "sp1"));
+    // 차단됐으니 같은 관전 링크로 다시 들어올 수 없다
+    expect(await new Client(port, { room: room.id, user: "sp1", name: "구경꾼", role: "spectator", invite: inv.code }).closed).toBe(4411);
+    // GM이 차단을 풀면 링크로 다시 들어온다
+    kp.cmd("member.unban", { userId: "sp1" });
+    await kp.waitFor((m) => m.event.type === "bans.updated" && m.event.data.banned.length === 0);
     const back = await enter(room, inv.code);
     expect(members(back).find((m) => m.userId === "sp1")?.role).toBe("spectator");
+  });
+
+  it("PL도 내보내고 차단할 수 있다. 같은 PL 초대 링크로 다시 들어올 수 없다", async () => {
+    const room = await makeRoom();
+    const kp = await connect(room, GM);
+    const pl = await connect(room, SEO);
+    kp.cmd("member.remove", { userId: "pl1" });
+    await pl.waitFor(isType("member.removed"));
+    expect(await pl.closed).toBe(4411);
+    expect(await new Client(port, { room: room.id, user: "pl1", name: "서하", invite: room.invite }).closed).toBe(4411);
+    // GET /rooms/:id 미리보기도 막힌다
+    const res = await fetch(`${base}/rooms/${room.id}?invite=${room.invite}`, { headers: { "x-dev-user": "pl1", "x-dev-name": encodeURIComponent("서하") } });
+    expect(res.status).toBe(403);
+  });
+
+  it("차단 없이 내보내면(ban:false) 4410이고, 링크가 있으면 다시 들어올 수 있다", async () => {
+    const room = await makeRoom();
+    const kp = await connect(room, GM);
+    const pl = await connect(room, SEO);
+    kp.cmd("member.remove", { userId: "pl1", ban: false });
+    await pl.waitFor(isType("member.removed"));
+    expect(await pl.closed).toBe(4410);
+    const again = new Client(port, { room: room.id, user: "pl1", name: "서하", invite: room.invite });
+    await again.open();
+    again.join();
+    await again.waitFor(isType("snapshot"));
   });
 });

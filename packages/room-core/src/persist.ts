@@ -1,4 +1,4 @@
-import { CHAT_KEEP, DEFAULT_CHAT_SETTINGS, LOG_KEEP, LOG_KINDS, sanitizeMarkers, type ChatMessage, type GameObject, type LogEntry } from "@coc-vtt/shared";
+import { CHAT_KEEP, DEFAULT_CHAT_SETTINGS, LOG_KEEP, LOG_KINDS, MAX_BANNED, sanitizeDisplayName, sanitizeMarkers, type BannedUser, type ChatMessage, type GameObject, type LogEntry } from "@coc-vtt/shared";
 import type { RoomData } from "./room";
 
 /**
@@ -6,9 +6,10 @@ import type { RoomData } from "./room";
  *  1: 번호가 없던 옛 모양(대화·세션 기록이 없다)
  *  2: 대화(chat, chatSettings)와 세션 기록(log)이 생겼다
  *  3: 토큰 상태 표식(objects[].markers)과 관전자 대화 설정(chatSettings.spectatorChat)이 생겼다
+ *  4: 차단 목록(banned)과 "PL이 자기 수치 직접 수정" 설정(chatSettings.plSelfEdit, 없으면 켜짐)이 생겼다
  * 새 필드는 늘 "없으면 기본값"으로 읽는다. 그래서 옛 데이터는 그대로 열리고, 더 새로운 번호의 데이터도 아는 필드만 읽어 열린다.
  */
-export const ROOM_SCHEMA_VERSION = 3;
+export const ROOM_SCHEMA_VERSION = 4;
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown): v is string => typeof v === "string";
@@ -33,6 +34,8 @@ const validLog = (e: unknown): e is LogEntry =>
   str(e.type) &&
   (LOG_KINDS as readonly string[]).includes(e.kind as string) &&
   (e.audience === "all" || e.audience === "gm" || (Array.isArray(e.audience) && e.audience.every(str)));
+
+const validBan = (b: unknown): b is BannedUser => isObj(b) && str(b.userId) && b.userId.length > 0 && b.userId.length <= 64 && str(b.name) && num(b.at);
 
 /** 오브젝트의 표식에서 모양이 깨진 것을 버린다(모르는 key는 새 버전이 쓴 것이라 남긴다). */
 const cleanMarkers = (o: GameObject): GameObject => {
@@ -59,7 +62,8 @@ export function migrateRoomData(raw: unknown): RoomData {
     members: Array.isArray(d.members) ? d.members : [],
     rolls: Array.isArray(d.rolls) ? d.rolls : [],
     chat,
-    chatSettings: { ...DEFAULT_CHAT_SETTINGS, plWhisper: cs.plWhisper === true, spectatorChat: cs.spectatorChat === true },
+    chatSettings: { ...DEFAULT_CHAT_SETTINGS, plWhisper: cs.plWhisper === true, spectatorChat: cs.spectatorChat === true, plSelfEdit: cs.plSelfEdit !== false },
     log,
+    banned: (Array.isArray(d.banned) ? d.banned.filter(validBan) : []).slice(0, MAX_BANNED).map((b) => ({ userId: b.userId, name: sanitizeDisplayName(b.name), at: b.at })),
   };
 }

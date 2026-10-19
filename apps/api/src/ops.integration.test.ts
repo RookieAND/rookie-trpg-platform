@@ -6,12 +6,13 @@ import { WsAdapter } from "@nestjs/platform-ws";
 import type { INestApplication } from "@nestjs/common";
 import { createLogger, setLogger } from "./platform/log";
 import { AppModule, type AppOptions } from "./app.module";
+import { PNG_1x1 } from "./image/test-images";
 
 let app: INestApplication | null = null;
 let base = "";
 let port = 0;
 const HOOK = "https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz_-ABC";
-const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32, 1)]);
+const PNG = PNG_1x1;
 
 async function boot(options: AppOptions = {}) {
   const ref = await Test.createTestingModule({ imports: [AppModule.register({ joinTimeoutMs: 2000, registry: { saveDebounceMs: 20 }, ...options })] }).compile();

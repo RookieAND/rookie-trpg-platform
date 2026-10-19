@@ -1,4 +1,4 @@
-import { Module, type DynamicModule, type OnModuleDestroy, Inject } from "@nestjs/common";
+import { Module, type DynamicModule, type MiddlewareConsumer, type NestModule, type OnModuleDestroy, Inject } from "@nestjs/common";
 import { LibraryService } from "./library/application/library.service";
 import type { LibraryRepository } from "./library/domain/user-library";
 import { MemoryLibraryRepository } from "./library/infrastructure/memory-library.repository";
@@ -23,12 +23,13 @@ import type { RoomRepository } from "./room/domain/room.repository";
 import { MemoryRoomRepository } from "./room/infrastructure/memory-room.repository";
 import { RoomsController } from "./room/interface/http/rooms.controller";
 import { RoomGateway } from "./room/interface/ws/room.gateway";
-import { RoomHub, type HubOptions } from "./room/interface/ws/room.hub";
+import { RoomHub, type HubOptions, type WsLimits } from "./room/interface/ws/room.hub";
 import { AllExceptionsFilter } from "./platform/all-exceptions.filter";
 import { HEALTH_DB, HealthController } from "./platform/health.controller";
 import type { Db } from "./platform/postgres";
 import { APP_FILTER } from "@nestjs/core";
 import { ClientIpResolver } from "./identity/application/client-ip";
+import { DEFAULT_HTTP_RATE, createHttpRateLimiter, type HttpRateOptions } from "./platform/http-rate-limit";
 import { collectMediaIds } from "./media-refs";
 import { SheetImportService, type SheetImportOptions } from "./sheet-import/application/sheet-import.service";
 import type { SheetFetch } from "./sheet-import/domain/sheet-import";
@@ -54,6 +55,12 @@ export interface AppOptions {
   kpAwayGraceMs?: number;
   /** /health·/ready가 DB에 닿는지 확인할 때 쓴다. 없으면 DB 항목은 none. */
   db?: Db | null;
+  /** 모든 REST 요청의 속도 제한. 생략하면 기본값(IP당 분당 1800, 토큰당 900) */
+  httpRate?: Partial<HttpRateOptions>;
+  /** 웹소켓 동시 연결 상한(사용자·IP·룸) */
+  wsLimits?: Partial<WsLimits>;
+  /** 연결 없는 룸을 메모리에서 내리기까지의 분. 0이면 내리지 않는다(기본). */
+  roomIdleMinutes?: number;
 }
 
 /**
@@ -69,8 +76,17 @@ class Lifecycle implements OnModuleDestroy {
   }
 }
 
+const HTTP_LIMITER = Symbol("HTTP_LIMITER");
+
 @Module({})
-export class AppModule {
+export class AppModule implements NestModule {
+  constructor(@Inject(HTTP_LIMITER) private readonly limiter: ReturnType<typeof createHttpRateLimiter>) {}
+
+  /** 모든 REST 경로에 속도 제한을 건다(/health·/ready 제외). */
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(this.limiter).forRoutes("*");
+  }
+
   /** 테스트에서 저장소, 난수, 시계, 인증을 바꿀 수 있게 동적 모듈로 만든다. */
   static register(options: AppOptions = {}): DynamicModule {
     return {
@@ -81,6 +97,11 @@ export class AppModule {
         { provide: APP_FILTER, useClass: AllExceptionsFilter },
         { provide: AuthService, useFactory: () => new AuthService(options.authenticate ?? devAuthenticate) },
         { provide: ClientIpResolver, useFactory: () => new ClientIpResolver(options.trustProxyHops ?? 0) },
+        {
+          provide: HTTP_LIMITER,
+          inject: [ClientIpResolver],
+          useFactory: (ips: ClientIpResolver) => createHttpRateLimiter({ ...DEFAULT_HTTP_RATE, ...options.httpRate }, ips, options.trustProxyHops ?? 0),
+        },
         {
           provide: RoomRegistry,
           inject: [ImageService],
@@ -98,9 +119,12 @@ export class AppModule {
         },
         {
           provide: RoomHub,
-          inject: [RoomRegistry, AuthService, DiscordNotifier],
-          useFactory: (registry: RoomRegistry, auth: AuthService, notifier: DiscordNotifier) =>
+          inject: [RoomRegistry, AuthService, DiscordNotifier, ClientIpResolver],
+          useFactory: (registry: RoomRegistry, auth: AuthService, notifier: DiscordNotifier, ips: ClientIpResolver) =>
             new RoomHub(registry, auth, options.joinTimeoutMs, notifier, {
+              ipOf: (req) => ips.of(req),
+              limits: options.wsLimits,
+              ...(options.roomIdleMinutes ? { idleEvictMs: options.roomIdleMinutes * 60_000 } : {}),
               ...options.hub,
               ...(options.kpAwayGraceMs !== undefined ? { kpAwayGraceMs: options.kpAwayGraceMs } : {}),
             }),

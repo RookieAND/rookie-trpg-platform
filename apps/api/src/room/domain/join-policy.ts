@@ -3,12 +3,13 @@ import { DEFAULT_MAX_SPECTATORS, type RoomMeta } from "./room.repository";
 
 export type JoinDecision =
   | { ok: true; role: Role }
-  | { ok: false; reason: "no_access" | "not_owner" | "invite_expired" | "room_full" };
+  | { ok: false; reason: "no_access" | "not_owner" | "invite_expired" | "room_full" | "banned" };
 
 /**
  * 룸 입장 규칙. 주인은 항상 GM, 이미 멤버였던 사람은 원래 역할로,
  * 처음 오는 사람은 유효한 초대 코드와 남은 자리가 있어야 한다.
  * 코드가 관전 초대의 것이면 요청한 역할과 상관없이 관전자로만 들어온다.
+ * GM이 내보내며 막은 사람(banned)은 어떤 초대 링크로도 들어올 수 없다(GM이 풀 때까지).
  * PL은 주인 포함 최대 인원(maxMembers)을 지키고, 관전자는 그와 따로 관전 초대의 최대 인원을 센다.
  */
 export function decideJoin(
@@ -18,9 +19,11 @@ export function decideJoin(
   requested: Role,
   inviteCode: string | null,
   now: number,
+  banned = false,
 ): JoinDecision {
   if (meta.ownerId === userId) return { ok: true, role: "kp" };
   if (requested === "kp") return { ok: false, reason: "not_owner" };
+  if (banned) return { ok: false, reason: "banned" };
   const known = members.find((m) => m.userId === userId);
   if (known) return { ok: true, role: known.role };
   const pl = meta.invite;

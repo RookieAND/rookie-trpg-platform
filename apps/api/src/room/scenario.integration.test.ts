@@ -117,7 +117,7 @@ describe("룸에 시나리오 가져오기", () => {
     const room = (await call("POST", "/rooms", "kp1", json({ name: "저택" }))).json;
     const kp = await join(room.id, "kp1");
     let last = 0;
-    for (let i = 0; i < 21; i++) last = (await call("POST", `/rooms/${room.id}/scenario`, "kp1", sample({ scenes: [{ key: "s", name: "방" }], tokens: [], characters: [], handouts: [], beats: [], branches: [] }))).status;
+    for (let i = 0; i < 41; i++) last = (await call("POST", `/rooms/${room.id}/scenario`, "kp1", sample({ scenes: [{ key: "s", name: "방" }], tokens: [], characters: [], handouts: [], beats: [], branches: [] }))).status;
     expect(last).toBe(429);
     kp.ws.close();
   });

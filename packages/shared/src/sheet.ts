@@ -1,4 +1,5 @@
 import { deriveStats, type Characteristics } from "./dice";
+import { own } from "./safe-key";
 
 /** CoC 7판 캐릭터 시트. 룸 안에서 쓰는 복사본이고, 원본은 보관함에 있다. */
 
@@ -98,7 +99,7 @@ export function deriveCharacter(c: Pick<Character, "characteristics" | "age">) {
 
 /** 이름으로 굴림 목표값을 찾는다. 기능(스킬)이 먼저고, 없으면 특성치(STR 등)를 본다. */
 export function targetValue(c: Character, name: string): number | null {
-  const skill = c.skills[name];
+  const skill = own(c.skills, name);
   if (skill) return skill.value;
   const key = name.toUpperCase() as CharacteristicKey;
   if ((CHARACTERISTIC_KEYS as readonly string[]).includes(key)) return c.characteristics[key];

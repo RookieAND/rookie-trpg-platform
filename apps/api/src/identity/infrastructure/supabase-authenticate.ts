@@ -1,5 +1,5 @@
 import type { IncomingMessage } from "node:http";
-import type { Role } from "@coc-vtt/shared";
+import { sanitizeDisplayName, type Role } from "@coc-vtt/shared";
 import type { Authenticate } from "../domain/identity";
 import type { VerifyToken } from "./jwt-verifier";
 
@@ -25,5 +25,5 @@ export const supabaseAuthenticate =
     const name = m.custom_claims?.global_name ?? m.full_name ?? m.name ?? m.user_name ?? "이름 없음";
     const role = url.searchParams.get("role");
     const requestedRole: Role = role === "kp" || role === "spectator" ? role : "pl";
-    return { userId: claims.sub, name: String(name).slice(0, 40), requestedRole };
+    return { userId: claims.sub, name: sanitizeDisplayName(name), requestedRole, ...(typeof claims.exp === "number" ? { expiresAt: claims.exp * 1000 } : {}) };
   };

@@ -208,6 +208,7 @@ const samples = (w: World): Record<string, ClientCommand["data"]> => {
     "object.update": { id: ids.token, ownerId: "sp1" },
     "object.marker": { id: ids.token, key: "stun", on: true },
     "member.remove": { userId: "pl2" },
+    "member.unban": { userId: "pl2" },
     "board.ping": { sceneId: "main", x: 1, y: 1 },
     "scene.fog": { id: "main", enabled: false },
     "scene.grid": { id: "main", size: 40, show: true, snap: true },
@@ -338,31 +339,86 @@ describe("관전자의 명령은 전부 거절된다", () => {
   });
 });
 
-describe("GM이 관전자를 내보낸다", () => {
-  it("관전자만 내보낼 수 있고, 내보낸 사람은 알림을 받고 목록에서 사라진다", () => {
+describe("GM이 참가자를 내보낸다", () => {
+  it("관전자를 내보내면 알림을 받고 목록에서 사라지며, 차단되어 다시 들어올 수 없다", () => {
     const w = world();
     must(w.room.handle(kp, cmd("session.start", {})));
     expect(w.room.handle(pl1, cmd("member.remove", { userId: "sp1" }))).toMatchObject({ ok: false, code: "forbidden" });
-    expect(w.room.handle(kp, cmd("member.remove", { userId: "pl2" }))).toMatchObject({ ok: false, code: "forbidden" });
     expect(w.room.handle(kp, cmd("member.remove", { userId: "kp1" }))).toMatchObject({ ok: false, code: "forbidden" });
     expect(w.room.handle(kp, cmd("member.remove", { userId: "nobody" }))).toMatchObject({ ok: false, code: "not_found" });
     const out = must(w.room.handle(kp, cmd("member.remove", { userId: "sp1" })));
     const removed = out.filter((o) => o.event.type === "member.removed");
     expect(removed).toHaveLength(1);
     expect(removed[0]!.audience.users).toEqual(["sp1"]);
+    expect(removed[0]!.event.data).toEqual({ banned: true });
     expect(inAudience(removed[0]!.audience, pl1)).toBe(false);
     expect(w.room.roleOf("sp1")).toBeNull();
     expect(w.room.snapshot(kp).members.some((m) => m.userId === "sp1")).toBe(false);
+    expect(w.room.isBanned("sp1")).toBe(true);
     // 내보낸 뒤에는 룸 안에서 아무것도 못 한다
     expect(w.room.handle(spec, cmd("chat.send", { text: "나 아직 있나요" }))).toMatchObject({ ok: false, code: "forbidden" });
-    // 저장 데이터에도 남지 않는다
+    // 저장 데이터에는 멤버로 남지 않고 차단 목록에만 남는다
     expect(w.room.toData().members.some((m) => m.userId === "sp1")).toBe(false);
+    expect(w.room.toData().banned?.map((b) => b.userId)).toEqual(["sp1"]);
+  });
+
+  it("PL도 내보내고 차단할 수 있다. 자기 자신과 GM은 안 된다", () => {
+    const w = world();
+    must(w.room.handle(kp, cmd("session.start", {})));
+    expect(w.room.handle(pl1, cmd("member.remove", { userId: "pl2" }))).toMatchObject({ ok: false, code: "forbidden" });
+    expect(w.room.handle(kp, cmd("member.remove", { userId: "kp1" }))).toMatchObject({ ok: false, code: "forbidden" });
+    const out = must(w.room.handle(kp, cmd("member.remove", { userId: "pl2" })));
+    expect(out.some((o) => o.event.type === "member.removed" && o.audience.users?.[0] === "pl2")).toBe(true);
+    expect(w.room.roleOf("pl2")).toBeNull();
+    expect(w.room.isBanned("pl2")).toBe(true);
+    // 내보낸 PL은 명령을 보낼 수 없다
+    expect(w.room.handle(pl2, cmd("roll.request", { expr: "1d6", secret: false }))).toMatchObject({ ok: false, code: "forbidden" });
+    // 차단 목록은 GM만 받는다
+    expect(w.room.snapshot(kp).banned?.map((b) => b.userId)).toEqual(["pl2"]);
+    expect(w.room.snapshot(pl1).banned).toEqual([]);
+    expect(w.room.snapshot(spec).banned).toEqual([]);
+    const bans = out.find((o) => o.event.type === "bans.updated")!;
+    expect(inAudience(bans.audience, kp)).toBe(true);
+    expect(inAudience(bans.audience, pl1)).toBe(false);
+    // 그 PL의 시트는 룸에 남아 GM이 정리한다
+    expect(w.room.snapshot(kp).characters.length).toBeGreaterThan(0);
+  });
+
+  it("차단 없이 내보내기(ban:false)는 목록에만 빠진다", () => {
+    const w = world();
+    must(w.room.handle(kp, cmd("session.start", {})));
+    const out = must(w.room.handle(kp, cmd("member.remove", { userId: "pl2", ban: false })));
+    expect(out.find((o) => o.event.type === "member.removed")!.event.data).toEqual({});
+    expect(w.room.isBanned("pl2")).toBe(false);
+    expect(out.some((o) => o.event.type === "bans.updated")).toBe(false);
+  });
+
+  it("차단은 GM만 풀 수 있고, 저장하고 다시 열어도 남는다", () => {
+    const w = world();
+    must(w.room.handle(kp, cmd("session.start", {})));
+    must(w.room.handle(kp, cmd("member.remove", { userId: "pl2" })));
+    expect(w.room.handle(pl1, cmd("member.unban", { userId: "pl2" }))).toMatchObject({ ok: false, code: "forbidden" });
+    expect(w.room.handle(kp, cmd("member.unban", { userId: "nobody" }))).toMatchObject({ ok: false, code: "not_found" });
+    const back = Room.fromData(JSON.parse(JSON.stringify(w.room.toData())));
+    expect(back.isBanned("pl2")).toBe(true);
+    expect(back.snapshot(kp).banned?.[0]).toMatchObject({ userId: "pl2", name: "도윤" });
+    must(w.room.handle(kp, cmd("member.unban", { userId: "pl2" })));
+    expect(w.room.isBanned("pl2")).toBe(false);
+    expect(w.room.snapshot(kp).banned).toEqual([]);
+  });
+
+  it("옛 저장 데이터(차단 목록 없음)도 그대로 열린다", () => {
+    const w = world();
+    const data = JSON.parse(JSON.stringify(w.room.toData()));
+    delete data.banned;
+    data.schemaVersion = 3;
+    expect(Room.fromData(data).snapshot(kp).banned).toEqual([]);
   });
 });
 
 /** GM만 쓸 수 있는 명령. PL이 보내면 룸이 바뀌지 않고 거절돼야 한다. */
 const GM_ONLY = [
-  "member.remove", "object.add", "scene.fog", "scene.grid", "fog.reveal", "fog.remove", "fog.clear", "fog.forget",
+  "member.remove", "member.unban", "object.add", "object.update", "object.remove", "hp.heal", "roll.group", "scenario.revert", "scene.fog", "scene.grid", "fog.reveal", "fog.remove", "fog.clear", "fog.forget",
   "undo.last", "roll.ask", "handout.create", "handout.update", "handout.remove", "handout.show", "settings.effects",
   "scene.create", "scene.rename", "scene.setStart", "scene.setBgm", "scene.background", "scene.remove", "scene.duplicate",
   "scene.reorder", "scene.activate", "damage.apply", "san.newDay", "flow.beat.upsert", "flow.beat.remove", "flow.branch.upsert",
@@ -387,4 +443,24 @@ describe("PL의 GM 전용 명령은 거절된다", () => {
       expect(JSON.stringify(w.room.toData())).toBe(before);
     });
   }
+});
+
+/** 레벨 3: PL이 쓸 수 있는 명령(나머지는 전부 GM 전용이어야 한다). 새 명령을 프로토콜에 더하면 둘 중 한 곳에 반드시 넣어야 이 시험이 통과한다. */
+const PL_ALLOWED = [
+  "object.move", "object.marker", "board.ping", "character.add", "character.remove", "sheet.patch", "damage.roll",
+  "roll.request", "roll.opposed", "roll.push", "luck.spend", "san.check", "chat.send",
+] as const;
+
+describe("권한 분류표가 모든 명령을 덮는다 (새 명령이 분류 없이 끼어들 수 없다)", () => {
+  it("프로토콜의 모든 명령은 GM_ONLY 또는 PL_ALLOWED 중 정확히 한 곳에 있다", () => {
+    const gm = new Set<string>(GM_ONLY);
+    const pl = new Set<string>(PL_ALLOWED);
+    const unclassified = COMMAND_TYPES.filter((t) => !gm.has(t) && !pl.has(t));
+    expect(unclassified, `분류되지 않은 명령: ${unclassified.join(", ")} — spectator.test.ts의 GM_ONLY나 PL_ALLOWED에 넣고 권한 시험을 확인하세요`).toEqual([]);
+    const both = COMMAND_TYPES.filter((t) => gm.has(t) && pl.has(t));
+    expect(both, `두 목록에 모두 있는 명령: ${both.join(", ")}`).toEqual([]);
+    const unknown = [...gm, ...pl].filter((t) => !(COMMAND_TYPES as string[]).includes(t));
+    expect(unknown, `프로토콜에 없는 명령: ${unknown.join(", ")}`).toEqual([]);
+    expect(gm.size).toBe(GM_ONLY.length); // 목록 안 중복 없음
+  });
 });

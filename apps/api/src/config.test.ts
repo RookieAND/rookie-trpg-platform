@@ -10,7 +10,7 @@ describe("loadConfig 인증 설정", () => {
     expect(() => loadConfig({ NODE_ENV: "production", SUPABASE_JWT_SECRET: "   " })).toThrow(/SUPABASE_JWT_SECRET/);
   });
   it("production에서 시크릿이 있으면 supabase 모드다", () => {
-    const c = loadConfig({ NODE_ENV: "production", SUPABASE_JWT_SECRET: "s".repeat(32), WEB_ORIGIN: "https://x.app", DATABASE_URL: "postgres://x" });
+    const c = loadConfig({ NODE_ENV: "production", SUPABASE_JWT_SECRET: "s".repeat(32), WEB_ORIGIN: "https://x.app", DATABASE_URL: "postgres://x", TRUST_PROXY: "1" });
     expect(c.authMode).toBe("supabase");
     expect(c.warnings).toEqual([]);
   });
@@ -34,8 +34,12 @@ describe("loadConfig 인증 설정", () => {
     expect((await authenticateFor(c)(req({ "x-dev-user": "u1" }), new URL("http://x/rooms")))?.userId).toBe("u1");
   });
   it("production에서 빠진 WEB_ORIGIN과 저장소 설정은 경고한다", () => {
-    const c = loadConfig({ NODE_ENV: "production", SUPABASE_JWT_SECRET: "s".repeat(32) });
+    const c = loadConfig({ NODE_ENV: "production", SUPABASE_JWT_SECRET: "s".repeat(32), TRUST_PROXY: "1" });
     expect(c.warnings.length).toBe(2);
+  });
+  it("production에서 TRUST_PROXY가 없으면 프록시 뒤에서 IP가 뭉치는 문제를 경고한다", () => {
+    const c = loadConfig({ NODE_ENV: "production", SUPABASE_JWT_SECRET: "s".repeat(32), WEB_ORIGIN: "https://x.app", DATABASE_URL: "postgres://x" });
+    expect(c.warnings.join("\n")).toMatch(/TRUST_PROXY/);
   });
   it("PORT와 TRUST_PROXY를 검증한다", () => {
     expect(() => loadConfig({ PORT: "abc" })).toThrow(ConfigError);

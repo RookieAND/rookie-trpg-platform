@@ -1,6 +1,6 @@
 import { errFields, log } from "../../platform/log";
 import type { Out } from "@coc-vtt/room-core";
-import { formatNotification, redactWebhooks, type DiscordGateway } from "../domain/discord";
+import { formatNotification, plain, redactWebhooks, type DiscordGateway } from "../domain/discord";
 import type { RoomMeta } from "../domain/room.repository";
 
 export interface NotifierOptions {
@@ -47,7 +47,7 @@ export class DiscordNotifier {
 
   /** 설정 확인용. 실패하면 오류를 그대로 던진다. */
   test(webhookUrl: string, roomName: string): Promise<void> {
-    return this.gateway.send(webhookUrl, `✅ **${roomName.slice(0, 60)}** · 디스코드 알림이 연결됐어요.`);
+    return this.gateway.send(webhookUrl, `✅ **${plain(roomName)}** · 디스코드 알림이 연결됐어요.`);
   }
 
   private enqueue(roomId: string, url: string, text: string) {

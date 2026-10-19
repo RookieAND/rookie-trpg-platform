@@ -2,6 +2,7 @@ import { z } from "zod";
 import { MAX_SUM_EXPR_LENGTH } from "./dice";
 import { isDamageExpr, AUDIO_KINDS, BEAT_KINDS, BGM_STOP, EFFECT_LEVELS, FOG_MAX_RADIUS, MAX_AUDIO_TRACKS, MAX_BEATS, MAX_BEAT_HANDOUTS, MAX_BRANCHES, MAX_CHARACTERS, MAX_FOG_ZONES, MAX_HANDOUTS, MAX_MADNESS_ENTRIES, MAX_OBJECTS, MAX_SCENES } from "./protocol";
 import { MARKER_TEXT_MAX, MAX_MARKERS } from "./markers";
+import { safeKey } from "./safe-key";
 import { CHARACTERISTIC_KEYS, MAX_SKILLS, MAX_WEAPONS } from "./sheet";
 
 /**
@@ -23,7 +24,8 @@ export const MADNESS_ENTRY_MAX_LENGTH = 120;
 export const AUDIO_LABEL_MAX_LENGTH = 40;
 /** 파일 하나가 품을 수 있는 이미지·음원(데이터 주소) 수와 크기 합 */
 export const MAX_EMBEDDED_FILES = 80;
-export const MAX_EMBEDDED_BYTES = 40 * 1024 * 1024;
+/** 한 파일에 품을 수 있는 이미지·음원 데이터의 합(서버의 가져오기 본문 한도 12MB 안에 들어와야 한다) */
+export const MAX_EMBEDDED_BYTES = 9 * 1024 * 1024;
 
 const KEY = /^[A-Za-z0-9_-]{1,40}$/;
 const IMAGE_ID = /^[a-f0-9]{32}$/;
@@ -59,7 +61,7 @@ const coord = z.number().finite().min(-100_000).max(100_000);
 const keyField = z.string().regex(KEY, "key는 영문·숫자·-·_ 40자 이내여야 해요.");
 const name40 = z.string().trim().min(1).max(40);
 
-const skill = z.object({ name: z.string().trim().min(1).max(30), value: z.number().int().min(0).max(100), grown: z.boolean().optional() });
+const skill = z.object({ name: safeKey(z.string().trim().min(1).max(30)), value: z.number().int().min(0).max(100), grown: z.boolean().optional() });
 const weapon = z.object({
   name: z.string().trim().min(1).max(30),
   skill: z.string().trim().min(1).max(30),

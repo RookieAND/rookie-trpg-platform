@@ -51,7 +51,7 @@ describe("HS256 검증", () => {
 describe("supabaseAuthenticate", () => {
   const auth = supabaseAuthenticate(verify());
   it("Bearer 헤더에서 신원을 읽고, 이름은 디스코드 표시 이름을 쓴다", async () => {
-    expect(await auth(req({ authorization: `Bearer ${sign(good)}` }), url())).toEqual({ userId: "u-1", name: "서하", requestedRole: "pl" });
+    expect(await auth(req({ authorization: `Bearer ${sign(good)}` }), url())).toEqual({ userId: "u-1", name: "서하", requestedRole: "pl", expiresAt: good.exp * 1000 });
   });
   it("웹소켓은 token 쿼리로 받는다", async () => {
     expect((await auth(req(), url(`token=${sign(good)}&role=kp`)))?.requestedRole).toBe("kp");

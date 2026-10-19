@@ -1,4 +1,5 @@
 import type { Authenticate } from "./identity/domain/identity";
+import { DEFAULT_HTTP_RATE, type HttpRateOptions } from "./platform/http-rate-limit";
 import { devAuthenticate } from "./identity/infrastructure/dev-authenticate";
 import { createJwtVerifier } from "./identity/infrastructure/jwt-verifier";
 import { supabaseAuthenticate } from "./identity/infrastructure/supabase-authenticate";
@@ -40,11 +41,28 @@ export interface ApiConfig {
   webOrigin: string;
   /** 앞단 프록시가 몇 겹인지. 0이면 X-Forwarded-For를 믿지 않는다. */
   trustProxyHops: number;
+  /** 모든 REST 요청에 거는 속도 제한 */
+  httpRate: HttpRateOptions;
+  /** 웹소켓 동시 연결 상한 */
+  wsLimits: { perUser: number; perIp: number; perRoom: number };
+  /** 연결이 없는 룸을 메모리에서 내리기까지의 분. 0이면 내리지 않는다. */
+  roomIdleMinutes: number;
+  /** 쓰이지 않는 이미지·오디오 자동 정리 */
+  imageCleanup: { mode: "off" | "dry-run" | "on"; intervalHours: number; minAgeDays: number; maxDelete: number };
   /** 시작 로그에 찍을 경고 */
   warnings: string[];
 }
 
 const flag = (v: string | undefined) => v === "1" || v === "true";
+
+/** 정수 환경변수. 비었으면 기본값, 범위를 벗어나면 부팅을 거부한다. */
+function intEnv(env: NodeJS.ProcessEnv, name: string, fallback: number, min: number, max: number): number {
+  const raw = env[name]?.trim();
+  if (!raw) return fallback;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < min || n > max) throw new ConfigError(`${name}은 ${min}~${max} 사이 정수여야 해요: ${raw}`);
+  return n;
+}
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
   const production = env.NODE_ENV === "production";
@@ -96,7 +114,31 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
   const s3 = parseS3(env);
   if (production && s3 && !databaseUrl && !env.DATA_DIR) warnings.push("이미지는 S3에 저장하지만 룸 저장소(DATABASE_URL)가 없어요. 룸 데이터는 로컬 파일에 쌓여요.");
 
-  return { production, port, authMode, jwtSecret, supabaseUrl, jwtAudience, s3, databaseUrl, databaseSsl: sslRaw as ApiConfig["databaseSsl"], databaseCaCert: env.DATABASE_CA_CERT?.trim() || undefined, databasePoolMax, dataDir, webOrigin, trustProxyHops: hops, warnings };
+  if (production && hops === 0) warnings.push("TRUST_PROXY가 0이에요. Fly·Render·Cloudflare 같은 프록시 뒤라면 1(겹 수)로 설정하세요. 아니면 IP별 제한이 모든 사용자를 한 사람으로 세어요.");
+
+  const rateRaw = env.HTTP_RATE_LIMIT?.trim().toLowerCase();
+  if (rateRaw && !["on", "off", "1", "0", "true", "false"].includes(rateRaw)) throw new ConfigError(`HTTP_RATE_LIMIT은 on 또는 off여야 해요: ${rateRaw}`);
+  const httpRate: HttpRateOptions = {
+    enabled: !(rateRaw === "off" || rateRaw === "0" || rateRaw === "false"),
+    ipPerMin: intEnv(env, "HTTP_RATE_IP_PER_MIN", DEFAULT_HTTP_RATE.ipPerMin, 10, 1_000_000),
+    userPerMin: intEnv(env, "HTTP_RATE_USER_PER_MIN", DEFAULT_HTTP_RATE.userPerMin, 10, 1_000_000),
+  };
+  const wsLimits = {
+    perUser: intEnv(env, "WS_MAX_CONNS_PER_USER", 8, 1, 1000),
+    perIp: intEnv(env, "WS_MAX_CONNS_PER_IP", 60, 1, 100_000),
+    perRoom: intEnv(env, "WS_MAX_CONNS_PER_ROOM", 150, 1, 100_000),
+  };
+  const roomIdleMinutes = intEnv(env, "ROOM_IDLE_EVICT_MINUTES", 30, 0, 24 * 60);
+  const cleanupRaw = env.IMAGE_CLEANUP?.trim().toLowerCase() || "off";
+  if (!["off", "dry-run", "on"].includes(cleanupRaw)) throw new ConfigError(`IMAGE_CLEANUP은 off, dry-run, on 중 하나여야 해요: ${cleanupRaw}`);
+  const imageCleanup = {
+    mode: cleanupRaw as "off" | "dry-run" | "on",
+    intervalHours: intEnv(env, "IMAGE_CLEANUP_INTERVAL_HOURS", 24, 1, 24 * 30),
+    minAgeDays: intEnv(env, "IMAGE_CLEANUP_MIN_AGE_DAYS", 7, 1, 365),
+    maxDelete: intEnv(env, "IMAGE_CLEANUP_MAX_DELETE", 500, 1, 1_000_000),
+  };
+
+  return { production, port, authMode, jwtSecret, supabaseUrl, jwtAudience, s3, databaseUrl, databaseSsl: sslRaw as ApiConfig["databaseSsl"], databaseCaCert: env.DATABASE_CA_CERT?.trim() || undefined, databasePoolMax, dataDir, webOrigin, trustProxyHops: hops, httpRate, wsLimits, roomIdleMinutes, imageCleanup, warnings };
 }
 
 function parseSupabaseUrl(raw: string | undefined): string | undefined {

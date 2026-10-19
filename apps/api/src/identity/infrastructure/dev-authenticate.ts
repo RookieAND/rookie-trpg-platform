@@ -1,5 +1,5 @@
 import type { IncomingMessage } from "node:http";
-import type { Role } from "@coc-vtt/shared";
+import { sanitizeDisplayName, type Role } from "@coc-vtt/shared";
 import type { Authenticate } from "../domain/identity";
 
 const header = (req: IncomingMessage, name: string) => {
@@ -27,5 +27,5 @@ export const devAuthenticate: Authenticate = (req, url) => {
   const role = url.searchParams.get("role");
   if (!userId || !name) return null;
   const requestedRole: Role = role === "kp" || role === "spectator" ? role : "pl";
-  return { userId: userId.slice(0, 64), name: name.slice(0, 40), requestedRole };
+  return { userId: userId.slice(0, 64), name: sanitizeDisplayName(name, userId.slice(0, 40)), requestedRole };
 };

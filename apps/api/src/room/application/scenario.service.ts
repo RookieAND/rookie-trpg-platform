@@ -3,24 +3,37 @@ import { classifyRef, MAX_EMBEDDED_BYTES, MAX_EMBEDDED_FILES, type ScenarioDoc }
 import { collectMediaIds } from "../../media-refs";
 import type { LoadedRoom } from "./room-registry";
 
-/** 한 사람이 한 시간에 시나리오·백업을 가져올 수 있는 횟수 */
-export const IMPORTS_PER_HOUR = 20;
-/** 요청 본문 한도(데이터 주소를 품은 파일). 파싱 단계에서 품은 데이터 합계도 따로 막는다. */
-export const MAX_SCENARIO_BODY = 64 * 1024 * 1024;
-/** 내보내는 파일에 이미지를 품을 수 있는 크기 합 */
-const EXPORT_EMBED_BYTES = 30 * 1024 * 1024;
+/**
+ * 한 사람이 한 시간에 시나리오·백업을 보낼 수 있는 횟수. 미리보기(dryRun)도 센다.
+ * 미리보기 뒤 가져오기가 한 쌍이라서 20번 가져올 수 있는 셈이다.
+ */
+export const IMPORTS_PER_HOUR = 40;
+/** 서버 전체에서 동시에 읽고 검사할 수 있는 가져오기 수(메모리 보호). */
+export const MAX_CONCURRENT_IMPORTS = 4;
+/** 요청 본문 한도(데이터 주소를 품은 파일). 품은 이미지는 MAX_EMBEDDED_BYTES까지라 이 안에 들어온다. */
+export const MAX_SCENARIO_BODY = 12 * 1024 * 1024;
+/** 내보내는 파일에 이미지를 품을 수 있는 크기 합(가져오기 한도 안에 들어오게 본문 한도보다 작다) */
+const EXPORT_EMBED_BYTES = 8 * 1024 * 1024;
 
 type MediaKind = "image" | "audio";
+/** 파일을 저장하는 사람(올리기와 같은 시간당 한도를 센다) */
+export interface MediaUploader {
+  userId: string;
+  ip?: string;
+}
+
+/** 룸 하나가 가질 수 있는 이미지·오디오 파일 수. 가져오기로 이 수를 넘겨 저장소를 채우지 못하게 한다. */
+export const MAX_ROOM_MEDIA_FILES = 200;
 
 /**
  * 이 서비스가 파일 저장소에 바라는 일(포트). 실제 구현(이미지 서비스)은 app.module에서 이어 준다.
  * 룸 컨텍스트가 이미지 컨텍스트를 직접 가져오지 않게 하려는 경계다.
  */
 export interface MediaFiles {
-  inspect(bytes: Buffer, kind: MediaKind): "ok" | "empty" | "too_large" | "bad_type";
-  storeChecked(bytes: Buffer, kind: MediaKind): Promise<{ ok: true; id: string } | { ok: false; code: "empty" | "too_large" | "bad_type" }>;
+  inspect(bytes: Buffer, kind: MediaKind): "ok" | "empty" | "too_large" | "bad_type" | "bad_size";
+  storeChecked(bytes: Buffer, kind: MediaKind, who?: MediaUploader): Promise<{ ok: true; id: string } | { ok: false; code: "empty" | "too_large" | "bad_type" | "bad_size" | "rate_limited" }>;
   exists(id: string, kind: MediaKind): Promise<boolean>;
-  copy(id: string, kind: MediaKind): Promise<string | null>;
+  copy(id: string, kind: MediaKind, who?: MediaUploader): Promise<string | null | "rate_limited">;
   get(id: string, kind?: MediaKind): Promise<{ bytes: Buffer; mime: string } | null>;
   removeMany(ids: Iterable<string>): Promise<number>;
 }
@@ -38,6 +51,8 @@ export interface Resolved {
 const REASON = {
   empty: "빈 파일이에요",
   too_large: "너무 커요(이미지 3MB, 오디오 10MB까지)",
+  bad_size: "그림 크기가 너무 커요(한 변 8000px, 4천만 화소까지)",
+  rate_limited: "올릴 수 있는 한도를 넘었어요. 잠시 뒤에 다시 가져와 주세요",
   bad_type: "형식을 알 수 없어요(이미지는 PNG·JPG·GIF·WEBP만 돼요)",
 } as const;
 
@@ -52,6 +67,8 @@ const decode = (base64: string): Buffer => Buffer.from(base64, "base64");
  */
 export class ScenarioService {
   private readonly recent = new Map<string, number[]>();
+  /** 지금 가져오기를 처리 중인 사용자. 한 사람이 동시에 하나만 보낼 수 있다. */
+  private readonly busy = new Set<string>();
 
   constructor(
     private readonly images: MediaFiles,
@@ -72,10 +89,29 @@ export class ScenarioService {
   }
 
   /**
+   * 가져오기 자리를 잡는다. 이 사용자가 이미 처리 중이면 "user", 서버 전체가 꽉 찼으면 "server", 잡았으면 release 함수를 준다.
+   * 본문을 읽기 전에 잡고, 끝나면(성공이든 실패든) 꼭 release를 불러야 한다.
+   */
+  begin(userId: string): { ok: true; release: () => void } | { ok: false; reason: "user" | "server" } {
+    if (this.busy.has(userId)) return { ok: false, reason: "user" };
+    if (this.busy.size >= MAX_CONCURRENT_IMPORTS) return { ok: false, reason: "server" };
+    this.busy.add(userId);
+    let done = false;
+    return {
+      ok: true,
+      release: () => {
+        if (done) return;
+        done = true;
+        this.busy.delete(userId);
+      },
+    };
+  }
+
+  /**
    * 참조를 id로 바꾼다. store가 false면(미리보기) 아무것도 저장하지 않고 쓸 수 있는지만 본다.
    * roomMedia는 이 룸이 이미 쓰는 파일 id: 이런 id는 복사하지 않고 그대로 쓴다.
    */
-  async resolve(doc: ScenarioDoc, opts: { roomMedia: ReadonlySet<string>; store: boolean }): Promise<Resolved> {
+  async resolve(doc: ScenarioDoc, opts: { roomMedia: ReadonlySet<string>; store: boolean; who?: MediaUploader }): Promise<Resolved> {
     const warnings: string[] = [];
     const created: string[] = [];
     const cache = new Map<string, Promise<string | undefined>>();
@@ -94,7 +130,7 @@ export class ScenarioService {
         }
         let bytes: Buffer | null = null;
         if (c.kind === "data") bytes = decode(c.base64);
-        else if (doc.media?.[c.id]) {
+        else if (doc.media && Object.hasOwn(doc.media, c.id)) {
           const m = classifyRef(doc.media[c.id]!);
           if (m.kind === "data") bytes = decode(m.base64);
         }
@@ -105,15 +141,30 @@ export class ScenarioService {
             return undefined;
           }
           if (!opts.store) return placeholder;
-          const stored = await this.images.storeChecked(bytes, kind);
-          if (!stored.ok) return undefined;
+          if (opts.roomMedia.size + created.length >= MAX_ROOM_MEDIA_FILES) {
+            note(`${where}: 룸에 둘 수 있는 파일 수(${MAX_ROOM_MEDIA_FILES}개)를 넘어서 건너뛰었어요.`);
+            return undefined;
+          }
+          const stored = await this.images.storeChecked(bytes, kind, opts.who);
+          if (!stored.ok) {
+            if (stored.code !== "empty") note(`${where}: ${REASON[stored.code]}. 건너뛰었어요.`);
+            return undefined;
+          }
           created.push(stored.id);
           return stored.id;
         }
         const id = (c as { id: string }).id;
         if (opts.roomMedia.has(id) && (await this.images.exists(id, kind))) return id;
         if (!opts.store) return (await this.images.exists(id, kind)) ? id : (note(`${where}: 올려 둔 파일을 찾을 수 없어서 건너뛰었어요.`), undefined);
-        const copy = await this.images.copy(id, kind);
+        if (opts.roomMedia.size + created.length >= MAX_ROOM_MEDIA_FILES) {
+          note(`${where}: 룸에 둘 수 있는 파일 수(${MAX_ROOM_MEDIA_FILES}개)를 넘어서 건너뛰었어요.`);
+          return undefined;
+        }
+        const copy = await this.images.copy(id, kind, opts.who);
+        if (copy === "rate_limited") {
+          note(`${where}: ${REASON.rate_limited}. 건너뛰었어요.`);
+          return undefined;
+        }
         if (!copy) {
           note(`${where}: 올려 둔 파일을 찾을 수 없어서 건너뛰었어요.`);
           return undefined;

@@ -3,6 +3,7 @@ import { MAX_SUM_EXPR_LENGTH, type Difficulty, type RollOutcome } from "./dice";
 import { MAX_EXPR_LENGTH, parseDiceExpression } from "./expr";
 import type { DamageKind, StatusKey } from "./wounds";
 import { MARKER_KEYS, MARKER_TEXT_MAX, type Marker } from "./markers";
+import { safeKey } from "./safe-key";
 import { CHARACTERISTIC_KEYS, CONDITIONS, MADNESS_KINDS, MAX_WEAPONS, STAT_PATHS, type Character } from "./sheet";
 
 export type Role = "kp" | "pl" | "spectator";
@@ -224,9 +225,26 @@ export interface ChatSettings {
   plWhisper: boolean;
   /** 관전자가 모두에게 보이는 말을 할 수 있게 한다. 꺼 두면 관전자는 읽기만 한다. 옛 저장 데이터에는 없을 수 있다(없으면 꺼짐). */
   spectatorChat?: boolean;
+  /**
+   * PL이 자기 시트의 HP·MP·SAN·행운을 직접 고칠 수 있게 한다(기본 켜짐). 끄면 이 수치는 GM만 고치고,
+   * PL은 굴림·행운 쓰기·SAN 판정 같은 정해진 명령으로만 수치를 바꾼다. 옛 저장 데이터에는 없을 수 있다(없으면 켜짐).
+   * 대화 설정과 같은 묶음에 두어 같은 명령(settings.chat)과 이벤트로 오간다.
+   */
+  plSelfEdit?: boolean;
 }
 
-export const DEFAULT_CHAT_SETTINGS: ChatSettings = { plWhisper: false, spectatorChat: false };
+export const DEFAULT_CHAT_SETTINGS: ChatSettings = { plWhisper: false, spectatorChat: false, plSelfEdit: true };
+
+/** GM이 내보내며 막은 사용자. 같은 초대 링크로 다시 들어오지 못한다. GM만 목록을 받는다. */
+export interface BannedUser {
+  userId: string;
+  name: string;
+  /** 막은 시각(ms) */
+  at: number;
+}
+
+/** 룸 하나에 둘 수 있는 차단 목록의 최대 길이 */
+export const MAX_BANNED = 100;
 
 export const LOG_KINDS = ["session", "scene", "handout", "beat", "combat", "roll", "damage", "sanity", "chat"] as const;
 export type LogKind = (typeof LOG_KINDS)[number];
@@ -419,6 +437,8 @@ export interface Snapshot {
   damageApplied?: Record<string, string[]>;
   /** 대화 설정. 옛 서버가 보낸 snapshot에는 없을 수 있다. */
   chatSettings?: ChatSettings;
+  /** 차단한 사용자. GM에게만 담아 보낸다(다른 사람은 빈 배열). 옛 서버에는 없을 수 있다. */
+  banned?: BannedUser[];
   /** 서버의 현재 시각(ms). 클라이언트가 시계 차이를 맞추는 데 쓴다. */
   now: number;
 }
@@ -467,7 +487,7 @@ export const characterInputSchema = z.object({
   mp: z.number().int().min(0).max(99).optional(),
   san: z.number().int().min(0).max(99).optional(),
   skills: z
-    .array(z.object({ name: z.string().trim().min(1).max(30), value: z.number().int().min(0).max(100), grown: z.boolean().default(false) }))
+    .array(z.object({ name: safeKey(z.string().trim().min(1).max(30)), value: z.number().int().min(0).max(100), grown: z.boolean().default(false) }))
     .max(150)
     .default([]),
   notes: z.string().max(2000).default(""),
@@ -489,7 +509,7 @@ export const sheetOp = z.union([
   z
     .object({
       path: z.literal("skill"),
-      name: z.string().min(1).max(30),
+      name: safeKey(z.string().min(1).max(30)),
       value: z.number().int().min(0).max(999).optional(),
       delta: delta.optional(),
       grown: z.boolean().optional(),
@@ -566,7 +586,10 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
     }),
   }),
   /** GM이 관전자 한 명을 내보낸다(그 사람의 연결이 닫힌다). 다시 들어오려면 관전 초대 링크가 있어야 한다. */
-  z.object({ type: z.literal("member.remove"), data: z.object({ userId: id }) }),
+  /** 참가자를 내보낸다(PL·관전자). ban이 true(기본)면 같은 초대 링크로 다시 들어오지 못한다. */
+  z.object({ type: z.literal("member.remove"), data: z.object({ userId: id, ban: z.boolean().default(true) }) }),
+  /** 차단을 푼다. 풀린 사람은 초대 링크가 유효하면 다시 들어올 수 있다. */
+  z.object({ type: z.literal("member.unban"), data: z.object({ userId: id }) }),
   /** 보드의 한 곳을 모두에게 가리킨다(저장하지 않는 일회성 신호). sceneId는 보고 있는 장면이고 활성 장면과 같아야 한다. */
   z.object({ type: z.literal("board.ping"), data: z.object({ sceneId: id, x: coord, y: coord }) }),
   z.object({ type: z.literal("scene.fog"), data: z.object({ id, enabled: z.boolean() }) }),
@@ -803,7 +826,7 @@ export const clientCommandSchema = z.discriminatedUnion("type", [
     }),
   }),
   /** 대화 설정(GM 전용) */
-  z.object({ type: z.literal("settings.chat"), data: z.object({ plWhisper: z.boolean(), spectatorChat: z.boolean().optional() }) }),
+  z.object({ type: z.literal("settings.chat"), data: z.object({ plWhisper: z.boolean(), spectatorChat: z.boolean().optional(), plSelfEdit: z.boolean().optional() }) }),
   z.object({ type: z.literal("session.start"), data: z.object({}).default({}) }),
   z.object({ type: z.literal("session.pause"), data: z.object({}).default({}) }),
   z.object({ type: z.literal("session.resume"), data: z.object({}).default({}) }),
@@ -953,7 +976,11 @@ export type ServerEvent =
   | { type: "chat.history"; data: { messages: ChatMessage[]; last: boolean } }
   | { type: "settings.chat"; data: ChatSettings }
   /** GM이 나를 내보냈다. 받은 사람에게만 가고, 이어서 연결이 닫힌다. */
-  | { type: "member.removed"; data: Record<string, never> }
+  | { type: "member.removed"; data: { banned?: boolean } }
+  /** 차단 목록이 바뀌었다. GM에게만 간다. */
+  | { type: "bans.updated"; data: { banned: BannedUser[] } }
+  /** GM이 대화·세션 기록을 비웠다. 받은 화면은 해당 목록을 지운다. */
+  | { type: "history.purged"; data: { chat: boolean; log: boolean } }
   | { type: "session.started"; data: { number: number } }
   | { type: "session.paused"; data: { reason: PauseReason } }
   /** GM의 마지막 연결이 닫혀 유예가 시작됨. 아직 정지는 아니다. */

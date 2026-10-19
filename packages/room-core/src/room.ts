@@ -47,7 +47,15 @@ import {
   MAX_MADNESS_ENTRIES,
   applyLuck,
   josa,
+  isSafeKey,
+  memberDisplayName,
+  own,
+  ownSafeEntries,
+  UNSAFE_KEY_MESSAGE,
   applyMarker,
+  STAT_PATHS,
+  MAX_BANNED,
+  type BannedUser,
   isMarkerKey,
   markerLabel,
   markersFor,
@@ -218,6 +226,8 @@ export interface RoomData {
   chatSettings?: ChatSettings;
   /** 세션 기록(최근 LOG_KEEP개). 이전 버전에서 저장한 데이터에는 없을 수 있다. */
   log?: LogEntry[];
+  /** 내보내며 막은 사용자(저장 모양 4). 이전 버전에서 저장한 데이터에는 없을 수 있다(없으면 빈 목록). */
+  banned?: BannedUser[];
 }
 
 /**
@@ -319,6 +329,8 @@ export class Room {
   private chatSettings: ChatSettings = { ...DEFAULT_CHAT_SETTINGS };
   private log: LogEntry[] = [];
   private logN = 0;
+  /** 내보내며 막은 사용자. 같은 초대 링크로 다시 들어오지 못한다. */
+  private banned = new Map<string, BannedUser>();
 
   private readonly rng: Rng;
   private readonly now: () => number;
@@ -361,6 +373,7 @@ export class Room {
       chat: this.chat.map(cloneChat),
       chatSettings: { ...this.chatSettings },
       log: this.log.map(cloneLog),
+      banned: [...this.banned.values()].map((b) => ({ ...b })),
     };
   }
 
@@ -396,6 +409,7 @@ export class Room {
     room.chatSettings = { ...DEFAULT_CHAT_SETTINGS, ...data.chatSettings };
     room.log = (data.log ?? []).map(cloneLog);
     room.logN = room.log.reduce((m, e) => Math.max(m, e.n), 0);
+    for (const b of data.banned ?? []) room.banned.set(b.userId, { ...b });
     return room;
   }
 
@@ -415,9 +429,11 @@ export class Room {
    */
   join(actor: Actor): Out[] {
     const prev = this.members.get(actor.userId);
-    this.members.set(actor.userId, { userId: actor.userId, name: actor.name, role: actor.role, online: true });
+    // 이름은 로그인 정보에서 온 글이라 한 번 더 정리한다(제어·방향 문자 제거, GM으로 착각할 이름에는 표시).
+    const name = memberDisplayName(actor.name, actor.role === "kp");
+    this.members.set(actor.userId, { userId: actor.userId, name, role: actor.role, online: true });
     const out: Out[] = [];
-    if (!(prev && prev.online && prev.role === actor.role && prev.name === actor.name)) {
+    if (!(prev && prev.online && prev.role === actor.role && prev.name === name)) {
       out.push(...this.presenceOuts());
     }
     if (actor.role === "kp") {
@@ -496,7 +512,13 @@ export class Room {
       handouts: [...this.handouts.values()].filter((h) => canSeeHandout(h, viewer)).map((h) => cloneHandout(h)),
       damageApplied: viewer.role === "kp" ? Object.fromEntries([...this.damageApplied].map(([k, v]) => [k, [...v]])) : {},
       chatSettings: { ...this.chatSettings },
+      banned: viewer.role === "kp" ? [...this.banned.values()].map((b) => ({ ...b })) : [],
     };
+  }
+
+  /** 이 사용자가 이 룸에서 차단됐는가 */
+  isBanned(userId: string): boolean {
+    return this.banned.has(userId);
   }
 
   /**
@@ -624,7 +646,9 @@ export class Room {
       case "object.marker":
         return this.objectMarker(who, command.data);
       case "member.remove":
-        return this.memberRemove(who, command.data.userId);
+        return this.memberRemove(who, command.data.userId, command.data.ban !== false);
+      case "member.unban":
+        return this.memberUnban(who, command.data.userId);
       case "board.ping":
         return this.boardPing(who, command.data);
       case "object.remove":
@@ -1764,7 +1788,7 @@ export class Room {
         hp: clamp(c.hp ?? limits.hp, 0, limits.hp),
         mp: clamp(c.mp ?? limits.mp, 0, limits.mp),
         san: clamp(c.san ?? c.characteristics.POW, 0, SAN_CAP),
-        skills: Object.fromEntries(values),
+        skills: Object.fromEntries([...values].filter(([k]) => isSafeKey(k))),
         notes: c.notes,
         backstory: c.backstory,
         possessions: c.possessions,
@@ -2155,16 +2179,60 @@ export class Room {
     return ok(this.emit({ type: "object.updated", data: this.view(obj, kpView) }, { roles: ["kp"] }));
   }
 
-  /** GM이 관전자 한 명을 내보낸다. 그 사람은 알림을 받고 연결이 닫히며(허브가 닫는다), 다시 들어오려면 관전 초대 링크가 있어야 한다. */
-  private memberRemove(who: Actor, userId: string): Result {
+  /**
+   * GM이 참가자(PL·관전자)를 내보낸다. 받은 사람은 알림을 받고 연결이 닫힌다(허브가 닫는다).
+   * ban이 true(기본)면 차단 목록에도 올라 같은 초대 링크로 다시 들어오지 못하고, 풀어 줄 때까지 막힌다.
+   * ban이 false면 목록에서만 빠진다(초대 링크가 유효하면 다시 들어올 수 있다). 자기 자신과 GM은 내보낼 수 없다.
+   * 내보낸 PL의 시트는 룸에 그대로 남고(GM이 정리한다), 차단을 풀고 다시 들어오면 주인으로 이어진다.
+   */
+  private memberRemove(who: Actor, userId: string, ban: boolean): Result {
     if (who.role !== "kp") return fail("forbidden", "GM만 참가자를 내보낼 수 있어요.");
+    if (userId === who.userId) return fail("forbidden", "자기 자신은 내보낼 수 없어요.");
     const m = this.members.get(userId);
     if (!m) return fail("not_found", "그 참가자를 찾을 수 없어요.");
-    if (m.role !== "spectator") return fail("forbidden", "관전자만 내보낼 수 있어요.");
+    if (m.role === "kp") return fail("forbidden", "GM은 내보낼 수 없어요.");
+    if (ban && !this.banned.has(userId) && this.banned.size >= MAX_BANNED) return fail("bad_message", `차단은 ${MAX_BANNED}명까지 둘 수 있어요. 차단 목록을 정리해 주세요.`);
     this.members.delete(userId);
     this.rollTimes.delete(`chat:${userId}`);
-    this.record("session", "member.remove", `관전자 ${m.name} 내보냄`, { audience: "gm" });
-    return ok(this.emitTo({ type: "member.removed", data: {} }, { users: [userId] }), ...this.presenceOuts());
+    this.rollTimes.delete(`sheet:${userId}`);
+    const who2 = m.role === "pl" ? "PL" : "관전자";
+    this.record("session", "member.remove", `${who2} ${m.name} 내보냄${ban ? " (차단)" : ""}`, { audience: "gm" });
+    const out: Out[] = [this.emitTo({ type: "member.removed", data: ban ? { banned: true } : {} }, { users: [userId] })];
+    if (ban) {
+      this.banned.set(userId, { userId, name: m.name, at: this.now() });
+      out.push(this.emitBans());
+    }
+    return ok(...out, ...this.presenceOuts());
+  }
+
+  /** GM이 차단을 푼다. 풀린 사람은 유효한 초대 링크로 다시 들어올 수 있다. */
+  private memberUnban(who: Actor, userId: string): Result {
+    if (who.role !== "kp") return fail("forbidden", "GM만 차단을 풀 수 있어요.");
+    const b = this.banned.get(userId);
+    if (!b) return fail("not_found", "차단 목록에 없는 사람이에요.");
+    this.banned.delete(userId);
+    this.record("session", "member.unban", `${b.name} 차단을 풀었어요`, { audience: "gm" });
+    return ok(this.emitBans());
+  }
+
+  private emitBans(): Out {
+    return this.emit({ type: "bans.updated", data: { banned: [...this.banned.values()].map((x) => ({ ...x })) } }, { roles: ["kp"] });
+  }
+
+  /**
+   * 대화(귓속말 포함)나 세션 기록을 비운다. 룸 주인이 REST로 요청하며, 권한 확인은 부르는 쪽이 한다.
+   * 다시 접속하는 사람이 지난 이벤트로 지운 대화를 되받지 못하게 이벤트 버퍼에서도 대화를 걷어낸다.
+   * 기록을 비우면 "비웠다"는 한 줄만 새로 남는다(누가 비웠는지 GM이 알 수 있게).
+   */
+  purgeHistory(scope: { chat: boolean; log: boolean }): Out[] {
+    if (scope.chat) {
+      this.chat = [];
+      this.buffer = this.buffer.filter((o) => o.event.type !== "chat.posted" && o.event.type !== "chat.history");
+    }
+    if (scope.log) this.log = [];
+    const out: Out[] = [this.emit({ type: "history.purged", data: { chat: scope.chat, log: scope.log } }, { roles: ALL_ROLES })];
+    if (scope.log) this.record("session", "history.purge", scope.chat ? "대화와 세션 기록을 비웠어요" : "세션 기록을 비웠어요", { audience: "gm" });
+    return out;
   }
 
   private objectRemove(who: Actor, id: string): Result {
@@ -2341,7 +2409,7 @@ export class Room {
 
   /** 이름이 기능이 아니라 특성치·행운으로 굴리는 것인가(대항 판정이 비길 때 값 대신 다시 굴리는 기준) */
   private isCharacteristicRoll(c: Character, name: string): boolean {
-    if (c.skills[name]) return false;
+    if (own(c.skills, name)) return false;
     return (CHARACTERISTIC_KEYS as readonly string[]).includes(name.toUpperCase()) || name === "행운" || name.toUpperCase() === "LUCK";
   }
 
@@ -2763,8 +2831,8 @@ export class Room {
     if (d.skills.length > MAX_SKILLS) return fail("bad_sheet", `기능은 ${MAX_SKILLS}개까지 둘 수 있어요.`);
     const base = { characteristics: d.characteristics, age: d.age };
     const limits = deriveCharacter(base).limits;
-    const skills: Character["skills"] = {};
-    for (const s of d.skills) skills[s.name] = { value: s.value, grown: s.grown };
+    const skills = newSkills();
+    for (const s of d.skills) if (isSafeKey(s.name)) skills[s.name] = { value: s.value, grown: s.grown };
     const c: Character = {
       id: this.newId(),
       ...(d.vaultId ? { vaultId: d.vaultId } : {}),
@@ -2826,6 +2894,10 @@ export class Room {
     // 복사본에 적용해 보고, 하나라도 실패하면 아무것도 바꾸지 않는다.
     const next = cloneCharacter(c);
     const limits = deriveCharacter(next).limits;
+    // GM이 "PL이 자기 수치 직접 수정"을 꺼 둔 룸: HP·MP·SAN·행운은 GM만 고친다. 굴림·행운 쓰기·SAN 판정은 따로 된다.
+    if (who.role === "pl" && this.chatSettings.plSelfEdit === false && d.ops.some((o) => (STAT_PATHS as readonly string[]).includes(o.path))) {
+      return fail("forbidden", "이 룸에서는 HP·MP·SAN·행운을 GM만 고칠 수 있어요. 바꿀 일이 있으면 GM에게 말해 주세요.");
+    }
     for (const op of d.ops) {
       switch (op.path) {
         case "hp": {
@@ -2848,7 +2920,8 @@ export class Room {
         case "skill": {
           // 기능 값(처음 값·증감)은 GM만 고친다. PL은 자기 기능의 성장 표시만 바꾼다.
           if (who.role !== "kp" && (op.value !== undefined || op.delta !== undefined)) return fail("forbidden", "기능 값은 GM만 바꿀 수 있어요. 성장 표시만 직접 바꿀 수 있어요.");
-          const cur = next.skills[op.name];
+          if (!isSafeKey(op.name)) return fail("bad_message", UNSAFE_KEY_MESSAGE);
+          const cur = own(next.skills, op.name);
           if (!cur && op.value === undefined && op.delta === undefined) return fail("bad_sheet", `'${op.name}' 기능이 시트에 없어요.`);
           if (!cur && Object.keys(next.skills).length >= MAX_SKILLS) return fail("bad_sheet", `기능은 ${MAX_SKILLS}개까지 둘 수 있어요.`);
           const entry = cur ?? { value: 0, grown: false };
@@ -2936,9 +3009,14 @@ export class Room {
     return { name: c.name, character: c };
   }
 
-  private setChatSettings(who: Actor, d: { plWhisper: boolean; spectatorChat?: boolean }): Result {
+  private setChatSettings(who: Actor, d: { plWhisper: boolean; spectatorChat?: boolean; plSelfEdit?: boolean }): Result {
     if (who.role !== "kp") return fail("forbidden", "GM만 대화 설정을 바꿀 수 있어요.");
-    this.chatSettings = { ...this.chatSettings, plWhisper: d.plWhisper, ...(d.spectatorChat !== undefined ? { spectatorChat: d.spectatorChat } : {}) };
+    this.chatSettings = {
+      ...this.chatSettings,
+      plWhisper: d.plWhisper,
+      ...(d.spectatorChat !== undefined ? { spectatorChat: d.spectatorChat } : {}),
+      ...(d.plSelfEdit !== undefined ? { plSelfEdit: d.plSelfEdit } : {}),
+    };
     return ok(this.emit({ type: "settings.chat", data: { ...this.chatSettings } }, { roles: ALL_ROLES }));
   }
 
@@ -3135,8 +3213,11 @@ const cloneCharacter = (c: Character): Character => ({
   ...(c.conditions ? { conditions: [...c.conditions] } : {}),
   ...(c.sanDay ? { sanDay: { ...c.sanDay } } : {}),
   characteristics: { ...c.characteristics },
-  skills: Object.fromEntries(Object.entries(c.skills).map(([k, v]) => [k, { ...v }])),
+  skills: Object.fromEntries(ownSafeEntries(c.skills).map(([k, v]) => [k, { ...v }])),
 });
+
+/** 기능 목록을 담을 빈 객체. 원형이 없어서 어떤 이름을 넣어도 Object.prototype에 닿지 않는다. */
+const newSkills = (): Character["skills"] => Object.create(null) as Character["skills"];
 
 /** 시트 판정의 CC 표기. */
 const skillExpr = (value: number, bonus: number, difficulty?: "regular" | "hard" | "extreme") => {

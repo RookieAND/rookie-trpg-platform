@@ -1,4 +1,4 @@
-import { CHAT_KEEP, DEFAULT_CHAT_SETTINGS, DEFAULT_EFFECTS, DEFAULT_SCENE_ID, type ChatMessage, type ChatSettings, type EffectSettings } from "./protocol";
+import { CHAT_KEEP, DEFAULT_CHAT_SETTINGS, DEFAULT_EFFECTS, DEFAULT_SCENE_ID, type BannedUser, type ChatMessage, type ChatSettings, type EffectSettings } from "./protocol";
 import { mergeChat } from "./chat";
 import type { Character } from "./sheet";
 import type {
@@ -63,6 +63,10 @@ export interface RoomState {
   /** 접속 직후의 최근 대화를 다 받았는가(옛 서버에는 없는 이벤트라 snapshot에서 false로 시작한다) */
   chatLoaded: boolean;
   chatSettings: ChatSettings;
+  /** 차단한 사용자(GM만 채워진다) */
+  banned: BannedUser[];
+  /** 기록 비우기를 받은 횟수. 열려 있는 세션 기록 보기가 이 값이 바뀌면 다시 불러온다. */
+  historyPurges: number;
   /** GM이 요청한 판정(최근 것부터 5개). 화면에서 내게 온 것만 골라 쓴다. */
   rollAsks: RollAsk[];
   characters: Record<string, Character>;
@@ -113,6 +117,8 @@ export const initialRoomState = (roomId = ""): RoomState => ({
   chat: [],
   chatLoaded: false,
   chatSettings: DEFAULT_CHAT_SETTINGS,
+  banned: [],
+  historyPurges: 0,
   rollAsks: [],
   characters: {},
   handouts: {},
@@ -162,7 +168,8 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
       rolls: d.rolls,
       // 대화는 이어서 둔다(다시 접속하면 같은 대화가 또 오지만 id로 걸러진다).
       chatLoaded: false,
-      chatSettings: d.chatSettings ?? DEFAULT_CHAT_SETTINGS,
+      chatSettings: { ...DEFAULT_CHAT_SETTINGS, ...d.chatSettings },
+      banned: d.banned ?? [],
       rollAsks: [],
       characters: Object.fromEntries(d.characters.map((c) => [c.id, c])),
       handouts: Object.fromEntries(d.handouts.map((h) => [h.id, h])),
@@ -291,8 +298,12 @@ export function applyServerMessage(state: RoomState, msg: ServerMessage): RoomSt
     case "presence":
       return { ...next, members: ev.data.members };
     case "member.removed":
-      // 연결이 곧 4410으로 닫힌다. 화면은 닫힘 코드로 안내한다.
+      // 연결이 곧 4410(차단이면 4411)으로 닫힌다. 화면은 닫힘 코드로 안내한다.
       return next;
+    case "bans.updated":
+      return { ...next, banned: ev.data.banned };
+    case "history.purged":
+      return { ...next, chat: ev.data.chat ? [] : state.chat, historyPurges: state.historyPurges + 1 };
     case "session.started":
       return { ...next, sessionStatus: "ACTIVE", pauseReason: null, kpAwaySince: null, sessionNumber: ev.data.number, lastEnd: null };
     case "session.paused":

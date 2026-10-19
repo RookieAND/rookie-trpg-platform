@@ -1,4 +1,5 @@
 import { josa } from "./josa";
+import { isSafeKey, own } from "./safe-key";
 import { CSV_BOM, guardCell, parseCsv, serializeCsv, unguardCell } from "./csv";
 import { deriveCharacter, CHARACTERISTIC_KEYS, DEFAULT_SKILLS, MAX_SKILLS, MAX_WEAPONS, SAN_CAP, LUCK_CAP, defaultSkillValues, type Character, type CharacteristicKey, type Weapon } from "./sheet";
 import { characterInputSchema, weaponSchema, type CharacterData } from "./protocol";
@@ -274,7 +275,7 @@ export function parseSheetCsv(text: string): SheetCsvResult {
 
     switch (section) {
       case SECTION_BASIC: {
-        const field = BASIC_KEYS[k];
+        const field = own(BASIC_KEYS, k);
         if (!field) return void warn(`기본 정보에 '${key}' 항목은 없어서 건너뛰었어요.`, row);
         if (seenBasic.has(field)) return void warn(`${josa(`'${key}'`, "이/가")} 두 번 나와서 뒤의 것을 건너뛰었어요.`, row);
         seenBasic.add(field);
@@ -288,7 +289,7 @@ export function parseSheetCsv(text: string): SheetCsvResult {
         return;
       }
       case SECTION_STATS: {
-        const stat = STAT_KEYS[k];
+        const stat = own(STAT_KEYS, k);
         if (!stat) return void warn(`${josa(`'${key}'`, "은/는")} 특성치 이름이 아니라서 건너뛰었어요.`, row);
         if (stat in stats) return void warn(`${josa(String(stat), "이/가")} 두 번 나와서 뒤의 것을 건너뛰었어요.`, row);
         const n = parseIntCell(arg(1));
@@ -298,7 +299,7 @@ export function parseSheetCsv(text: string): SheetCsvResult {
       }
       case SECTION_DERIVED: {
         if (k === "항목") return;
-        const d = DERIVED_KEYS[k];
+        const d = own(DERIVED_KEYS, k);
         if (!d) return void warn(`파생 수치에 '${key}' 항목은 없어서 건너뛰었어요.`, row);
         if (seenDerived.has(d)) return void warn(`${josa(String(DERIVED_LABEL[d]), "이/가")} 두 번 나와서 뒤의 것을 건너뛰었어요.`, row);
         seenDerived.add(d);
@@ -316,6 +317,7 @@ export function parseSheetCsv(text: string): SheetCsvResult {
         const second = arg(1);
         if (["기능", "이름", "기능이름", "스킬", "skill", "name"].includes(k) && parseIntCell(second) === null) return; // 머리글 줄
         if (key === "") return void warn("기능 이름이 비어 있어 건너뛰었어요.", row);
+        if (!isSafeKey(key)) return void warn(`${josa(`'${key.slice(0, 20)}'`, "은/는")} 사용할 수 없는 기능 이름이라 건너뛰었어요.`, row);
         if (key.length > SKILL_NAME_MAX) return void warn(`기능 이름 '${key.slice(0, 12)}…' 하나가 ${SKILL_NAME_MAX}자를 넘어 건너뛰었어요.`, row);
         const value = parseIntCell(second);
         if (value === null || value > 100) return void warn(`'${key}'의 값은 0~100 사이 정수여야 해서 건너뛰었어요. ('${second}')`, row);
@@ -358,7 +360,7 @@ export function parseSheetCsv(text: string): SheetCsvResult {
         return;
       }
       case SECTION_NOTES: {
-        const field = NOTE_KEYS[k];
+        const field = own(NOTE_KEYS, k);
         if (!field) return void warn(`비고에 '${key}' 항목은 없어서 건너뛰었어요. (메모, 인물 배경)`, row);
         if (field in noteFields) return void warn(`${josa(`'${key}'`, "이/가")} 두 번 나와서 뒤의 것을 건너뛰었어요.`, row);
         noteFields[field] = cleanText(cells[1] ?? "");

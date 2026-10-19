@@ -8,8 +8,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppModule } from "../app.module";
 import { FileImageStorage } from "./infrastructure/file-image.storage";
+import { PNG_1x1 } from "./test-images";
 
-const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32, 1)]);
+const PNG = PNG_1x1;
 let app: INestApplication;
 let base: string;
 let dir: string;
