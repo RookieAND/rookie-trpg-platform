@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { Tag } from "lucide-react";
 import type { ClientCommand, GameObject } from "@coc-vtt/shared";
 import { MarkerPanel } from "./MarkerPanel";
 
@@ -30,7 +31,7 @@ export function MarkerButton({ obj, canSecret, enabled, send }: { obj: GameObjec
   return (
     <span ref={root} className="mk-anchor">
       <button type="button" className="btn" data-testid="marker-open" aria-expanded={open} aria-haspopup="true" disabled={obj.kind !== "token"} title="토큰에 기절·중독 같은 상태 표식을 붙여요" onClick={() => setOpen((o) => !o)}>
-        상태 표식{count > 0 ? ` ${count}` : ""}
+        <Tag aria-hidden />상태 표식{count > 0 ? ` ${count}` : ""}
       </button>
       {open && (
         <div className="mk-pop" data-testid="marker-pop">

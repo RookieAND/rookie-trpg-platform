@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import { Upload } from "lucide-react";
 import { josa, MAX_AUDIO_TRACKS, type AudioKind, type AudioTrack, type BgmState, type ClientCommand } from "@coc-vtt/shared";
 import { uploadAudio, type Caller } from "@/shared/api";
 import { useAsk, Select } from "@/shared/ui";
@@ -77,7 +78,7 @@ export function AudioPanel({ me, library, bgm, enabled, send }: { me: Caller; li
           </label>
         </div>
         <button className="btn" disabled={!enabled || busy || library.length >= MAX_AUDIO_TRACKS} onClick={() => input.current?.click()}>
-          {busy ? "올리는 중…" : "파일 고르기"}
+          <Upload aria-hidden />{busy ? "올리는 중…" : "파일 고르기"}
         </button>
         <input ref={input} type="file" accept="audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/webm,audio/x-wav,audio/aac" aria-label="음원 파일" hidden onChange={(e) => pick(e.target.files?.[0])} />
         <span style={{ color: "var(--muted)", fontSize: 12 }}>mp3, ogg, wav, m4a · 10MB까지 · {library.length}/{MAX_AUDIO_TRACKS}</span>

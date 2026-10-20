@@ -5,6 +5,7 @@ import { onTabListKeyDown } from "@/shared/ui";
 export interface DockTabDef<T extends string> {
   id: T;
   label: string;
+  icon?: ReactNode;
 }
 
 /**
@@ -17,7 +18,7 @@ export function ToolDock<T extends string>({ tab, tabs, onTab, sections }: { tab
       <div className="tooldock-tabs" role="tablist" aria-label="도구 고르기" onKeyDown={onTabListKeyDown}>
         {tabs.map((t) => (
           <button key={t.id} type="button" role="tab" id={`dock-tab-${t.id}`} aria-selected={tab === t.id} aria-controls={`dock-sec-${t.id}`} data-testid={`dock-tab-${t.id}`} onClick={() => onTab(t.id)}>
-            {t.label}
+            {t.icon}{t.label}
           </button>
         ))}
       </div>

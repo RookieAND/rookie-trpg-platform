@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { UserPlus } from "lucide-react";
 import { createPortal } from "react-dom";
 import { LIMITS, MAX_CHARACTERS, NPC_PRESETS, QUICK_NPC_HP_MAX, buildQuickNpc, josa, quickNpcPreview, type CharacterData, type QuickNpc } from "@coc-vtt/shared";
 import { Dialog, LimitNote, Select } from "@/shared/ui";
@@ -54,7 +55,7 @@ export function NpcSheetButton({ count, disabled, onCreate, open: openProp, onOp
 
   return (
     <>
-      <button className="btn" data-testid="npc-new" disabled={disabled || full} title={full ? `시트는 ${MAX_CHARACTERS}개까지예요` : "이름과 몇 가지 숫자로 NPC 시트를 만들어요"} onClick={() => setOpen(true)}>NPC 만들기</button>
+      <button className="btn" data-testid="npc-new" disabled={disabled || full} title={full ? `시트는 ${MAX_CHARACTERS}개까지예요` : "이름과 몇 가지 숫자로 NPC 시트를 만들어요"} onClick={() => setOpen(true)}><UserPlus aria-hidden />NPC 만들기</button>
       {open &&
         createPortal(
           <Dialog

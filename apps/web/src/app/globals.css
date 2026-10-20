@@ -1039,3 +1039,9 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .quick-dice { display: flex; gap: 6px; flex-wrap: wrap; }
 .quick-dice .btn { min-width: 44px; justify-content: center; }
 .handout-actions .spacer { flex: 1; }
+
+/* 버튼 안 아이콘(lucide-react) */
+.btn > svg { width: 15px; height: 15px; flex: none; stroke-width: 2; }
+.btn.sm > svg { width: 14px; height: 14px; }
+.tooldock-tabs button { display: inline-flex; align-items: center; gap: 6px; }
+.tooldock-tabs button > svg { width: 14px; height: 14px; flex: none; }

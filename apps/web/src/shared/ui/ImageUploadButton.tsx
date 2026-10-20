@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import { ImagePlus } from "lucide-react";
 import type { Caller } from "../api";
 import { useImageLibrary } from "./ImageLibrary";
 import { ImagePicker } from "./ImagePicker";
@@ -28,7 +29,7 @@ export function ImageUploadButton({ me, label, onUploaded, disabled, className =
         disabled={disabled || busy}
         onClick={() => (ids.length > 0 ? setOpen((o) => !o) : input.current?.click())}
       >
-        {busy ? "올리는 중…" : label}
+        <ImagePlus aria-hidden />{busy ? "올리는 중…" : label}
       </button>
       <input
         ref={input}

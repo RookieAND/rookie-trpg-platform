@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { Check, Eye, EyeOff, FileText, ImageOff, Lock, LockOpen, Trash2 } from "lucide-react";
 import { LIMITS, type Character, type ClientCommand, type GameObject, type Member } from "@coc-vtt/shared";
 import type { Caller } from "@/shared/api";
 import { ImageUploadButton, LimitNote, Select } from "@/shared/ui";
@@ -83,7 +84,7 @@ export function PlaceControls({ placement: p, enabled, players, withTokenButton 
         <button className="btn" disabled={!enabled} title="PL마다 그 사람 이름으로 토큰을 하나씩 놓아요" onClick={p.addAll}>PL 전원 토큰 만들기</button>
       )}
       <button className="btn" data-testid="lock-all" aria-pressed={p.allLocked} disabled={!enabled || p.plTokens.length === 0} title={p.allLocked ? "PL 토큰의 잠금을 모두 풀어요" : "PL 토큰을 모두 잠가 움직이지 못하게 해요(전투 정리·컷신용)"} onClick={p.toggleLockAll}>
-        {p.allLocked ? "이동 풀기" : "이동 잠금"}
+        {p.allLocked ? <LockOpen aria-hidden /> : <Lock aria-hidden />}{p.allLocked ? "이동 풀기" : "이동 잠금"}
       </button>
       <button className="btn" disabled={!enabled} title="가구·단서 같은 소품을 놓아요" onClick={() => p.add("prop", "object")}>+ 소품</button>
       <button className="btn" disabled={!enabled} title="PL에게 보이지 않는 메모용 소품을 놓아요" onClick={() => p.add("prop", "gm")}>+ GM 전용</button>
@@ -121,7 +122,7 @@ export function SelectedControls({ me, enabled, players, selected, characters = 
             onChange={(e) => setRename(e.target.value)} onBlur={commitRename} onKeyDown={(e) => e.key === "Enter" && commitRename()} />
           <LimitNote label="이름" max={LIMITS.objectName} value={rename} />
         </span>
-        <button className="btn" disabled={!enabled || !rename.trim() || rename.trim() === selected.name} onClick={commitRename}>이름 바꾸기</button>
+        <button className="btn" disabled={!enabled || !rename.trim() || rename.trim() === selected.name} onClick={commitRename}><Check aria-hidden />이름 바꾸기</button>
       </div>
       {selected.kind === "token" && (
         <div className="sel-row sel-fields">
@@ -151,11 +152,11 @@ export function SelectedControls({ me, enabled, players, selected, characters = 
       <div className="sel-row sel-actions">
         {selected.kind === "token" && selected.characterId && (
           <>
-            <button className="btn" data-testid="open-linked-sheet" disabled={!onOpenSheet} onClick={() => onOpenSheet?.(selected.characterId!)}>시트 열기</button>
+            <button className="btn" data-testid="open-linked-sheet" disabled={!onOpenSheet} onClick={() => onOpenSheet?.(selected.characterId!)}><FileText aria-hidden />시트 열기</button>
             <button className="btn" data-testid="hp-public" aria-pressed={Boolean(selected.hpPublic)} disabled={!enabled}
               title="켜면 PL에게도 이 토큰의 HP 막대를 보여 줘요. NPC는 꺼 두면 GM에게만 보여요"
               onClick={() => send({ type: "object.update", data: { id: selected.id, hpPublic: !selected.hpPublic } })}>
-              {selected.hpPublic ? "HP 공개 중" : "HP 공개"}
+              {selected.hpPublic ? <Eye aria-hidden /> : <EyeOff aria-hidden />}{selected.hpPublic ? "HP 공개 중" : "HP 공개"}
             </button>
           </>
         )}
@@ -163,15 +164,15 @@ export function SelectedControls({ me, enabled, players, selected, characters = 
         {selected.kind === "token" && (
           <button className="btn" aria-pressed={Boolean(selected.locked)} disabled={!enabled} title="잠그면 소유자도 이 토큰을 움직일 수 없어요"
             onClick={() => send({ type: "object.update", data: { id: selected.id, locked: !selected.locked } })}>
-            {selected.locked ? "잠김" : "잠그기"}
+            {selected.locked ? <Lock aria-hidden /> : <LockOpen aria-hidden />}{selected.locked ? "잠김" : "잠그기"}
           </button>
         )}
           <button className="btn" disabled={!enabled} onClick={() => send({ type: "object.update", data: { id: selected.id, layer: selected.layer === "gm" ? "object" : "gm" } })}>
-            {selected.layer === "gm" ? "공개" : "숨기기"}
+            {selected.layer === "gm" ? <Eye aria-hidden /> : <EyeOff aria-hidden />}{selected.layer === "gm" ? "공개" : "숨기기"}
           </button>
           <ImageUploadButton me={me} label="이미지" current={selected.image} disabled={!enabled} onUploaded={(image) => send({ type: "object.update", data: { id: selected.id, image } })} />
-          {selected.image && <button className="btn" disabled={!enabled} onClick={() => send({ type: "object.update", data: { id: selected.id, image: null } })}>이미지 떼기</button>}
-          <button className="btn danger" disabled={!enabled} title="지워도 Ctrl+Z 로 되돌릴 수 있어요" onClick={() => (send({ type: "object.remove", data: { id: selected.id } }), onDeselect())}>삭제</button>
+          {selected.image && <button className="btn" disabled={!enabled} onClick={() => send({ type: "object.update", data: { id: selected.id, image: null } })}><ImageOff aria-hidden />이미지 떼기</button>}
+          <button className="btn danger" disabled={!enabled} title="지워도 Ctrl+Z 로 되돌릴 수 있어요" onClick={() => (send({ type: "object.remove", data: { id: selected.id } }), onDeselect())}><Trash2 aria-hidden />삭제</button>
       </div>
     </>
   );

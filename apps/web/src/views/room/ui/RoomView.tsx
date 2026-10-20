@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { Clapperboard, CloudFog, MousePointer2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -521,9 +522,9 @@ function Room({ roomId, me, invite }: { roomId: string; me: Identity; invite?: s
                 tab={dockTab}
                 onTab={setDockTab}
                 tabs={[
-                  { id: "place", label: "놓기" },
-                  { id: "fog", label: "안개" },
-                  { id: "cues", label: "연출" },
+                  { id: "place", label: "놓기", icon: <MousePointer2 aria-hidden /> },
+                  { id: "fog", label: "안개", icon: <CloudFog aria-hidden /> },
+                  { id: "cues", label: "연출", icon: <Clapperboard aria-hidden /> },
                 ]}
                 sections={{
                   place: (

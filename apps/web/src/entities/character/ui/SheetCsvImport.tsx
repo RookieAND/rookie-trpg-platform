@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useRef, useState, type ReactNode } from "react";
+import { Download, Upload } from "lucide-react";
 import { SHEET_CSV_MAX_CHARS, decodeCsvBytes, deriveCharacter, josa, parseGoogleSheetUrl, parseSheetCsv, type CharacterData } from "@coc-vtt/shared";
 import { ApiError, type Caller } from "@/shared/api";
 import { fetchGoogleSheetCsv } from "../api/google-sheet-api";
@@ -17,8 +18,8 @@ export function SheetCsvImport({ me, applyLabel, onApply, disabled = false, chil
   return (
     <div className="csv" data-testid="csv-tools">
       <div className="row">
-        <button type="button" className="btn" aria-expanded={open} disabled={disabled} onClick={() => setOpen((v) => !v)}>CSV로 가져오기</button>
-        <button type="button" className="btn ghost" onClick={downloadSheetTemplate} title="구글 시트나 엑셀에 올려서 채우는 빈 양식이에요">양식 받기</button>
+        <button type="button" className="btn" aria-expanded={open} disabled={disabled} onClick={() => setOpen((v) => !v)}><Upload aria-hidden />CSV로 가져오기</button>
+        <button type="button" className="btn ghost" onClick={downloadSheetTemplate} title="구글 시트나 엑셀에 올려서 채우는 빈 양식이에요"><Download aria-hidden />양식 받기</button>
         {children && <span className="spacer-right">{children}</span>}
       </div>
       {open && (

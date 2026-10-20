@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { UserPlus } from "lucide-react";
 import type { BannedUser, ClientCommand, Member } from "@coc-vtt/shared";
 import { createSpectatorInvite, getRoom, regenerateInvite, revokeSpectatorInvite, type Invite } from "@/entities/room";
 import type { Identity } from "@/entities/user";
@@ -103,7 +104,7 @@ export function InviteButton({ me, roomId, members = [], banned = [], send }: { 
   return (
     <>
       {ask.node}
-      <button className="btn keep" onClick={show} title="초대 링크를 보고 PL이나 관전자를 불러요">초대</button>
+      <button className="btn keep" onClick={show} title="초대 링크를 보고 PL이나 관전자를 불러요"><UserPlus aria-hidden />초대</button>
       {open && (
         <Dialog label="초대 링크" onClose={() => setOpen(false)} className="dialog">
           <strong>초대 링크</strong>

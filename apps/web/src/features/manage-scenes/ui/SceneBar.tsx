@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Copy, Flag, ImageOff, Pencil, Trash2 } from "lucide-react";
 import { josa, BGM_STOP, DEFAULT_GRID_SIZE, GRID_MAX, GRID_MIN, LIMITS, MAX_SCENES, type AudioTrack, type ClientCommand, type Scene } from "@coc-vtt/shared";
 import type { Caller } from "@/shared/api";
 import { useMediaQuery } from "@/shared/lib";
@@ -88,12 +89,12 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
   );
   const settings = (viewing: Scene, close: () => void) => (
     <>
-      <MenuLabel>이 장면</MenuLabel>
+      <MenuLabel>시작·배경·이름</MenuLabel>
       <button className="btn" aria-pressed={!!viewing.start} disabled={!enabled} onClick={() => { send({ type: "scene.setStart", data: { id: viewing.start ? null : viewing.id } }); close(); }}>
-        {viewing.start ? "시작 장면 해제" : "시작 장면으로"}
+        <Flag aria-hidden />{viewing.start ? "시작 장면 해제" : "시작 장면으로"}
       </button>
       <ImageUploadButton className="btn" me={me} label="배경" current={viewing.background} disabled={!enabled} onUploaded={(image) => send({ type: "scene.background", data: { id: viewing.id, image } })} />
-      {viewing.background && <button className="btn" disabled={!enabled} onClick={() => { send({ type: "scene.background", data: { id: viewing.id, image: null } }); close(); }}>배경 떼기</button>}
+      {viewing.background && <button className="btn" disabled={!enabled} onClick={() => { send({ type: "scene.background", data: { id: viewing.id, image: null } }); close(); }}><ImageOff aria-hidden />배경 떼기</button>}
       {tracks.some((t) => t.kind === "bgm") && (
         <Select className="input" aria-label="장면 배경음" value={viewing.bgmTrackId ?? ""} disabled={!enabled} onChange={(e) => send({ type: "scene.setBgm", data: { id: viewing.id, trackId: e.target.value || null } })}>
           <option value="">배경음 그대로 둠</option>
@@ -104,8 +105,8 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
         </Select>
       )}
       <GridSettings scene={viewing} enabled={enabled} send={send} />
-      <button className="btn" disabled={!enabled} onClick={() => { close(); void rename(); }}>이름 변경</button>
-      {!isActive && <button className="btn" style={{ color: "var(--danger)" }} disabled={!enabled} onClick={() => { close(); void remove(); }}>장면 삭제</button>}
+      <button className="btn" disabled={!enabled} onClick={() => { close(); void rename(); }}><Pencil aria-hidden />이름 변경</button>
+      {!isActive && <button className="btn" style={{ color: "var(--danger)" }} disabled={!enabled} onClick={() => { close(); void remove(); }}><Trash2 aria-hidden />장면 삭제</button>}
     </>
   );
   const legend = (
@@ -141,9 +142,9 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
                 <>
                   <MenuLabel>장면 목록</MenuLabel>
                   <button className="btn" disabled={!enabled || scenes.length >= MAX_SCENES} onClick={() => { close(); void newScene(); }}>+ 새 장면</button>
-                  <button type="button" className="btn" data-testid="scene-duplicate" disabled={!enabled || scenes.length >= MAX_SCENES} onClick={() => { duplicate(viewing.id); close(); }}>복제</button>
-                  <button type="button" className="btn" data-testid="scene-move-up" disabled={!enabled || index <= 0} onClick={() => { move(index - 1); close(); }}>앞으로 옮기기</button>
-                  <button type="button" className="btn" data-testid="scene-move-down" disabled={!enabled || index < 0 || index >= scenes.length - 1} onClick={() => { move(index + 1); close(); }}>뒤로 옮기기</button>
+                  <button type="button" className="btn" data-testid="scene-duplicate" disabled={!enabled || scenes.length >= MAX_SCENES} onClick={() => { duplicate(viewing.id); close(); }}><Copy aria-hidden />복제</button>
+                  <button type="button" className="btn" data-testid="scene-move-up" disabled={!enabled || index <= 0} onClick={() => { move(index - 1); close(); }}><ArrowLeft aria-hidden />앞으로 옮기기</button>
+                  <button type="button" className="btn" data-testid="scene-move-down" disabled={!enabled || index < 0 || index >= scenes.length - 1} onClick={() => { move(index + 1); close(); }}><ArrowRight aria-hidden />뒤로 옮기기</button>
                   {settings(viewing, close)}
                 </>
               )}
@@ -227,9 +228,9 @@ export function SceneBar({ me, scenes, tracks, activeId, viewId, onView, enabled
             {(close) => (
               <>
                 <MenuLabel>이 장면</MenuLabel>
-                <button type="button" className="btn" data-testid="scene-duplicate" title="이 장면의 토큰·소품·안개·배경을 그대로 복사해요" disabled={!enabled || scenes.length >= MAX_SCENES} onClick={() => { duplicate(viewing.id); close(); }}>복제</button>
-                <button type="button" className="btn" data-testid="scene-move-up" disabled={!enabled || index <= 0} onClick={() => { move(index - 1); close(); }}>앞으로 옮기기</button>
-                <button type="button" className="btn" data-testid="scene-move-down" disabled={!enabled || index < 0 || index >= scenes.length - 1} onClick={() => { move(index + 1); close(); }}>뒤로 옮기기</button>
+                <button type="button" className="btn" data-testid="scene-duplicate" title="이 장면의 토큰·소품·안개·배경을 그대로 복사해요" disabled={!enabled || scenes.length >= MAX_SCENES} onClick={() => { duplicate(viewing.id); close(); }}><Copy aria-hidden />복제</button>
+                <button type="button" className="btn" data-testid="scene-move-up" disabled={!enabled || index <= 0} onClick={() => { move(index - 1); close(); }}><ArrowLeft aria-hidden />앞으로 옮기기</button>
+                <button type="button" className="btn" data-testid="scene-move-down" disabled={!enabled || index < 0 || index >= scenes.length - 1} onClick={() => { move(index + 1); close(); }}><ArrowRight aria-hidden />뒤로 옮기기</button>
                 {settings(viewing, close)}
               </>
             )}

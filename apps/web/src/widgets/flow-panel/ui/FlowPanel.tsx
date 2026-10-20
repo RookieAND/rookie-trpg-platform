@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Plus } from "lucide-react";
 import { josa, BEAT_KIND_LABEL_KO, BGM_STOP, type AudioTrack, type Beat, type Branch, type ClientCommand, type Flow, type Handout, type Scene } from "@coc-vtt/shared";
 import { BeatEditor } from "./BeatEditor";
 import { BranchEditor } from "./BranchEditor";
@@ -111,7 +112,7 @@ export function FlowPanel({ flow, scenes, handouts, tracks, status, enabled, sen
 
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <strong style={{ flex: 1 }}>비트 {flow.beats.length}개</strong>
-        <button className="btn sm primary" disabled={!enabled} onClick={() => setEditing({ kind: "beat" })}>비트 추가</button>
+        <button className="btn sm primary" disabled={!enabled} onClick={() => setEditing({ kind: "beat" })}><Plus aria-hidden />비트 추가</button>
       </div>
       {flow.beats.length === 0 && <div style={{ color: "var(--muted)" }}>아직 비트가 없어요. 시작 비트부터 만들어 보세요.</div>}
 

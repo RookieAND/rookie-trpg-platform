@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Pause, Play, Square } from "lucide-react";
 import type { ClientCommand } from "@coc-vtt/shared";
 import type { SessionStatus } from "@/entities/room";
 import { Dialog } from "@/shared/ui";
@@ -15,10 +16,10 @@ export function SessionControls({ status, send, endingDefaults }: { status: Sess
   const cmd = (type: "session.start" | "session.pause" | "session.resume") => () => send({ type, data: {} });
   return (
     <>
-      {status === "IDLE" && <button className="btn primary" onClick={cmd("session.start")}>세션 시작</button>}
-      {status === "ACTIVE" && <button className="btn" onClick={cmd("session.pause")}>일시정지</button>}
-      {status === "PAUSED" && <button className="btn primary" onClick={cmd("session.resume")}>이어하기</button>}
-      {status !== "IDLE" && <button className="btn danger quiet" onClick={() => setEnding(true)}>세션 종료</button>}
+      {status === "IDLE" && <button className="btn primary" onClick={cmd("session.start")}><Play aria-hidden />세션 시작</button>}
+      {status === "ACTIVE" && <button className="btn" onClick={cmd("session.pause")}><Pause aria-hidden />일시정지</button>}
+      {status === "PAUSED" && <button className="btn primary" onClick={cmd("session.resume")}><Play aria-hidden />이어하기</button>}
+      {status !== "IDLE" && <button className="btn danger quiet" onClick={() => setEnding(true)}><Square aria-hidden />세션 종료</button>}
       {ending && status !== "IDLE" && <EndDialog onClose={() => setEnding(false)} send={send} defaults={endingDefaults} />}
     </>
   );

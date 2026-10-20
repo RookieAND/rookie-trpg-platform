@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Pencil, Plus, Presentation, Send, Trash2 } from "lucide-react";
 import type { ClientCommand, Handout, Member } from "@coc-vtt/shared";
 import { HandoutEditor } from "@/features/manage-handouts";
 import { showBlockReason } from "../model/show-reason";
@@ -27,7 +28,7 @@ export function HandoutPanel({ me, handouts, isKp, canEdit, canShow = canEdit, p
       {!editing && (
         <div className="panel-head">
           <span className="section-title">핸드아웃 {handouts.length}</span>
-          {isKp && <button className="btn sm primary" disabled={!canEdit} onClick={() => setEditing({ mode: "new" })}>새 핸드아웃</button>}
+          {isKp && <button className="btn sm primary" disabled={!canEdit} onClick={() => setEditing({ mode: "new" })}><Plus aria-hidden />새 핸드아웃</button>}
         </div>
       )}
 
@@ -70,11 +71,11 @@ export function HandoutPanel({ me, handouts, isKp, canEdit, canShow = canEdit, p
               <div className="btn-row handout-actions">
                 {!h.kpOnly && h.visibleTo === "gm" && (
                   <button className="btn primary" disabled={!canShow} data-testid="handout-publish" title="모두에게 공개하고 바로 펼쳐 보여요" aria-describedby={canShow ? undefined : `handout-why-${h.id}`}
-                    onClick={() => send({ type: "handout.show", data: { id: h.id, reveal: true } })}>공개하기</button>
+                    onClick={() => send({ type: "handout.show", data: { id: h.id, reveal: true } })}><Send aria-hidden />공개하기</button>
                 )}
-                {!h.kpOnly && <button className="btn" disabled={!canShow || h.visibleTo === "gm"} aria-describedby={showBlockReason(h, canShow) ? `handout-why-${h.id}` : undefined} onClick={() => send({ type: "handout.show", data: { id: h.id } })}>펼쳐 보이기</button>}
-                <button className="btn" disabled={!canEdit} onClick={() => setEditing({ mode: "edit", handout: h })}>편집</button>
-                <span className="spacer" /><button className="btn danger ghost" disabled={!canEdit} onClick={async () => (await ask.confirm({ title: `${josa(`'${shownTitle(h)}'`, "을/를")} 지울까요?`, confirmLabel: "지우기", danger: true })) && send({ type: "handout.remove", data: { id: h.id } })}>삭제</button>
+                {!h.kpOnly && <button className="btn" disabled={!canShow || h.visibleTo === "gm"} aria-describedby={showBlockReason(h, canShow) ? `handout-why-${h.id}` : undefined} onClick={() => send({ type: "handout.show", data: { id: h.id } })}><Presentation aria-hidden />펼쳐 보이기</button>}
+                <button className="btn ico" aria-label="편집" title="편집" disabled={!canEdit} onClick={() => setEditing({ mode: "edit", handout: h })}><Pencil aria-hidden /></button>
+                <span className="spacer" /><button className="btn ico danger" aria-label="삭제" title="삭제" disabled={!canEdit} onClick={async () => (await ask.confirm({ title: `${josa(`'${shownTitle(h)}'`, "을/를")} 지울까요?`, confirmLabel: "지우기", danger: true })) && send({ type: "handout.remove", data: { id: h.id } })}><Trash2 aria-hidden /></button>
               </div>
             )}
           </article>

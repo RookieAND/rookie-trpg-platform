@@ -15,6 +15,7 @@
     "@coc-vtt/shared": "workspace:*",
     "@fontsource/ibm-plex-sans-kr": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
+    "lucide-react": "^1.60.0",
     "next": "^15.0.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
