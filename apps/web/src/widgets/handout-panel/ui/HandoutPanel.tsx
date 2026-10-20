@@ -67,14 +67,14 @@ export function HandoutPanel({ me, handouts, isKp, canEdit, canShow = canEdit, p
               <div className="why" id={`handout-why-${h.id}`} data-testid="handout-show-why">{showBlockReason(h, canShow)}</div>
             )}
             {isKp && (
-              <div className="btn-row">
+              <div className="btn-row handout-actions">
                 {!h.kpOnly && h.visibleTo === "gm" && (
                   <button className="btn primary" disabled={!canShow} data-testid="handout-publish" title="모두에게 공개하고 바로 펼쳐 보여요" aria-describedby={canShow ? undefined : `handout-why-${h.id}`}
                     onClick={() => send({ type: "handout.show", data: { id: h.id, reveal: true } })}>공개하기</button>
                 )}
                 {!h.kpOnly && <button className="btn" disabled={!canShow || h.visibleTo === "gm"} aria-describedby={showBlockReason(h, canShow) ? `handout-why-${h.id}` : undefined} onClick={() => send({ type: "handout.show", data: { id: h.id } })}>펼쳐 보이기</button>}
                 <button className="btn" disabled={!canEdit} onClick={() => setEditing({ mode: "edit", handout: h })}>편집</button>
-                <button className="btn danger" disabled={!canEdit} onClick={async () => (await ask.confirm({ title: `${josa(`'${shownTitle(h)}'`, "을/를")} 지울까요?`, confirmLabel: "지우기", danger: true })) && send({ type: "handout.remove", data: { id: h.id } })}>삭제</button>
+                <span className="spacer" /><button className="btn danger ghost" disabled={!canEdit} onClick={async () => (await ask.confirm({ title: `${josa(`'${shownTitle(h)}'`, "을/를")} 지울까요?`, confirmLabel: "지우기", danger: true })) && send({ type: "handout.remove", data: { id: h.id } })}>삭제</button>
               </div>
             )}
           </article>

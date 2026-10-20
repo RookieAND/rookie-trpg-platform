@@ -157,7 +157,7 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
     <>
       {ctx.menu}
       <div className="log" data-testid="roll-log" aria-live="polite">
-        {rolls.length === 0 && hidden.length === 0 && <div style={{ color: "var(--muted)" }}>아직 굴림이 없어요.</div>}
+        {rolls.length === 0 && hidden.length === 0 && <div style={{ color: "var(--muted)" }}>아직 굴림이 없어요. 아래 주사위 칩이나 식으로 굴려 보세요.</div>}
         {[...rolls].reverse().map((r) => (
           <div key={r.id} className="log-item" data-testid="roll-entry" onContextMenu={isKp && onRemove ? ctx.onContextMenu([{ label: "이 굴림 지우기", danger: true, onSelect: () => onRemove(r.id) }]) : undefined}>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -183,6 +183,14 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
         <MacroBar error={macro.error} macros={macro.macros} isKp={isKp} readOnly={readOnly} disabled={disabled} onRoll={macroRoll} onAdd={macro.add} onRemove={macro.remove} />
         {isKp && onAsk && <AskForm players={players ?? []} disabled={disabled} onAsk={onAsk} {...(onGroup ? { onGroup } : {})} />}
         {onOpposed && <OpposedForm isKp={isKp} disabled={disabled} userId={userId} characters={characters} players={players ?? []} onOpposed={onOpposed} />}
+        {!readOnly && (
+          <div className="quick-dice" role="group" aria-label="빠른 주사위" data-testid="quick-dice">
+            {["1d100", "1d20", "1d10", "1d8", "1d6", "1d4"].map((d) => (
+              <button key={d} type="button" className="btn sm mono" disabled={disabled} title={`${d} 바로 굴리기${isKp && secret ? " (비밀)" : ""}`}
+                onClick={() => macroRoll({ expr: d, secret })}>{d.replace("1d", "d")}</button>
+            ))}
+          </div>
+        )}
         <div className="row">
           <div className="skill-ac">
             <input

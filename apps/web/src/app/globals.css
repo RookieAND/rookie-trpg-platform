@@ -1034,3 +1034,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .party-card.clickable:hover, .party-card.clickable:focus-visible { border-color: rgba(124,134,247,.8); outline: none; }
 @media (max-width: 1100px) { .party.gm .party-card { width: 128px; } }
 .board:has(> .scenebar) .party.gm { top: calc(var(--sb-h, 44px) + 56px); }
+
+/* 굴림 탭 빠른 주사위, 핸드아웃 버튼 줄(삭제는 오른쪽 끝) */
+.quick-dice { display: flex; gap: 6px; flex-wrap: wrap; }
+.quick-dice .btn { min-width: 44px; justify-content: center; }
+.handout-actions .spacer { flex: 1; }
