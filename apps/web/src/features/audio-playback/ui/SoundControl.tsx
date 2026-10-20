@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Volume2, VolumeX } from "lucide-react";
 import type { AudioPrefs } from "../model/useAudioPreference";
 
 const SLIDERS: Array<{ key: "bgm" | "se" | "roll"; label: string }> = [
@@ -14,7 +15,7 @@ export function SoundControl({ prefs, onChange, unlocked, onUnlock, playing }: {
   return (
     <span style={{ position: "relative" }}>
       <button className="btn" aria-expanded={open} aria-pressed={!prefs.muted} data-testid="sound-toggle" onClick={() => setOpen((o) => !o)} title="내 소리 설정">
-        소리 {prefs.muted ? "꺼짐" : playing ? "♪" : "켜짐"}
+        {prefs.muted ? <VolumeX aria-hidden /> : <Volume2 aria-hidden />}소리 {prefs.muted ? "꺼짐" : playing ? "♪" : "켜짐"}
       </button>
       {open && (
         <div className="card" role="dialog" aria-label="소리 설정" data-testid="sound-panel" style={{ position: "absolute", right: 0, top: 40, width: 240, zIndex: 20, gap: 10 }}>

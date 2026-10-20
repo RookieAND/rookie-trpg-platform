@@ -1,5 +1,6 @@
 "use client";
 import { useId, useState } from "react";
+import { Swords } from "lucide-react";
 import { Select } from "@/shared/ui";
 import { LIMITS, josa, type Character } from "@coc-vtt/shared";
 import { commonSkillNames, skillOptions } from "../model/skill-options";
@@ -60,7 +61,7 @@ export function OpposedForm({ isKp, disabled, userId, characters, players, onOpp
   return (
     <div className="ask" data-testid="opposed-form">
       <button type="button" className="disclose" aria-expanded={open} title="두 캐릭터가 각자 굴려 성공 단계를 비교해요" onClick={() => setOpen((o) => !o)}>
-        <span aria-hidden className="disclose-caret">{open ? "▾" : "▸"}</span>대항 판정
+        <Swords aria-hidden />대항 판정
       </button>
       {open && (
         <div className="ask-fields">

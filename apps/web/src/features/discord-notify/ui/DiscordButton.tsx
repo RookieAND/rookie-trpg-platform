@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Bell } from "lucide-react";
 import { getDiscord, saveDiscord, testDiscord, type DiscordSettings } from "@/entities/room";
 import type { Identity } from "@/entities/user";
 import { ApiError } from "@/shared/api";
@@ -54,7 +55,7 @@ export function DiscordButton({ me, roomId }: { me: Identity; roomId: string }) 
 
   return (
     <>
-      <button className="btn" onClick={show}>디스코드</button>
+      <button className="btn" onClick={show}><Bell aria-hidden />디스코드</button>
       {open && (
         <Dialog label="디스코드 알림" onClose={() => setOpen(false)} className="dialog">
           <strong>디스코드 알림</strong>

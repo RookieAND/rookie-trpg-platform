@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { SlidersHorizontal } from "lucide-react";
 import { MAX_MACROS, type AddResult, type Macro } from "../model/macros";
 
 /** 자주 굴리는 식을 이름 붙여 두고 한 번에 굴리는 줄. */
@@ -31,7 +32,7 @@ export function MacroBar({ error: syncError, macros, isKp, readOnly = false, dis
           </span>
         ))}
         {!readOnly && <button className="btn sm ghost" style={macros.length ? { marginLeft: "auto" } : undefined} title="자주 굴리는 식을 이름 붙여 저장해요" aria-expanded={editing} onClick={() => setEditing((v) => !v)}>
-          {editing ? "닫기" : "매크로 편집"}
+          <SlidersHorizontal aria-hidden />{editing ? "닫기" : "매크로 편집"}
         </button>}
       </div>
       {syncError && <div className="err" role="alert">{syncError}</div>}

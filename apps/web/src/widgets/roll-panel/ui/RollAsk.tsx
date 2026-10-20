@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { BellRing } from "lucide-react";
 import { Select } from "@/shared/ui";
 import { LIMITS, josa, type Character, type DamageApplied, type RollAsk } from "@coc-vtt/shared";
 
@@ -34,7 +35,7 @@ export function AskForm({
   return (
     <div className="ask" data-testid="roll-ask-form">
       <button type="button" className="disclose" aria-expanded={open} title="PL에게 “이 기능으로 굴려 주세요”라고 알려요" onClick={() => setOpen((o) => !o)}>
-        <span aria-hidden className="disclose-caret">{open ? "▾" : "▸"}</span>판정 요청
+        <BellRing aria-hidden />판정 요청
       </button>
       {open && (
         <div className="ask-fields">

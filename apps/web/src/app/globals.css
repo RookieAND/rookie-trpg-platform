@@ -1045,3 +1045,11 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .btn.sm > svg { width: 14px; height: 14px; }
 .tooldock-tabs button { display: inline-flex; align-items: center; gap: 6px; }
 .tooldock-tabs button > svg { width: 14px; height: 14px; flex: none; }
+
+/* 굴림 탭 아래 도구(매크로·판정 요청·대항 판정)를 한 줄에 */
+.compose-tools { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 2px 4px; }
+.compose-tools > .macro-bar:has(.macro-chip), .compose-tools > .macro-bar:has(.macro-edit), .compose-tools > .ask:has(.ask-fields) { flex: 1 1 100%; }
+.compose-tools .macro-bar .row > .btn.ghost:first-child, .compose-tools .ask > .disclose { margin-left: 0; }
+.disclose > svg { width: 14px; height: 14px; flex: none; color: var(--muted); }
+.macro-bar .btn.ghost > svg { width: 14px; height: 14px; }
+.dock-group.dock-div { padding-left: 10px; border-left: 1px solid var(--line); }

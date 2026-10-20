@@ -1,5 +1,6 @@
 "use client";
 import { useState, type ReactNode } from "react";
+import { FileDown, FileInput, FileOutput, Pencil } from "lucide-react";
 import { exportRoom, renameRoom, type ScenarioImportResult } from "@/entities/room";
 import { ApiError, type Caller } from "@/shared/api";
 import { downloadText } from "@/shared/lib";
@@ -39,14 +40,14 @@ export function useScenarioPrep({ me, roomId, roomName, onRenamed, notify, onImp
 
   const items = (close: () => void): ReactNode => (
     <>
-      <button className="btn" data-testid="menu-import" title="시나리오 파일이나 룸 백업을 이 룸에 더해요" onClick={() => (close(), setImporting(true))}>시나리오 가져오기</button>
-      <button className="btn" data-testid="menu-export-backup" title="장면·토큰·핸드아웃·흐름·설정을 파일 하나로 저장해요. 새 룸을 만들 때 쓸 수 있어요" onClick={() => void download("backup")}>룸 내보내기 (백업)</button>
+      <button className="btn" data-testid="menu-import" title="시나리오 파일이나 룸 백업을 이 룸에 더해요" onClick={() => (close(), setImporting(true))}><FileInput aria-hidden />시나리오 가져오기</button>
+      <button className="btn" data-testid="menu-export-backup" title="장면·토큰·핸드아웃·흐름·설정을 파일 하나로 저장해요. 새 룸을 만들 때 쓸 수 있어요" onClick={() => void download("backup")}><FileDown aria-hidden />룸 내보내기 (백업)</button>
       <label className="check" style={{ padding: "2px 8px 4px 26px", fontSize: 12 }} title="PL의 시트도 백업에 담아요. 복원하면 GM 소유의 시트로 들어와요">
         <input type="checkbox" data-testid="export-sheets" checked={withSheets} onChange={(e) => setWithSheets(e.target.checked)} style={{ accentColor: "#7c86f7" }} />
         시트 포함
       </label>
-      <button className="btn" data-testid="menu-export-scenario" title="다른 룸에서 가져오기 쉬운 시나리오 파일로 저장해요" onClick={() => void download("scenario")}>시나리오 파일로 내보내기</button>
-      <button className="btn" data-testid="menu-rename-room" onClick={() => (close(), void rename())}>룸 이름 바꾸기</button>
+      <button className="btn" data-testid="menu-export-scenario" title="다른 룸에서 가져오기 쉬운 시나리오 파일로 저장해요" onClick={() => void download("scenario")}><FileOutput aria-hidden />시나리오 파일로 내보내기</button>
+      <button className="btn" data-testid="menu-rename-room" onClick={() => (close(), void rename())}><Pencil aria-hidden />룸 이름 바꾸기</button>
     </>
   );
 

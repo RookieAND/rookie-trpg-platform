@@ -180,9 +180,11 @@ export function RollPanel({ me, rolls, userId, characters, hidden, isKp, disable
         ))}
       </div>
       <div className="compose">
+        <div className="compose-tools">
         <MacroBar error={macro.error} macros={macro.macros} isKp={isKp} readOnly={readOnly} disabled={disabled} onRoll={macroRoll} onAdd={macro.add} onRemove={macro.remove} />
         {isKp && onAsk && <AskForm players={players ?? []} disabled={disabled} onAsk={onAsk} {...(onGroup ? { onGroup } : {})} />}
         {onOpposed && <OpposedForm isKp={isKp} disabled={disabled} userId={userId} characters={characters} players={players ?? []} onOpposed={onOpposed} />}
+        </div>
         {!readOnly && (
           <div className="quick-dice" role="group" aria-label="빠른 주사위" data-testid="quick-dice">
             {["1d100", "1d20", "1d10", "1d8", "1d6", "1d4"].map((d) => (

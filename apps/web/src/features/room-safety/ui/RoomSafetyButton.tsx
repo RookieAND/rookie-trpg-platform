@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { ShieldCheck } from "lucide-react";
 import type { ChatSettings, ClientCommand } from "@coc-vtt/shared";
 import { purgeRoomHistory } from "@/entities/room";
 import type { Identity } from "@/entities/user";
@@ -31,7 +32,7 @@ export function RoomSafetyButton({ me, roomId, settings, send }: { me: Identity;
 
   return (
     <>
-      <button className="btn" data-testid="room-safety-open" onClick={() => { setMsg(""); setOpen(true); }}>안전·기록</button>
+      <button className="btn" data-testid="room-safety-open" onClick={() => { setMsg(""); setOpen(true); }}><ShieldCheck aria-hidden />안전·기록</button>
       {open && (
         <Dialog label="안전·기록" onClose={() => setOpen(false)} className="dialog">
           <strong>안전·기록</strong>

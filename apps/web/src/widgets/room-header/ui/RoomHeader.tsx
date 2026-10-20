@@ -1,5 +1,6 @@
 "use client";
 import type { ReactNode } from "react";
+import { Keyboard } from "lucide-react";
 import Link from "next/link";
 import type { BannedUser, ChatSettings, ClientCommand, EffectSettings, Member, Role } from "@coc-vtt/shared";
 import { ROLE_LABEL, SESSION_STATUS_LABEL, type SessionStatus } from "@/entities/room";
@@ -115,7 +116,7 @@ export function RoomHeader({
             <MenuLabel>내 화면</MenuLabel>
             <EffectToggle enabled={effectsEnabled} onToggle={onToggleEffects} />
             {soundControl}
-            {onShortcutHelp && <button type="button" className="btn" data-testid="open-shortcuts" aria-keyshortcuts="?" onClick={() => { close(); onShortcutHelp(); }}>단축키 보기 (?)</button>}
+            {onShortcutHelp && <button type="button" className="btn" data-testid="open-shortcuts" aria-keyshortcuts="?" onClick={() => { close(); onShortcutHelp(); }}><Keyboard aria-hidden />단축키 보기 (?)</button>}
             {isKp && <MenuLabel>룸 설정 (GM)</MenuLabel>}
             {isKp && <EffectSettingsButton effects={effects} send={send} />}
             {isKp && <MadnessTableButton entries={madnessTable} indefinite={madnessIndefinite ?? []} send={send} />}

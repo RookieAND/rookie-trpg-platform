@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Dices } from "lucide-react";
 import { EFFECT_LEVELS, LEVEL_LABEL_KO, type ClientCommand, type EffectLevel, type EffectSettings } from "@coc-vtt/shared";
 import { Dialog, Select } from "@/shared/ui";
 
@@ -10,7 +11,7 @@ export function EffectSettingsButton({ effects, send }: { effects: EffectSetting
 
   return (
     <>
-      <button className="btn" onClick={() => setOpen(!open)} aria-expanded={open}>판정 효과</button>
+      <button className="btn" onClick={() => setOpen(!open)} aria-expanded={open}><Dices aria-hidden />판정 효과</button>
       {open && (
         <Dialog label="판정 효과 설정" onClose={() => setOpen(false)} className="dialog">
           <strong>판정 효과</strong>

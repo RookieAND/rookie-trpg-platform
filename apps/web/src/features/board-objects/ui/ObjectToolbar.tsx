@@ -73,6 +73,7 @@ export function QuickTokenButton({ placement, enabled }: { placement: Placement;
 export function PlaceControls({ placement: p, enabled, players, withTokenButton = true }: { placement: Placement; enabled: boolean; players: Member[]; withTokenButton?: boolean }) {
   return (
     <>
+      <span className="dock-group" role="group" aria-label="토큰 놓기">
       {withTokenButton && <button className="btn" disabled={!enabled} title="PL이 움직일 수 있는 토큰(캐릭터·NPC)을 놓아요" onClick={p.placeToken}>+ 토큰</button>}
       <Select className="dock-input" aria-label="새 토큰 소유자" title="새 토큰의 소유자예요" disabled={!enabled} value={p.owner} onChange={(e) => p.setOwner(e.target.value)}>
         <option value="">소유자 없음(NPC)</option>
@@ -83,11 +84,16 @@ export function PlaceControls({ placement: p, enabled, players, withTokenButton 
       {players.length > 1 && (
         <button className="btn" disabled={!enabled} title="PL마다 그 사람 이름으로 토큰을 하나씩 놓아요" onClick={p.addAll}>PL 전원 토큰 만들기</button>
       )}
+      </span>
+      <span className="dock-group dock-div" role="group" aria-label="토큰 이동">
       <button className="btn" data-testid="lock-all" aria-pressed={p.allLocked} disabled={!enabled || p.plTokens.length === 0} title={p.allLocked ? "PL 토큰의 잠금을 모두 풀어요" : "PL 토큰을 모두 잠가 움직이지 못하게 해요(전투 정리·컷신용)"} onClick={p.toggleLockAll}>
         {p.allLocked ? <LockOpen aria-hidden /> : <Lock aria-hidden />}{p.allLocked ? "이동 풀기" : "이동 잠금"}
       </button>
+      </span>
+      <span className="dock-group dock-div" role="group" aria-label="소품 놓기">
       <button className="btn" disabled={!enabled} title="가구·단서 같은 소품을 놓아요" onClick={() => p.add("prop", "object")}>+ 소품</button>
       <button className="btn" disabled={!enabled} title="PL에게 보이지 않는 메모용 소품을 놓아요" onClick={() => p.add("prop", "gm")}>+ GM 전용</button>
+      </span>
     </>
   );
 }

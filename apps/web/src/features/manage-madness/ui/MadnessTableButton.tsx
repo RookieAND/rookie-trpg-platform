@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Skull } from "lucide-react";
 import { MAX_MADNESS_ENTRIES, type ClientCommand } from "@coc-vtt/shared";
 import { Dialog } from "@/shared/ui";
 
@@ -23,7 +24,7 @@ export function MadnessTableButton({ entries, indefinite = [], send }: { entries
           setOpen(true);
         }}
       >
-        광기표
+        <Skull aria-hidden />광기표
       </button>
       {open && (
         <Dialog label="광기 증상표" onClose={() => setOpen(false)} className="dialog">
