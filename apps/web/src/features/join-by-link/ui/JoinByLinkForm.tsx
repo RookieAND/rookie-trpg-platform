@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { LogIn } from "lucide-react";
 
 /** 초대 링크 전체를 붙여 넣어 참가한다. */
 export function JoinByLinkForm({ onJoin, onError }: { onJoin: (roomId: string, invite: string) => void; onError: (message: string) => void }) {
@@ -18,9 +19,9 @@ export function JoinByLinkForm({ onJoin, onError }: { onJoin: (roomId: string, i
   };
 
   return (
-    <div className="toolbar">
+    <div className="toolbar join-row">
       <input className="input" aria-label="초대 링크" placeholder="초대 링크로 참가" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
-      <button className="btn" disabled={!text.trim()} onClick={submit}>참가</button>
+      <button className="btn" disabled={!text.trim()} onClick={submit}><LogIn aria-hidden />참가</button>
     </div>
   );
 }

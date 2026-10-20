@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { DoorOpen, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { ROLE_LABEL, SESSION_STATUS_LABEL, type RoomListItem } from "../model/types";
 
@@ -42,8 +43,8 @@ export function RoomCard({ room, onRemove }: { room: RoomListItem; onRemove?: (i
         </div>
       ) : (
         <div className="room-actions">
-          {canRemove && <button className="btn sm ghost" aria-label={`${room.name} 룸 삭제`} onClick={() => setConfirming(true)}>삭제</button>}
-          <Link className="btn sm" href={`/room/${room.id}`}>{action}</Link>
+          {canRemove && <button className="btn sm ico ghost" aria-label={`${room.name} 룸 삭제`} title="룸 삭제" onClick={() => setConfirming(true)}><Trash2 aria-hidden /></button>}
+          <Link className="btn sm" href={`/room/${room.id}`}><DoorOpen aria-hidden />{action}</Link>
         </div>
       )}
     </article>

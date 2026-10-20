@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { LogOut, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { RoomCard, deleteRoom, listRooms, type RoomListItem } from "@/entities/room";
@@ -42,10 +43,10 @@ function Lobby({ me, onLogout }: { me: Identity; onLogout: () => void }) {
       <header className="topbar">
         <span className="brand">{SERVICE_NAME}</span>
         <div style={{ flex: 1 }} />
-        <Link href="/characters" className="btn ghost">내 캐릭터</Link>
+        <Link href="/characters" className="btn ghost"><Users aria-hidden />내 캐릭터</Link>
         <span className="sep" />
         <span className="badge">{me.name}</span>
-        <button className="btn ghost" onClick={onLogout}>로그아웃</button>
+        <button className="btn ghost" onClick={onLogout}><LogOut aria-hidden />로그아웃</button>
       </header>
       <main className="page">
         <div className="page-head">

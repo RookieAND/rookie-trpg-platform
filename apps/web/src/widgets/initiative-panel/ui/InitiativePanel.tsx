@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Plus, SkipForward, Square, Swords, X } from "lucide-react";
 import { LIMITS, type ClientCommand, type Initiative } from "@coc-vtt/shared";
 import { StatusChips, useAsk } from "@/shared/ui";
 
@@ -20,7 +21,7 @@ export function InitiativePanel({ initiative, isKp, enabled, send }: { initiativ
     return (
       <div className="panel" data-testid="initiative">
         <div style={{ color: "var(--muted)" }}>{isKp ? "진행 중인 전투가 없어요. 시작하면 룸의 캐릭터가 DEX 순서로 서요." : "진행 중인 전투가 없어요."}</div>
-        {isKp && <button className="btn" style={{ justifySelf: "start" }} disabled={!enabled} onClick={() => send({ type: "initiative.start", data: {} })}>전투 시작</button>}
+        {isKp && <button className="btn" style={{ justifySelf: "start" }} disabled={!enabled} onClick={() => send({ type: "initiative.start", data: {} })}><Swords aria-hidden />전투 시작</button>}
       </div>
     );
   }
@@ -32,8 +33,8 @@ export function InitiativePanel({ initiative, isKp, enabled, send }: { initiativ
         <strong data-testid="initiative-round" style={{ flex: 1 }}>{initiative.round}라운드</strong>
         {isKp && (
           <>
-            <button className="btn sm primary" disabled={!enabled || initiative.entries.length === 0} onClick={() => send({ type: "initiative.next", data: {} })}>다음 차례</button>
-            <button className="btn sm danger" disabled={!enabled} onClick={async () => (await ask.confirm({ title: "전투를 끝낼까요?", confirmLabel: "전투 종료", danger: true })) && send({ type: "initiative.end", data: {} })}>전투 종료</button>
+            <button className="btn sm primary" disabled={!enabled || initiative.entries.length === 0} onClick={() => send({ type: "initiative.next", data: {} })}><SkipForward aria-hidden />다음 차례</button>
+            <button className="btn sm danger" disabled={!enabled} onClick={async () => (await ask.confirm({ title: "전투를 끝낼까요?", confirmLabel: "전투 종료", danger: true })) && send({ type: "initiative.end", data: {} })}><Square aria-hidden />전투 종료</button>
           </>
         )}
       </div>
@@ -73,7 +74,7 @@ export function InitiativePanel({ initiative, isKp, enabled, send }: { initiativ
               ) : (
                 <span className="mono" style={{ color: "var(--muted)" }}>{e.hidden ? "DEX ?" : `DEX ${e.dex}`}</span>
               )}
-              {isKp && <button className="btn sm ghost" aria-label={`${e.name} 빼기`} disabled={!enabled} onClick={() => send({ type: "initiative.remove", data: { id: e.id } })}>빼기</button>}
+              {isKp && <button className="btn sm ico ghost" aria-label={`${e.name} 빼기`} title="전투에서 빼기" disabled={!enabled} onClick={() => send({ type: "initiative.remove", data: { id: e.id } })}><X aria-hidden /></button>}
             </li>
           );
         })}
@@ -83,7 +84,7 @@ export function InitiativePanel({ initiative, isKp, enabled, send }: { initiativ
         <div style={{ display: "flex", gap: 8 }}>
           <input className="input" style={{ flex: 1 }} aria-label="NPC 이름" placeholder="NPC 이름" maxLength={LIMITS.initiativeName} value={name} disabled={!enabled} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
           <input className="input mono" style={{ width: 64 }} type="number" aria-label="NPC DEX" value={dex} disabled={!enabled} onChange={(e) => setDex(e.target.value)} />
-          <button className="btn" disabled={!canAdd} onClick={add}>추가</button>
+          <button className="btn" disabled={!canAdd} onClick={add}><Plus aria-hidden />추가</button>
         </div>
       )}
     </div>

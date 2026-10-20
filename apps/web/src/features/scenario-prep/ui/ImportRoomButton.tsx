@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { FileInput } from "lucide-react";
 import { createPortal } from "react-dom";
 import { SAMPLE_SCENARIO } from "@coc-vtt/shared";
 import { importNewRoom } from "@/entities/room";
@@ -58,7 +59,7 @@ export function ImportRoomButton({ me, onCreated, onError }: { me: Caller; onCre
 
   return (
     <>
-      <button className="btn" data-testid="import-room" title="룸 백업이나 시나리오 파일로 새 룸을 만들어요" onClick={() => setOpen(true)}>백업에서 새 룸 만들기</button>
+      <button className="btn" data-testid="import-room" title="룸 백업이나 시나리오 파일로 새 룸을 만들어요" onClick={() => setOpen(true)}><FileInput aria-hidden />백업에서 새 룸 만들기</button>
       {open &&
         createPortal(
           <Dialog

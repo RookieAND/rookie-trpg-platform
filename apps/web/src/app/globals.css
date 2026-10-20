@@ -1053,3 +1053,5 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .disclose > svg { width: 14px; height: 14px; flex: none; color: var(--muted); }
 .macro-bar .btn.ghost > svg { width: 14px; height: 14px; }
 .dock-group.dock-div { padding-left: 10px; border-left: 1px solid var(--line); }
+.join-row { flex-wrap: nowrap; }
+.join-row > .input { flex: 1 1 auto; min-width: 0; }

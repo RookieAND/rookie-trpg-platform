@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import { Plus } from "lucide-react";
 import { LIMITS } from "@coc-vtt/shared";
 import { createRoom } from "@/entities/room";
 import { LimitNote } from "@/shared/ui";
@@ -27,7 +28,7 @@ export function CreateRoomForm({ me, onCreated, onError }: { me: Identity; onCre
     <div className="toolbar">
       <input ref={inputRef} className="input" style={{ width: 200 }} aria-label="새 룸 이름" placeholder="새 룸 이름" value={name} maxLength={LIMITS.roomName} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
       <LimitNote label="룸 이름" max={LIMITS.roomName} value={name} />
-      <button className="btn primary" disabled={busy} onClick={submit}>{busy ? "만드는 중…" : "새 룸 만들기"}</button>
+      <button className="btn primary" disabled={busy} onClick={submit}>{busy ? "만드는 중…" : <><Plus aria-hidden />새 룸 만들기</>}</button>
     </div>
   );
 }
