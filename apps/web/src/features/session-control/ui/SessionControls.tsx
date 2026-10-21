@@ -16,10 +16,10 @@ export function SessionControls({ status, send, endingDefaults }: { status: Sess
   const cmd = (type: "session.start" | "session.pause" | "session.resume") => () => send({ type, data: {} });
   return (
     <>
-      {status === "IDLE" && <button className="btn primary" onClick={cmd("session.start")}><Play aria-hidden />세션 시작</button>}
-      {status === "ACTIVE" && <button className="btn" onClick={cmd("session.pause")}><Pause aria-hidden />일시정지</button>}
-      {status === "PAUSED" && <button className="btn primary" onClick={cmd("session.resume")}><Play aria-hidden />이어하기</button>}
-      {status !== "IDLE" && <button className="btn danger quiet" onClick={() => setEnding(true)}><Square aria-hidden />세션 종료</button>}
+      {status === "IDLE" && <button className="btn primary" title="세션 시작" onClick={cmd("session.start")}><Play aria-hidden /><span className="lbl">세션 시작</span></button>}
+      {status === "ACTIVE" && <button className="btn" title="일시정지" onClick={cmd("session.pause")}><Pause aria-hidden /><span className="lbl">일시정지</span></button>}
+      {status === "PAUSED" && <button className="btn primary" title="이어하기" onClick={cmd("session.resume")}><Play aria-hidden /><span className="lbl">이어하기</span></button>}
+      {status !== "IDLE" && <button className="btn danger quiet" title="세션 종료" onClick={() => setEnding(true)}><Square aria-hidden /><span className="lbl">세션 종료</span></button>}
       {ending && status !== "IDLE" && <EndDialog onClose={() => setEnding(false)} send={send} defaults={endingDefaults} />}
     </>
   );

@@ -1,5 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
+import { ArrowLeft, Eye, LogIn, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getRoom } from "@/entities/room";
 import { useIdentity } from "@/entities/user";
@@ -35,18 +36,24 @@ export function JoinView({ roomId, invite }: { roomId: string; invite: string })
   if (identity === undefined) return null;
   if (identity === null) return <LoginForm title="룸에 초대받았어요" submitLabel="계속하기" onLogin={login} />;
   return (
-    <main style={{ maxWidth: 360, margin: "120px auto", display: "grid", gap: 12, padding: "0 16px" }}>
+    <main className="login join-card">
       {error ? (
-        <div className="err" role="alert">{error}</div>
+        <>
+          <h1 className="brand" style={{ margin: 0, fontSize: 18 }}>초대 링크를 열 수 없어요</h1>
+          <div className="err" role="alert">{error}</div>
+          <button className="btn lg" onClick={() => router.push("/")}><ArrowLeft aria-hidden />로비로 돌아가기</button>
+        </>
       ) : info ? (
         <>
-          <h1 style={{ margin: 0, fontSize: 22 }}>{info.name}</h1>
-          <p style={{ margin: 0, color: "var(--muted)" }}>지금 {info.online}명이 접속해 있어요.</p>
+          <span className="join-cap">{info.spectator ? "관전 초대" : "PL 초대"}</span>
+          <h1 className="join-name">{info.name}</h1>
+          <p className="join-meta"><Users aria-hidden />지금 {info.online}명이 접속해 있어요.</p>
           {info.spectator && <p style={{ margin: 0 }} data-testid="join-spectator-note">관전 링크예요. 보드와 공개된 굴림·핸드아웃을 보기만 하고, 아무것도 바꿀 수 없어요.</p>}
-          <button className="btn primary" data-testid="join-enter" onClick={() => router.push(`/room/${roomId}?invite=${encodeURIComponent(invite)}`)}>{info.spectator ? "관전으로 입장" : "PL로 입장"}</button>
+          <button className="btn primary lg" data-testid="join-enter" onClick={() => router.push(`/room/${roomId}?invite=${encodeURIComponent(invite)}`)}>{info.spectator ? <Eye aria-hidden /> : <LogIn aria-hidden />}{info.spectator ? "관전으로 입장" : "PL로 입장"}</button>
+          <button className="btn ghost" onClick={() => router.push("/")}>로비로</button>
         </>
       ) : (
-        <p style={{ color: "var(--muted)" }}>확인하는 중이에요…</p>
+        <p style={{ color: "var(--muted)", margin: 0 }}>확인하는 중이에요…</p>
       )}
     </main>
   );

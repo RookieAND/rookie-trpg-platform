@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { SendHorizontal } from "lucide-react";
 import { CHAT_HELP_LINES, CHAT_HISTORY_ON_JOIN, CHAT_MAX_LENGTH, type ChatMessage, type ClientCommand, type Member, type Role } from "@coc-vtt/shared";
 import { limitMessage } from "@/shared/lib";
 import { useContextMenu, Select } from "@/shared/ui";
@@ -218,7 +219,7 @@ export function ChatPanel(p: ChatPanelProps) {
             }}
           />
           <div className="chat-btns">
-            <button type="button" className="btn primary" data-testid="chat-send" disabled={readOnly || !text.trim() || left < 0} onClick={submit}>보내기</button>
+            <button type="button" className="btn primary" data-testid="chat-send" disabled={readOnly || !text.trim() || left < 0} onClick={submit}><SendHorizontal aria-hidden />보내기</button>
             <button type="button" className="btn" data-testid="chat-help-btn" aria-label="명령어 도움말" aria-expanded={help} title="명령어 도움말" onClick={() => setHelp((h) => !h)}>?</button>
           </div>
         </div>

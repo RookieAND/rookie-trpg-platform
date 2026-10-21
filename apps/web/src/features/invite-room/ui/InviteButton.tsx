@@ -104,7 +104,7 @@ export function InviteButton({ me, roomId, members = [], banned = [], send }: { 
   return (
     <>
       {ask.node}
-      <button className="btn keep" onClick={show} title="초대 링크를 보고 PL이나 관전자를 불러요"><UserPlus aria-hidden />초대</button>
+      <button className="btn keep" onClick={show} title="초대 링크를 보고 PL이나 관전자를 불러요"><UserPlus aria-hidden /><span className="lbl">초대</span></button>
       {open && (
         <Dialog label="초대 링크" onClose={() => setOpen(false)} className="dialog">
           <strong>초대 링크</strong>

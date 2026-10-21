@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Download } from "lucide-react";
 import { LOG_KINDS, LOG_KIND_LABEL_KO, type LogEntryView } from "@coc-vtt/shared";
 import { getSessionLog } from "@/entities/room";
 import type { Caller } from "@/shared/api";
@@ -124,8 +125,8 @@ export function LogPanel({ me, roomId, roomTitle, isKp, sessionCount, visible, v
               <input type="checkbox" data-testid="log-as-public" checked={asPublic} onChange={(e) => setAsPublic(e.target.checked)} /> 참가자용으로 보기
             </label>
           )}
-          <button type="button" className="btn sm" data-testid="log-export-md" disabled={busy} onClick={() => exportAs("md")}>마크다운 저장</button>
-          <button type="button" className="btn sm" data-testid="log-export-json" disabled={busy} onClick={() => exportAs("json")}>JSON 저장</button>
+          <button type="button" className="btn sm" data-testid="log-export-md" disabled={busy} onClick={() => exportAs("md")}><Download aria-hidden />마크다운 저장</button>
+          <button type="button" className="btn sm" data-testid="log-export-json" disabled={busy} onClick={() => exportAs("json")}><Download aria-hidden />JSON 저장</button>
         </div>
         {isKp && <p className="muted logp-note" data-testid="log-audience">{asPublic ? "참가자에게 보이는 기록만 보여요." : "GM용 기록이에요. 비밀 굴림 결과와 GM만 아는 내용이 들어 있어요."}</p>}
         {note && <p className="muted logp-note" role="status">{note}</p>}
