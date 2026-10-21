@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import { FileDown, FileInput, Pencil, Plus, Trash2 } from "lucide-react";
 import { Select } from "@/shared/ui";
 import { CREDIT_RATING, DEFAULT_SKILLS, MAX_OCCUPATION_SKILLS, OCCUPATION_POINT_FORMULAS, type Occupation, type OccupationFormulaId } from "@coc-vtt/shared";
 import { downloadText } from "@/shared/lib";
@@ -62,10 +63,10 @@ export function OccupationManager({ error: syncError, occupations, onAdd, onEdit
     <section className="card" style={{ gap: 12 }} data-testid="occupations">
       <div className="wrap-row" style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <strong style={{ flex: 1 }}>내 직업 정의 ({occupations.length})</strong>
-        <button className="btn" disabled={occupations.length === 0} onClick={() => downloadText(`occupations-${new Date().toISOString().slice(0, 10)}.json`, exportText(), "application/json;charset=utf-8")}>내보내기</button>
-        <button className="btn" onClick={() => fileRef.current?.click()}>가져오기</button>
+        <button className="btn" disabled={occupations.length === 0} onClick={() => downloadText(`occupations-${new Date().toISOString().slice(0, 10)}.json`, exportText(), "application/json;charset=utf-8")}><FileDown aria-hidden />내보내기</button>
+        <button className="btn" onClick={() => fileRef.current?.click()}><FileInput aria-hidden />가져오기</button>
         <input ref={fileRef} type="file" accept="application/json,.json" aria-label="직업 파일 가져오기" hidden onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = ""; }} />
-        <button className="btn" aria-expanded={open} onClick={() => { if (open) reset(); setOpen((v) => !v); }}>{open ? "닫기" : "직업 정의하기"}</button>
+        <button className="btn" aria-expanded={open} onClick={() => { if (open) reset(); setOpen((v) => !v); }}>{open ? "닫기" : <><Plus aria-hidden />직업 정의하기</>}</button>
       </div>
       {info && <div role="status" style={{ color: "var(--accent)", fontSize: 13 }}>{info}</div>}
       {syncError && <div className="err" role="alert">{syncError}</div>}
@@ -75,8 +76,8 @@ export function OccupationManager({ error: syncError, occupations, onAdd, onEdit
             <strong>{o.name}</strong>
             <span style={{ color: "var(--muted)", fontSize: 12.5 }}> · {OCCUPATION_POINT_FORMULAS.find((f) => f.id === o.formula)?.label} · 신용도 {o.creditMin}~{o.creditMax} · {o.skills.join(", ") || "직업 기능 없음"}</span>
           </span>
-          <button className="btn" aria-label={`${o.name} 직업 수정`} onClick={() => startEdit(o)}>수정</button>
-          <button className="btn danger" aria-label={`${o.name} 직업 삭제`} onClick={() => onRemove(o.id)}>삭제</button>
+          <button className="btn" aria-label={`${o.name} 직업 수정`} onClick={() => startEdit(o)}><Pencil aria-hidden />수정</button>
+          <button className="btn ico danger" aria-label={`${o.name} 직업 삭제`} title="삭제" onClick={() => onRemove(o.id)}><Trash2 aria-hidden /></button>
         </div>
       ))}
       {open && (

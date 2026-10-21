@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { UserPlus } from "lucide-react";
 import type { ClientCommand } from "@coc-vtt/shared";
 import { toRoomCharacter } from "@/entities/character";
 import type { Identity } from "@/entities/user";
@@ -16,7 +17,7 @@ export function RoomCharacterCreate({ me, send, disabled, label = "캐릭터 만
 
   return (
     <>
-      <button type="button" className="btn primary" data-testid="create-in-room" disabled={disabled} onClick={() => (setError(null), setOpen(true))}>{label}</button>
+      <button type="button" className="btn primary" data-testid="create-in-room" disabled={disabled} onClick={() => (setError(null), setOpen(true))}><UserPlus aria-hidden />{label}</button>
       {open && (
         <Dialog label="캐릭터 만들기" onClose={() => setOpen(false)} className="modal-veil" data-testid="create-dialog">
           <div className="modal-card">

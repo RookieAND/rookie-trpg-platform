@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { Download, Pencil, Plus, Trash2, WandSparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { CharacterInput } from "@coc-vtt/shared";
@@ -72,8 +73,8 @@ function Vault({ me }: { me: Identity }) {
         <div className="vault-head" style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <h1 style={{ margin: 0, fontSize: 22 }}>내 캐릭터</h1>
           <div style={{ flex: 1 }} />
-          {!editing && <button className="btn" onClick={() => setEditing({ mode: "wizard" })}>마법사로 만들기</button>}
-          {!editing && <button className="btn primary" onClick={() => setEditing({ mode: "new" })}>새 캐릭터</button>}
+          {!editing && <button className="btn" onClick={() => setEditing({ mode: "wizard" })}><WandSparkles aria-hidden />마법사로 만들기</button>}
+          {!editing && <button className="btn primary" onClick={() => setEditing({ mode: "new" })}><Plus aria-hidden />새 캐릭터</button>}
         </div>
         {!editing && (
           <SheetCsvImport me={me} applyLabel="새 캐릭터 폼으로 열기" onApply={(data) => { setError(null); setEditing({ mode: "new", initial: data }); }} />
@@ -100,9 +101,9 @@ function Vault({ me }: { me: Identity }) {
                 <div style={{ fontWeight: 600 }}>{c.name}</div>
                 <div style={{ color: "var(--muted)", fontSize: 12.5 }}>{c.occupation || "직업 없음"} · {c.age}세 · 기능 {c.skills.length}개</div>
               </div>
-              <button className="btn" onClick={() => setEditing({ mode: "edit", character: c })}>편집</button>
-              <button className="btn" aria-label={`${c.name} CSV로 내보내기`} onClick={() => downloadCharacterCsv(c)}>CSV</button>
-              <button className="btn danger" onClick={() => remove(c)}>삭제</button>
+              <button className="btn" onClick={() => setEditing({ mode: "edit", character: c })}><Pencil aria-hidden />편집</button>
+              <button className="btn" aria-label={`${c.name} CSV로 내보내기`} onClick={() => downloadCharacterCsv(c)}><Download aria-hidden />CSV</button>
+              <button className="btn ico danger" aria-label={`${c.name} 삭제`} title="삭제" onClick={() => remove(c)}><Trash2 aria-hidden /></button>
             </article>
           ))}
       </main>

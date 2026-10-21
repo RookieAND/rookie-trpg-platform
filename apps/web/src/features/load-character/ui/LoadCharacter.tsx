@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ClientCommand } from "@coc-vtt/shared";
 import { listCharacters, toRoomCharacter, type VaultCharacter } from "@/entities/character";
@@ -33,7 +34,7 @@ export function LoadCharacter({ me, send, disabled, title = "내 캐릭터 불�
       {items.map((c) => (
         <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center" }} data-testid="vault-item">
           <span style={{ flex: 1 }}>{c.name}<span style={{ color: "var(--muted)" }}> · {c.occupation || "직업 없음"}</span></span>
-          <button className="btn" disabled={disabled} onClick={() => load(c)}>불러오기</button>
+          <button className="btn" disabled={disabled} onClick={() => load(c)}><Download aria-hidden />불러오기</button>
         </div>
       ))}
     </div>
